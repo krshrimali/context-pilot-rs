@@ -1,0 +1,10 @@
+[package]
+name = "context-fetcher"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+btree-map = "*"
+quicli = "*"
+structopt = "*"
+linecount = "*"
