@@ -4,9 +4,9 @@
 
 Use this binary to find top N (all for now) relevant files and authors for the given:
 
-    - Line of Code
-    - Range of lines
-    - Current File
+- Line of Code
+- Range of lines
+- Current File
 
 Plugins available for both NeoVim and Visual Studio Code.
 
@@ -44,6 +44,14 @@ For each line:
 4. Ship PyCharm Extension
 5. Integrate LLM for deciding top 5 files and authors for relevance
 
+## Building
+
+(TODO: Improve this section of code)
+
+```bash
+cargo build --release
+cargo run <args>
+```
 
 ## Want to contribute?
 
