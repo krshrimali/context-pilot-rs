@@ -227,7 +227,7 @@ pub fn get_contextual_authors(
     let stdout_buf = String::from_utf8(output.stdout).unwrap();
     let parsed_output = parse_str(stdout_buf.as_str(), &file_path);
 
-    let mut vec_author_detail_for_line =
+    let vec_author_detail_for_line =
         get_data_for_line(parsed_output, start_line_number, end_line_number);
     // TODO: Use this function when files don't exist and have been moved/renamed
     // vec_author_detail_for_line = fix_details_in_case_of_move(vec_author_detail_for_line.clone());

@@ -1,6 +1,12 @@
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
+pub struct CliAsync {
+    #[structopt(short="w")]
+    pub workspace_path: String,
+}
+
+#[derive(Debug, StructOpt)]
 pub struct Cli {
     pub file: String,
 
