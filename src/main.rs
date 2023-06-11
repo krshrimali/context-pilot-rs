@@ -25,6 +25,23 @@ fn _validate_dir(path: &Path) -> bool {
     path.is_dir()
 }
 
+fn call_command_unique_files(file_path: &PathBuf) {
+    let count_lines: i32 = count_lines(std::fs::File::open(file_path.clone()).unwrap())
+        .unwrap()
+        .try_into()
+        .unwrap();
+    let valid_end_line_number: usize = (count_lines).try_into().unwrap_or(1);
+    // println!("Valid end line number: {:?}", valid_end_line_number);
+    println!(
+        "Relevant files: {:?}",
+        get_unique_files_changed(
+            file_path.to_str().unwrap().to_string(),
+            1,
+            valid_end_line_number
+        )
+    );
+}
+
 fn walk(workspace_path_buf: &Path) {
     for each_file in workspace_path_buf
         .read_dir()
@@ -38,10 +55,11 @@ fn walk(workspace_path_buf: &Path) {
                 continue;
             }
             println!("File: {:?}", entry_path);
-            println!(
-                "Relevant files found: {:?}",
-                get_unique_files_changed(entry_path.to_str().unwrap().to_string(), 1, 0)
-            );
+            // println!(
+            //     "Relevant files found: {:?}",
+            //     get_unique_files_changed(entry_path.to_str().unwrap().to_string(), 1, 10)
+            // );
+            call_command_unique_files(&entry_path);
             // println!("Relevant files: {:?}", get_(entry_path);
         } else {
             // It's a directory
@@ -86,7 +104,7 @@ fn main() -> CliResult {
 /// # Errors
 ///
 /// This function will return an error if .
-#[warn(dead_code())]
+#[warn(dead_code)]
 fn main_sync() -> CliResult {
     let args = Cli::from_args();
     let end_line_number: usize = if args.end_number == 0 {

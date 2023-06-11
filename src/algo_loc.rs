@@ -71,21 +71,21 @@ pub fn get_unique_files_changed(
     start_line_number: usize,
     end_line_number: usize,
 ) -> String {
-    let output = Command::new("git")
-        .args([
-            "blame",
-            "-L",
-            &(start_line_number.to_string() + "," + &end_line_number.to_string()),
-            "-w",
-            "-M",
-            "--",
-            file_path.as_str(),
-        ])
-        .stdout(Stdio::piped())
-        .output()
-        .unwrap();
+    let mut binding = Command::new("git");
+    let command = binding.args([
+        "blame",
+        "-L",
+        &(start_line_number.to_string() + "," + &end_line_number.to_string()),
+        "-w",
+        "-M",
+        "--",
+        file_path.as_str(),
+    ]);
+    // println!("Command: {:?}", command);
+    let output = command.stdout(Stdio::piped()).output().unwrap();
     let stdout_buf = String::from_utf8(output.stdout).unwrap();
     let parsed_output = parse_str(stdout_buf.as_str(), &file_path);
+    // println!("Parsed output: {:?}", parsed_output);
 
     let vec_author_detail_for_line =
         get_data_for_line(parsed_output, start_line_number, end_line_number);
@@ -142,19 +142,17 @@ pub fn get_unique_files_changed(
             *acc.entry(c.to_string()).or_insert(0) += 1;
             acc
         });
-    let reverse_sorted_map: BTreeMap<&i32, &String> =
-        sorted_map.iter().map(|(k, v)| (v, k)).collect();
-    let mut res = reverse_sorted_map
-        .values()
-        .fold(String::new(), |mut res, val| {
-            res.push_str(val);
-            res.push(',');
-            res
-        });
-    if res.ends_with(',') {
-        res.pop();
+    // println!("Sorted map: {:?}", sorted_map);
+    let mut output_result = sorted_map.keys().fold(String::new(), |mut res, val| {
+        res.push_str(val);
+        res.push(',');
+        res
+    });
+    if output_result.ends_with(',') {
+        output_result.pop();
     }
-    res
+    // println!("Res: {:?}", output_result);
+    output_result
 }
 
 pub fn parse_follow(input_str: &str, input_path: &str) -> Option<String> {
