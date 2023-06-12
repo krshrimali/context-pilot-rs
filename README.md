@@ -8,7 +8,7 @@ Use this binary to find top N (all for now) relevant files and authors for the g
 - Range of lines
 - Current File
 
-Plugins available for both NeoVim and Visual Studio Code.
+Plugins available for both [NeoVim](https://github.com/krshrimali/context-pilot.nvim) and [Visual Studio Code](https://github.com/krshrimali/context-pilot-vscode).
 
 ## Why do you need it?
 
