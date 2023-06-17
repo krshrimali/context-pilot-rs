@@ -1,10 +1,10 @@
 [package]
-name = "context-fetcher"
-version = "0.1.0"
+name = "context-pilot"
+version = "0.0.1"
 edition = "2021"
 
 [dependencies]
-btree-map = "*"
-quicli = "*"
-structopt = "*"
-linecount = "*"
+btree-map = "0.1.0"
+quicli = "0.4.0"
+structopt = "0.3.26"
+linecount = "0.1.0"
