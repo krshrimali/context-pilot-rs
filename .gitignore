@@ -2,3 +2,4 @@ target/*
 .git
 .github
 .test
+.test_recursive
