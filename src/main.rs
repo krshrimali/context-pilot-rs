@@ -1,20 +1,17 @@
-use std::fs::ReadDir;
-use std::iter::Flatten;
 use std::path::Path;
 use std::path::PathBuf;
-
-use linecount::count_lines;
-use quicli::prelude::*;
-use structopt::StructOpt;
 
 mod algo_loc;
 mod authordetails_impl;
 mod config;
 mod contextgpt_structs;
 
+use linecount::count_lines;
+use quicli::prelude::*;
+use structopt::StructOpt;
+
 use algo_loc::get_unique_files_changed;
-use contextgpt_structs::Cli;
-use contextgpt_structs::CliAsync;
+use contextgpt_structs::{Cli, CliAsync};
 
 use crate::algo_loc::get_contextual_authors;
 
@@ -27,8 +24,8 @@ fn _validate_dir(path: &Path) -> bool {
     path.is_dir()
 }
 
-fn call_command_unique_files(file_path: &PathBuf) {
-    let count_lines: i32 = count_lines(std::fs::File::open(file_path.clone()).unwrap())
+fn call_command_unique_files(file_path: &Path) {
+    let count_lines: i32 = count_lines(std::fs::File::open(file_path).unwrap())
         .unwrap()
         .try_into()
         .unwrap();
@@ -64,13 +61,9 @@ fn get_all_files(folder_path: &Path) -> Vec<PathBuf> {
 
 fn walk(workspace_path_buf: &Path) {
     let all_files = get_all_files(workspace_path_buf);
-    for each_file in workspace_path_buf
-        .read_dir()
-        .expect("Unable to read directory from path each_file (TODO)")
-        .flatten()
-    {
-        let entry_path = each_file.path();
-        if !_validate_dir(&entry_path) {
+    for each_file in all_files {
+        let entry_path = each_file.as_path();
+        if !_validate_dir(entry_path) {
             // It's a file!!
             if workspace_path_buf.to_str().unwrap().contains("target") {
                 continue;
@@ -80,11 +73,11 @@ fn walk(workspace_path_buf: &Path) {
             //     "Relevant files found: {:?}",
             //     get_unique_files_changed(entry_path.to_str().unwrap().to_string(), 1, 10)
             // );
-            call_command_unique_files(&entry_path);
+            call_command_unique_files(entry_path);
             // println!("Relevant files: {:?}", get_(entry_path);
         } else {
             // It's a directory
-            walk(&entry_path);
+            walk(entry_path);
         }
     }
 }
@@ -117,15 +110,6 @@ fn main() -> CliResult {
     Ok(())
 }
 
-/// .
-///
-/// # Panics
-///
-/// Panics if .
-///
-/// # Errors
-///
-/// This function will return an error if .
 #[warn(dead_code)]
 fn main_sync() -> CliResult {
     let args = Cli::from_args();
@@ -153,92 +137,4 @@ fn main_sync() -> CliResult {
     Ok(())
 }
 
-mod test {
-    use std::path::{Path, PathBuf};
-
-    use crate::get_all_files;
-    use std::fs::{File, ReadDir};
-    use std::io::{Error, Write};
-
-    fn create_sample_testing_dir() {
-        let output_folder_path = Path::new(".test");
-        if !output_folder_path.is_dir() {
-            std::fs::create_dir(output_folder_path).expect("Unable to create a directory");
-        }
-        let test_content = "test_content".to_string();
-        let total_files: usize = 6;
-
-        for idx in 1..total_files {
-            let file_path = output_folder_path.to_str().unwrap().to_owned()
-                + "/test_path"
-                + &idx.to_string()
-                + ".txt";
-            let mut output_file =
-                File::create(file_path).expect("File wasn't successfully created");
-            write!(output_file, "{}", test_content).expect("Unable to write content to the file");
-        }
-    }
-
-    fn create_sample_testing_dir_recursive() {
-        let output_folder_path = Path::new(".test_recursive");
-        if !output_folder_path.is_dir() {
-            std::fs::create_dir(output_folder_path).expect("Unable to create a directory");
-        }
-        let test_content = "test_content".to_string();
-        let total_files: usize = 6;
-
-        for idx in 1..total_files / 2 {
-            let output_recursed_folder_path =
-                output_folder_path.to_str().unwrap().to_owned() + "/" + &idx.to_string();
-            if !Path::new(&output_recursed_folder_path).is_dir() {
-                std::fs::create_dir(output_recursed_folder_path.clone())
-                    .expect("Unable to create a directory");
-            }
-            for idx_recurse in total_files / 2..total_files {
-                let file_path = output_recursed_folder_path.clone()
-                    + "/test_path"
-                    + &idx_recurse.to_string()
-                    + ".txt";
-                let mut output_file =
-                    File::create(file_path).expect("File wasn't successfully created");
-                write!(output_file, "{}", test_content)
-                    .expect("Unable to write content to the file");
-            }
-        }
-    }
-
-    #[test]
-    fn test_get_all_files_non_recursive() {
-        create_sample_testing_dir();
-        let mut all_files = get_all_files(Path::new(".test/"));
-        all_files.sort();
-        assert_eq!(
-            all_files,
-            vec![
-                Path::new(".test/test_path1.txt").to_path_buf(),
-                Path::new(".test/test_path2.txt").to_path_buf(),
-                Path::new(".test/test_path3.txt").to_path_buf(),
-                Path::new(".test/test_path4.txt").to_path_buf(),
-                Path::new(".test/test_path5.txt").to_path_buf(),
-            ]
-        );
-    }
-
-    #[test]
-    fn test_get_all_files_recursive() {
-        create_sample_testing_dir_recursive();
-        let mut all_files = get_all_files(Path::new(".test_recursive/"));
-        all_files.sort();
-        assert_eq!(
-            all_files,
-            vec![
-                Path::new(".test_recursive/1/test_path3.txt").to_path_buf(),
-                Path::new(".test_recursive/1/test_path4.txt").to_path_buf(),
-                Path::new(".test_recursive/1/test_path5.txt").to_path_buf(),
-                Path::new(".test_recursive/2/test_path3.txt").to_path_buf(),
-                Path::new(".test_recursive/2/test_path4.txt").to_path_buf(),
-                Path::new(".test_recursive/2/test_path5.txt").to_path_buf(),
-            ]
-        );
-    }
-}
+mod test;
