@@ -1,3 +1,4 @@
+use std::fs::read;
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -59,27 +60,67 @@ fn get_all_files(folder_path: &Path) -> Vec<PathBuf> {
     output_files
 }
 
-fn walk(workspace_path_buf: &Path) {
+// TODO: This function might not be needed but still thinking over it
+// fn validate_strings_as_files(gitignore_data: &Vec<String>) {
+//     for each_file in gitignore_data {
+//         let path = Path::from(each_file);
+
+//     }
+// }
+
+fn walk(workspace_path_buf: &Path, gitignore_data: &Vec<String>) {
+    // TODO: Not sure if this function is needed right now
+    // let validated_gitignore_files = validate_strings_as_files(gitignore_data);
     let all_files = get_all_files(workspace_path_buf);
     for each_file in all_files {
         let entry_path = each_file.as_path();
-        if !_validate_dir(entry_path) {
-            // It's a file!!
-            if workspace_path_buf.to_str().unwrap().contains("target") {
+        let mut ignore_file = false;
+        for to_be_ignored in gitignore_data {
+            if ignore_file {
                 continue;
             }
-            println!("File: {:?}", entry_path);
-            // println!(
-            //     "Relevant files found: {:?}",
-            //     get_unique_files_changed(entry_path.to_str().unwrap().to_string(), 1, 10)
-            // );
-            call_command_unique_files(entry_path);
-            // println!("Relevant files: {:?}", get_(entry_path);
+            if to_be_ignored.is_empty() {
+                continue;
+            }
+            let each_file_stripped_path = each_file
+                .strip_prefix(workspace_path_buf)
+                .expect("This is weird");
+            let new_str = to_be_ignored.strip_suffix('*').unwrap_or(to_be_ignored);
+            if each_file_stripped_path.starts_with(new_str) {
+                // TODO: Log here that file matched
+                // TODO: make a map here to not do this comparison again by looping around?
+                // println!(
+                //     "stripped path: {:?}, and to be ignored: {:?}",
+                //     each_file_stripped_path, new_str
+                // );
+                ignore_file = true;
+                continue;
+            }
+        }
+        if !_validate_dir(entry_path) {
+            // It's a file!!
+            // TODO: This needs to be optimised
+            if !ignore_file {
+                println!("File: {:?}", entry_path);
+                call_command_unique_files(entry_path);
+            }
         } else {
             // It's a directory
-            walk(entry_path);
+            if !ignore_file {
+                walk(entry_path, gitignore_data);
+            }
         }
     }
+}
+
+fn read_gitignore(gitignore_file_path: String) -> Vec<String> {
+    let gitignore_path = Path::new(&gitignore_file_path);
+    let gitignore_data = read(gitignore_path).expect("Unable to read .gitignore file");
+    let data = String::from_utf8(gitignore_data)
+        .map_err(|non_utf8| String::from_utf8_lossy(non_utf8.as_bytes()).into_owned())
+        .unwrap();
+    let vec_data: Vec<String> = data.split('\n').map(String::from).collect();
+    vec_data
 }
 
 // Run asynchronously in the bg
@@ -105,7 +146,11 @@ fn main() -> CliResult {
     //     .expect("Couldn't open the directory, something went wrong...")
     // {
     // TODO: Ideally, pass a function (something like func pointer) to walk along
-    walk(&current_folder_path);
+    let gitignore_data: Vec<String> = read_gitignore(".gitignore".to_string());
+    walk(
+        &current_folder_path,
+        /*gitignore_data=*/ &gitignore_data,
+    );
 
     Ok(())
 }
