@@ -23,3 +23,9 @@ A user should have option for some configs:
 2. can we let user know on the progress?
 3. In case file is not present, the file should have "renamed" flag.
 4. Once they click on a file, and if the flag `renamed` is somehow associated, call the server back again to fetch the new file.
+5. What's the best way to _almost sort_ given array?
+6. How to calculate available threads?
+
+### Design on Notes
+
+1. It's more like a scheduler design initially where load balancing has to happen across available threads
