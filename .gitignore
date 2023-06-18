@@ -1,7 +1,5 @@
 target/*
 .git
 .github
-.test
-.test_recursive
-.test_gitignore
+.test*
 Cargo.lock
