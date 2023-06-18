@@ -3,3 +3,5 @@ target/*
 .github
 .test
 .test_recursive
+.test_gitignore
+Cargo.lock
