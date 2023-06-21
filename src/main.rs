@@ -35,7 +35,7 @@ fn call_command_unique_files(file_path: &Path) {
 }
 
 // Run asynchronously in the bg
-fn main() -> CliResult {
+fn main_async() -> CliResult {
     // this runs for all files in the given workspace
     let args = CliAsync::from_args();
     if !file_utils::validate_path(&args.workspace_path) {
@@ -62,8 +62,8 @@ fn main() -> CliResult {
     Ok(())
 }
 
-#[warn(dead_code)]
-fn main_sync() -> CliResult {
+// #[warn(dead_code)]
+fn main() -> CliResult {
     let args = Cli::from_args();
     let end_line_number: usize = if args.end_number == 0 {
         0

@@ -1,8 +1,10 @@
 use std::collections::BTreeMap;
+use std::path::Path;
 use std::process::{Command, Stdio};
 
 use crate::config::LAST_MANY_COMMIT_HASHES;
 use crate::contextgpt_structs::AuthorDetails;
+use crate::file_utils::get_correct_file_path;
 
 fn parse_str(input_str: &str, file_path: &str) -> Vec<AuthorDetails> {
     let mut author_details_vec: Vec<AuthorDetails> = vec![];
@@ -84,8 +86,11 @@ pub fn get_unique_files_changed(
     // println!("Command: {:?}", command);
     let output = command.stdout(Stdio::piped()).output().unwrap();
     let stdout_buf = String::from_utf8(output.stdout).unwrap();
+    // Sanitize the file path first if required
+    // let file_path_obj = Path::new(&file_path);
+    // let mut sanitized_file_path = file_path.clone();
+    // println!("Trying to Sanitize: {:?}", file_path_obj);
     let parsed_output = parse_str(stdout_buf.as_str(), &file_path);
-    // println!("Parsed output: {:?}", parsed_output);
 
     let vec_author_detail_for_line =
         get_data_for_line(parsed_output, start_line_number, end_line_number);
@@ -97,7 +102,15 @@ pub fn get_unique_files_changed(
         let mut commit_id = val.commit_hash;
         let out_files_for_commit_hash = get_files_for_commit_hash(&commit_id);
         for each_file in out_files_for_commit_hash {
-            all_files_changed.push(each_file);
+            let each_file_path = Path::new(&each_file);
+            let mut sanitized_file_path = each_file.clone();
+            // println!("Checking for {:?}", each_file);
+            if !each_file_path.exists() {
+                sanitized_file_path = get_correct_file_path(&each_file);
+                // println!("Sanitized: {:?}", sanitized_file_path);
+                // println!("Path before: {:?}", each_file);
+            }
+            all_files_changed.push(sanitized_file_path);
         }
 
         let mut blame_count: i32 = 0;
@@ -132,7 +145,15 @@ pub fn get_unique_files_changed(
             commit_id = val.commit_hash.clone();
             let out_files_for_commit_hash = get_files_for_commit_hash(&commit_id);
             for each_file in out_files_for_commit_hash {
-                all_files_changed.push(each_file);
+                let each_file_path = Path::new(&each_file);
+                let mut sanitized_file_path = each_file.clone();
+                // println!("Checking for {:?}", each_file);
+                if !each_file_path.exists() {
+                    sanitized_file_path = get_correct_file_path(&each_file);
+                    //     println!("Sanitized: {:?}", sanitized_file_path);
+                    //     println!("Path before: {:?}", each_file);
+                }
+                all_files_changed.push(sanitized_file_path);
             }
         }
     }
@@ -201,6 +222,46 @@ pub fn fix_details_in_case_of_move(vec_author_details: Vec<AuthorDetails>) -> Ve
         }
     }
     output_vec
+}
+
+fn parse_moved(output: &str, path_obj: &str) -> Option<String> {
+    for each_file_combination_moved in output.split('\n') {
+        let comb: Vec<&str> = each_file_combination_moved.split('\t').collect();
+        if comb.is_empty() || comb.len() <= 1 {
+            continue;
+        }
+        if comb.get(1).unwrap() == &path_obj {
+            return Some(comb.get(2).unwrap().to_string());
+        }
+        // println!("First: {:?}, {:?}", comb.first(), comb.last());
+    }
+    Some("".to_string())
+}
+
+pub fn _correct_file_path(path_obj: &Path) -> Option<String> {
+    let output = Command::new("git")
+        .args([
+            "log",
+            "--format=%h",
+            "-m",
+            "--first-parent",
+            "--diff-filter=R",
+            "--name-status",
+            // "|",
+            // "grep",
+            // path_obj.to_str().unwrap(),
+        ])
+        .stdout(Stdio::piped())
+        .output()
+        .unwrap();
+    // println!("output: {:?}", output);
+    // println!("path: {:?}", path_obj.to_str().unwrap());
+    let stdout_buf = String::from_utf8(output.stdout).unwrap();
+    let parsed_output = parse_moved(stdout_buf.as_str(), path_obj.to_str().unwrap());
+    if let Some(final_path) = parsed_output {
+        return Some(final_path);
+    }
+    None
 }
 
 pub fn get_contextual_authors(

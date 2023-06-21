@@ -2,6 +2,7 @@ use std::fs::read;
 use std::path::Path;
 use std::path::PathBuf;
 
+use crate::algo_loc::_correct_file_path;
 use crate::call_command_unique_files;
 
 pub fn validate_path(path: &String) -> bool {
@@ -118,4 +119,17 @@ pub fn read_gitignore(gitignore_file_path: String) -> Vec<String> {
         .unwrap();
     let vec_data: Vec<String> = data.split('\n').map(String::from).collect();
     vec_data
+}
+
+pub fn get_correct_file_path(original_file_path: &String) -> String {
+    let path_obj = Path::new(original_file_path);
+    if path_obj.is_absolute() && path_obj.exists() {
+        "".to_string()
+    } else {
+        let output = _correct_file_path(path_obj);
+        match output {
+            Some(correct_path) => correct_path,
+            None => "".to_string(),
+        }
+    }
 }
