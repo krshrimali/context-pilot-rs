@@ -4,7 +4,6 @@ use std::process::{Command, Stdio};
 
 use crate::config::LAST_MANY_COMMIT_HASHES;
 use crate::contextgpt_structs::AuthorDetails;
-use crate::file_utils::get_correct_file_path;
 
 fn parse_str(input_str: &str, file_path: &str) -> Vec<AuthorDetails> {
     let mut author_details_vec: Vec<AuthorDetails> = vec![];
@@ -86,10 +85,6 @@ pub fn get_unique_files_changed(
     // println!("Command: {:?}", command);
     let output = command.stdout(Stdio::piped()).output().unwrap();
     let stdout_buf = String::from_utf8(output.stdout).unwrap();
-    // Sanitize the file path first if required
-    // let file_path_obj = Path::new(&file_path);
-    // let mut sanitized_file_path = file_path.clone();
-    // println!("Trying to Sanitize: {:?}", file_path_obj);
     let parsed_output = parse_str(stdout_buf.as_str(), &file_path);
 
     let vec_author_detail_for_line =
@@ -108,6 +103,7 @@ pub fn get_unique_files_changed(
                 // NOTE: Deciding not to send this to the plugin, to avoid confusions...
                 continue;
             }
+            all_files_changed.push(each_file);
 
             // TODO: need to find an efficient way right now to fix this
             // let mut sanitized_file_path = each_file.clone();
@@ -153,14 +149,19 @@ pub fn get_unique_files_changed(
             let out_files_for_commit_hash = get_files_for_commit_hash(&commit_id);
             for each_file in out_files_for_commit_hash {
                 let each_file_path = Path::new(&each_file);
-                let mut sanitized_file_path = each_file.clone();
-                // println!("Checking for {:?}", each_file);
                 if !each_file_path.exists() {
-                    sanitized_file_path = get_correct_file_path(&each_file);
-                    //     println!("Sanitized: {:?}", sanitized_file_path);
-                    //     println!("Path before: {:?}", each_file);
+                    // NOTE: If file doesn't exist, maybe it was moved/renamed/deleted - so skip it for now
+                    continue;
                 }
-                all_files_changed.push(sanitized_file_path);
+                all_files_changed.push(each_file);
+                // let mut sanitized_file_path = each_file.clone();
+                // // println!("Checking for {:?}", each_file);
+                // if !each_file_path.exists() {
+                //     sanitized_file_path = get_correct_file_path(&each_file);
+                //     //     println!("Sanitized: {:?}", sanitized_file_path);
+                //     //     println!("Path before: {:?}", each_file);
+                // }
+                // all_files_changed.push(sanitized_file_path);
             }
         }
     }
@@ -170,7 +171,6 @@ pub fn get_unique_files_changed(
             *acc.entry(c.to_string()).or_insert(0) += 1;
             acc
         });
-    // println!("Sorted map: {:?}", sorted_map);
     let mut output_result = sorted_map.keys().fold(String::new(), |mut res, val| {
         res.push_str(val);
         res.push(',');
@@ -179,7 +179,6 @@ pub fn get_unique_files_changed(
     if output_result.ends_with(',') {
         output_result.pop();
     }
-    // println!("Res: {:?}", output_result);
     output_result
 }
 
@@ -240,7 +239,6 @@ fn parse_moved(output: &str, path_obj: &str) -> Option<String> {
         if comb.get(1).unwrap() == &path_obj {
             return Some(comb.get(2).unwrap().to_string());
         }
-        // println!("First: {:?}, {:?}", comb.first(), comb.last());
     }
     Some("".to_string())
 }
