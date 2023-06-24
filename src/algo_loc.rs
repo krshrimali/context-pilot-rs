@@ -103,14 +103,21 @@ pub fn get_unique_files_changed(
         let out_files_for_commit_hash = get_files_for_commit_hash(&commit_id);
         for each_file in out_files_for_commit_hash {
             let each_file_path = Path::new(&each_file);
-            let mut sanitized_file_path = each_file.clone();
-            // println!("Checking for {:?}", each_file);
             if !each_file_path.exists() {
-                sanitized_file_path = get_correct_file_path(&each_file);
-                // println!("Sanitized: {:?}", sanitized_file_path);
-                // println!("Path before: {:?}", each_file);
+                // Uhmm, either the file was moved - renamed - or deleted 🤔
+                // NOTE: Deciding not to send this to the plugin, to avoid confusions...
+                continue;
             }
-            all_files_changed.push(sanitized_file_path);
+
+            // TODO: need to find an efficient way right now to fix this
+            // let mut sanitized_file_path = each_file.clone();
+            // // println!("Checking for {:?}", each_file);
+            // if !each_file_path.exists() {
+            //     sanitized_file_path = get_correct_file_path(&each_file);
+            //     // println!("Sanitized: {:?}", sanitized_file_path);
+            //     // println!("Path before: {:?}", each_file);
+            // }
+            // all_files_changed.push(sanitized_file_path);
         }
 
         let mut blame_count: i32 = 0;
