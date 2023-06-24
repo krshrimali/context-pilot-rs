@@ -21,7 +21,7 @@ impl AuthorDetails {
             }
         }
         author_name = author_name.trim_end().to_string();
-        let mut names: Vec<&str> = author_name.split(" ").collect();
+        let mut names: Vec<&str> = author_name.split(' ').collect();
         names.reverse();
         let author_original_name = names.join(" ");
         AuthorDetails {

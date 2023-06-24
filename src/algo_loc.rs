@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::path::Path;
 use std::process::{Command, Stdio};
 
 use crate::config::LAST_MANY_COMMIT_HASHES;
@@ -71,19 +72,18 @@ pub fn get_unique_files_changed(
     start_line_number: usize,
     end_line_number: usize,
 ) -> String {
-    let output = Command::new("git")
-        .args([
-            "blame",
-            "-L",
-            &(start_line_number.to_string() + "," + &end_line_number.to_string()),
-            "-w",
-            "-M",
-            "--",
-            file_path.as_str(),
-        ])
-        .stdout(Stdio::piped())
-        .output()
-        .unwrap();
+    let mut binding = Command::new("git");
+    let command = binding.args([
+        "blame",
+        "-L",
+        &(start_line_number.to_string() + "," + &end_line_number.to_string()),
+        "-w",
+        "-M",
+        "--",
+        file_path.as_str(),
+    ]);
+    // println!("Command: {:?}", command);
+    let output = command.stdout(Stdio::piped()).output().unwrap();
     let stdout_buf = String::from_utf8(output.stdout).unwrap();
     let parsed_output = parse_str(stdout_buf.as_str(), &file_path);
 
@@ -97,7 +97,23 @@ pub fn get_unique_files_changed(
         let mut commit_id = val.commit_hash;
         let out_files_for_commit_hash = get_files_for_commit_hash(&commit_id);
         for each_file in out_files_for_commit_hash {
+            let each_file_path = Path::new(&each_file);
+            if !each_file_path.exists() {
+                // Uhmm, either the file was moved - renamed - or deleted 🤔
+                // NOTE: Deciding not to send this to the plugin, to avoid confusions...
+                continue;
+            }
             all_files_changed.push(each_file);
+
+            // TODO: need to find an efficient way right now to fix this
+            // let mut sanitized_file_path = each_file.clone();
+            // // println!("Checking for {:?}", each_file);
+            // if !each_file_path.exists() {
+            //     sanitized_file_path = get_correct_file_path(&each_file);
+            //     // println!("Sanitized: {:?}", sanitized_file_path);
+            //     // println!("Path before: {:?}", each_file);
+            // }
+            // all_files_changed.push(sanitized_file_path);
         }
 
         let mut blame_count: i32 = 0;
@@ -132,7 +148,20 @@ pub fn get_unique_files_changed(
             commit_id = val.commit_hash.clone();
             let out_files_for_commit_hash = get_files_for_commit_hash(&commit_id);
             for each_file in out_files_for_commit_hash {
+                let each_file_path = Path::new(&each_file);
+                if !each_file_path.exists() {
+                    // NOTE: If file doesn't exist, maybe it was moved/renamed/deleted - so skip it for now
+                    continue;
+                }
                 all_files_changed.push(each_file);
+                // let mut sanitized_file_path = each_file.clone();
+                // // println!("Checking for {:?}", each_file);
+                // if !each_file_path.exists() {
+                //     sanitized_file_path = get_correct_file_path(&each_file);
+                //     //     println!("Sanitized: {:?}", sanitized_file_path);
+                //     //     println!("Path before: {:?}", each_file);
+                // }
+                // all_files_changed.push(sanitized_file_path);
             }
         }
     }
@@ -142,19 +171,15 @@ pub fn get_unique_files_changed(
             *acc.entry(c.to_string()).or_insert(0) += 1;
             acc
         });
-    let reverse_sorted_map: BTreeMap<&i32, &String> =
-        sorted_map.iter().map(|(k, v)| (v, k)).collect();
-    let mut res = reverse_sorted_map
-        .values()
-        .fold(String::new(), |mut res, val| {
-            res.push_str(val);
-            res.push(',');
-            res
-        });
-    if res.ends_with(',') {
-        res.pop();
+    let mut output_result = sorted_map.keys().fold(String::new(), |mut res, val| {
+        res.push_str(val);
+        res.push(',');
+        res
+    });
+    if output_result.ends_with(',') {
+        output_result.pop();
     }
-    res
+    output_result
 }
 
 pub fn parse_follow(input_str: &str, input_path: &str) -> Option<String> {
@@ -205,6 +230,45 @@ pub fn fix_details_in_case_of_move(vec_author_details: Vec<AuthorDetails>) -> Ve
     output_vec
 }
 
+fn parse_moved(output: &str, path_obj: &str) -> Option<String> {
+    for each_file_combination_moved in output.split('\n') {
+        let comb: Vec<&str> = each_file_combination_moved.split('\t').collect();
+        if comb.is_empty() || comb.len() <= 1 {
+            continue;
+        }
+        if comb.get(1).unwrap() == &path_obj {
+            return Some(comb.get(2).unwrap().to_string());
+        }
+    }
+    Some("".to_string())
+}
+
+pub fn _correct_file_path(path_obj: &Path) -> Option<String> {
+    let output = Command::new("git")
+        .args([
+            "log",
+            "--format=%h",
+            "-m",
+            "--first-parent",
+            "--diff-filter=R",
+            "--name-status",
+            // "|",
+            // "grep",
+            // path_obj.to_str().unwrap(),
+        ])
+        .stdout(Stdio::piped())
+        .output()
+        .unwrap();
+    // println!("output: {:?}", output);
+    // println!("path: {:?}", path_obj.to_str().unwrap());
+    let stdout_buf = String::from_utf8(output.stdout).unwrap();
+    let parsed_output = parse_moved(stdout_buf.as_str(), path_obj.to_str().unwrap());
+    if let Some(final_path) = parsed_output {
+        return Some(final_path);
+    }
+    None
+}
+
 pub fn get_contextual_authors(
     file_path: String,
     start_line_number: usize,
@@ -227,7 +291,7 @@ pub fn get_contextual_authors(
     let stdout_buf = String::from_utf8(output.stdout).unwrap();
     let parsed_output = parse_str(stdout_buf.as_str(), &file_path);
 
-    let mut vec_author_detail_for_line =
+    let vec_author_detail_for_line =
         get_data_for_line(parsed_output, start_line_number, end_line_number);
     // TODO: Use this function when files don't exist and have been moved/renamed
     // vec_author_detail_for_line = fix_details_in_case_of_move(vec_author_detail_for_line.clone());
