@@ -2,6 +2,7 @@ mod algo_loc;
 mod authordetails_impl;
 mod config;
 mod contextgpt_structs;
+mod db;
 
 use linecount::count_lines;
 use quicli::prelude::*;
@@ -29,11 +30,31 @@ fn main() -> CliResult {
     } else {
         end_line_number
     };
+    let mut auth_db_obj = db::DB {
+        db_file_path: config::AUTHOR_DB_PATH.to_string(),
+        ..Default::default()
+    };
+    let mut file_db_obj = db::DB {
+        db_file_path: config::FILE_DB_PATH.to_string(),
+        ..Default::default()
+    };
     if args.request_type.starts_with("aut") {
-        let output = get_contextual_authors(args.file, args.start_number, valid_end_line_number);
+        auth_db_obj.init_db();
+        let output = get_contextual_authors(
+            args.file,
+            args.start_number,
+            valid_end_line_number,
+            &mut auth_db_obj,
+        );
         println!("{:?}", output);
     } else {
-        let output = get_unique_files_changed(args.file, args.start_number, valid_end_line_number);
+        file_db_obj.init_db();
+        let output = get_unique_files_changed(
+            args.file,
+            args.start_number,
+            valid_end_line_number,
+            &mut file_db_obj,
+        );
         println!("{:?}", output);
     }
     Ok(())

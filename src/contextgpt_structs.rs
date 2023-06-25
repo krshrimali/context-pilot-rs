@@ -1,4 +1,5 @@
 use structopt::StructOpt;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, StructOpt)]
 pub struct Cli {
@@ -13,7 +14,7 @@ pub struct Cli {
     pub request_type: String,
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Deserialize, Serialize)]
 pub struct AuthorDetails {
     pub commit_hash: String,
     pub author_full_name: String,
