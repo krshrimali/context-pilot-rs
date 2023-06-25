@@ -31,11 +31,11 @@ fn main() -> CliResult {
         end_line_number
     };
     let mut auth_db_obj = db::DB {
-        db_file_path: config::AUTHOR_DB_PATH.to_string(),
+        db_file_name: config::AUTHOR_DB_PATH.to_string(),
         ..Default::default()
     };
     let mut file_db_obj = db::DB {
-        db_file_path: config::FILE_DB_PATH.to_string(),
+        db_file_name: config::FILE_DB_PATH.to_string(),
         ..Default::default()
     };
     if args.request_type.starts_with("aut") {

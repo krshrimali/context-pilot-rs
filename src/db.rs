@@ -9,8 +9,9 @@ use crate::{config, contextgpt_structs::AuthorDetails};
 
 #[derive(Default)]
 pub struct DB {
-    pub db_file_path: String,
+    pub db_file_name: String,
     pub current_data: HashMap<String, Vec<AuthorDetails>>,
+    pub db_file_path: String,
 }
 
 impl DB {
@@ -22,6 +23,16 @@ impl DB {
     }
 
     pub fn init_db(&mut self) {
+        let folder_path = Path::new(simple_home_dir::home_dir().unwrap().to_str().unwrap())
+            .join(config::DB_FOLDER);
+        self.db_file_path = folder_path
+            .join(&self.db_file_name)
+            .to_str()
+            .unwrap()
+            .to_string();
+        // Create folder
+        std::fs::create_dir_all(folder_path)
+            .expect("unable to create folder, something went wrong");
         let db_path_obj: &Path = Path::new(&self.db_file_path);
         if !db_path_obj.exists() {
             File::create(db_path_obj).expect("Couldn't create the file for some reason");
