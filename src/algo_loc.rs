@@ -5,7 +5,7 @@ use std::process::{Command, Stdio};
 use crate::config::LAST_MANY_COMMIT_HASHES;
 use crate::contextgpt_structs::AuthorDetails;
 use crate::db::DB;
-use crate::git_command_algo::{parse_str, get_data_for_line};
+use crate::git_command_algo::{extract_details, get_data_for_line, parse_str};
 
 pub fn get_unique_files_changed(
     origin_file_path: String,
@@ -33,19 +33,16 @@ pub fn get_unique_files_changed(
         return res;
     }
     // INSERT HERE
+    let output = extract_details(start_line_number, end_line_number, origin_file_path);
     let mut res: HashMap<String, usize> = HashMap::new();
-    for file_val in all_files_changed {
-        let details = AuthorDetails {
-            origin_file_path: file_val.clone(),
-            ..Default::default()
-        };
-        db_obj.append(&configured_file_path, details.clone());
-        if res.contains_key(&file_val) {
-            let count = res.get(&file_val).unwrap() + 1;
-            res.insert(details.origin_file_path, count);
+    for single_struct in output {
+        db_obj.append(&configured_file_path, single_struct.clone());
+        if res.contains_key(&single_struct.origin_file_path) {
+            let count = res.get(&single_struct.origin_file_path).unwrap() + 1;
+            res.insert(single_struct.origin_file_path, count);
             continue;
         }
-        res.insert(details.origin_file_path, 0);
+        res.insert(single_struct.origin_file_path, 0);
     }
     db_obj.store();
     let mut res_string: String = String::new();
@@ -60,88 +57,6 @@ pub fn get_unique_files_changed(
         res_string.pop();
     }
     res_string
-}
-
-pub fn parse_follow(input_str: &str, input_path: &str) -> Option<String> {
-    let mut split_input_lines: Vec<&str> = input_str.split('\t').collect();
-    split_input_lines.reverse();
-    let mut just_two = 1;
-    let mut final_path: Option<String> = None;
-    for mut each_line in split_input_lines {
-        if just_two < 0 {
-            break;
-        }
-        if just_two != 1 {
-            final_path = Some(each_line.to_string());
-        }
-        each_line = each_line.trim_end_matches('\n');
-        // FIXME: use aboslute paths here instead
-        if input_path.contains(each_line) || each_line.contains(input_path) || just_two != 1 {
-            just_two -= 1;
-        }
-    }
-    final_path
-}
-
-pub fn fix_details_in_case_of_move(vec_author_details: Vec<AuthorDetails>) -> Vec<AuthorDetails> {
-    let mut output_vec: Vec<AuthorDetails> = Vec::new();
-    for author_detail in vec_author_details {
-        let file_path = std::path::Path::new(&author_detail.origin_file_path);
-        if !file_path.is_file() {
-            output_vec.push(author_detail);
-        } else {
-            let output = Command::new("git")
-                .args(["log", "--follow", "--raw", "-n 1", &author_detail.origin_file_path])
-                .stdout(Stdio::piped())
-                .output()
-                .unwrap();
-            let stdout_buf = String::from_utf8(output.stdout).unwrap();
-            let parsed_output = parse_follow(stdout_buf.as_str(), &author_detail.origin_file_path);
-            if let Some(final_path) = parsed_output {
-                output_vec.push(AuthorDetails {
-                    origin_file_path: final_path,
-                    commit_hash: author_detail.commit_hash,
-                    author_full_name: author_detail.author_full_name,
-                    line_number: author_detail.line_number,
-                })
-            };
-        }
-    }
-    output_vec
-}
-
-fn parse_moved(output: &str, path_obj: &str) -> Option<String> {
-    for each_file_combination_moved in output.split('\n') {
-        let comb: Vec<&str> = each_file_combination_moved.split('\t').collect();
-        if comb.is_empty() || comb.len() <= 1 {
-            continue;
-        }
-        if comb.get(1).unwrap() == &path_obj {
-            return Some(comb.get(2).unwrap().to_string());
-        }
-    }
-    Some("".to_string())
-}
-
-pub fn _correct_file_path(path_obj: &Path) -> Option<String> {
-    let output = Command::new("git")
-        .args([
-            "log",
-            "--format=%h",
-            "-m",
-            "--first-parent",
-            "--diff-filter=R",
-            "--name-status",
-        ])
-        .stdout(Stdio::piped())
-        .output()
-        .unwrap();
-    let stdout_buf = String::from_utf8(output.stdout).unwrap();
-    let parsed_output = parse_moved(stdout_buf.as_str(), path_obj.to_str().unwrap());
-    if let Some(final_path) = parsed_output {
-        return Some(final_path);
-    }
-    None
 }
 
 pub fn get_contextual_authors(
