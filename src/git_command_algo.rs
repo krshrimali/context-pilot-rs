@@ -101,7 +101,7 @@ pub fn extract_details(
 
         let mut commit_id = val.commit_hash;
         let out_files_for_commit_hash = get_files_for_commit_hash(&commit_id);
-        let mut all_files_changed: Vec<String> = Vec::new();
+        let mut all_files_changed_initial_commit: Vec<String> = Vec::new();
         for each_file in out_files_for_commit_hash {
             let each_file_path = Path::new(&each_file);
             if !each_file_path.exists() {
@@ -109,8 +109,9 @@ pub fn extract_details(
                 // NOTE: Deciding not to send this to the plugin, to avoid confusions...
                 continue;
             }
-            all_files_changed.push(each_file);
+            all_files_changed_initial_commit.push(each_file);
         }
+
 
         let mut blame_count: i32 = 0;
         while blame_count != LAST_MANY_COMMIT_HASHES {
@@ -146,6 +147,7 @@ pub fn extract_details(
                 commit_id = valid_val.get(0).unwrap().commit_hash.clone();
                 let mut to_append_struct = valid_val.get(0).unwrap().clone();
                 let out_files_for_commit_hash = get_files_for_commit_hash(&commit_id);
+                let mut all_files_changed = Vec::new();
                 for each_file in out_files_for_commit_hash {
                     let each_file_path = Path::new(&each_file);
                     if !each_file_path.exists() {
@@ -154,7 +156,8 @@ pub fn extract_details(
                     }
                     all_files_changed.push(each_file);
                 }
-                to_append_struct.contextual_file_paths = all_files_changed.clone();
+                all_files_changed.extend(all_files_changed_initial_commit.clone());
+                to_append_struct.contextual_file_paths = all_files_changed;
                 result_author_details.push(to_append_struct);
             }
         }
