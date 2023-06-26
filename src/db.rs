@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
-    fs::{write, File},
-    io::{Read, Write},
+    fs::File,
+    io::Write,
     path::Path,
 };
 
@@ -15,9 +15,9 @@ pub struct DB {
 }
 
 impl DB {
-    pub fn read(&mut self, file_obj: &mut File) -> HashMap<String, Vec<AuthorDetails>> {
+    pub fn read(&mut self) -> HashMap<String, Vec<AuthorDetails>> {
         let data_buffer = std::fs::read_to_string(self.db_file_path.clone()).unwrap();
-        let v: HashMap<String, Vec<AuthorDetails>> = serde_json::from_str(&data_buffer.as_str())
+        let v: HashMap<String, Vec<AuthorDetails>> = serde_json::from_str(data_buffer.as_str())
             .expect("Unable to deserialize the file, something went wrong");
         v
     }
@@ -39,9 +39,7 @@ impl DB {
             self.current_data = HashMap::new();
             return;
         }
-        let mut file_obj =
-            File::open(self.db_file_path.as_str()).expect("Couldn't open the given file");
-        self.current_data = self.read(&mut file_obj);
+        self.current_data = self.read();
     }
 
     pub fn append(&mut self, configured_file_path: &String, data: AuthorDetails) {

@@ -18,6 +18,7 @@ pub struct Cli {
 pub struct AuthorDetails {
     pub commit_hash: String,
     pub author_full_name: String,
-    pub file_path: String,
+    pub origin_file_path: String,
+    pub contextual_file_paths: Vec<String>,
     pub line_number: usize,
 }
