@@ -1,4 +1,7 @@
-use std::{process::{Command, Stdio}, path::Path};
+use std::{
+    path::Path,
+    process::{Command, Stdio},
+};
 
 use crate::{config::LAST_MANY_COMMIT_HASHES, contextgpt_structs::AuthorDetails};
 
@@ -20,7 +23,7 @@ pub fn parse_str(input_str: &str, file_path: &str) -> Vec<AuthorDetails> {
             split_right_bracket.first().unwrap().to_string(),
             commit_hash.to_string(),
             file_path,
-            Vec::new()
+            Vec::new(),
         );
         author_details_vec.push(author_details);
     }
@@ -69,7 +72,11 @@ pub fn get_data_for_line(
     }
 }
 
-pub fn extract_details(start_line_number: usize, end_line_number: usize, file_path: String) -> Vec<AuthorDetails> {
+pub fn extract_details(
+    start_line_number: usize,
+    end_line_number: usize,
+    file_path: String,
+) -> Vec<AuthorDetails> {
     let mut binding = Command::new("git");
     let command = binding.args([
         "blame",
@@ -110,7 +117,10 @@ pub fn extract_details(start_line_number: usize, end_line_number: usize, file_pa
             blame_count += 1;
             let line_string: String =
                 val.line_number.to_string() + &','.to_string() + &val.line_number.to_string();
-            let commit_url = commit_id.clone() + "^";
+            let commit_url = commit_id.clone();
+            // if !commit_url.ends_with('^') {
+            //     commit_url = commit_id.clone() + "^";
+            // }
             let cmd_args = vec![
                 "blame",
                 "-L",
@@ -124,9 +134,11 @@ pub fn extract_details(start_line_number: usize, end_line_number: usize, file_pa
             let new_blame_command = Command::new("git")
                 .args(cmd_args.clone())
                 .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
                 .output()
                 .unwrap();
             let out_buf = String::from_utf8(new_blame_command.stdout).unwrap();
+            // let error_buf = String::from_utf8(new_blame_command.stderr).unwrap();
             let parsed_buf = parse_str(out_buf.as_str(), &file_path);
 
             if let Some(valid_val) = get_data_for_line(parsed_buf, val.line_number, val.line_number)
