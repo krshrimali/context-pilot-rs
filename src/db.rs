@@ -48,14 +48,15 @@ impl DB {
         let mut existing_data = vec![];
         let line_str: String = format!("{start_line_number}_{end_line_number}");
         if self.current_data.contains_key(configured_file_path) {
-            existing_data = self
+            let existing_data = self
                 .current_data
                 .get_mut(configured_file_path)
-                .unwrap()
-                .get_mut(&line_str)
-                .unwrap()
-                .to_vec();
-            existing_data.append(&mut vec![data]);
+                .unwrap();
+            if !existing_data.contains_key(&line_str) {
+                existing_data.insert(line_str.clone(), vec![data]);
+            } else {
+                existing_data.get_mut(&line_str).unwrap().append(&mut vec![data]);
+            }
         } else {
             existing_data.append(&mut vec![data]);
             self.current_data
@@ -104,8 +105,8 @@ impl DB {
                         {
                             output_vec = existing_lines.get(each_key_combination).cloned();
                             output_string = "".to_string();
-                        } else if start_line_number > received_start_line_number
-                            && end_line_number < received_end_line_number
+                        } else if start_line_number >= received_start_line_number
+                            && end_line_number <= received_end_line_number
                         {
                             // in between
                             let full_data = existing_lines.get(each_key_combination).unwrap();
@@ -119,13 +120,16 @@ impl DB {
                             }
                             output_vec = Some(final_data);
                             output_string = "".to_string();
-                        } else if start_line_number > received_start_line_number
+                        } else if start_line_number >= received_end_line_number {
+                            output_vec = None;
+                            output_string = search_field_second.to_string();
+                        }else if start_line_number >= received_start_line_number
                         // && end_line_number > received_start_line_number
                         {
                             let full_data = existing_lines.get(each_key_combination).unwrap();
                             let mut final_data: Vec<AuthorDetails> = Vec::new();
                             for line_data in full_data {
-                                if line_data.line_number > start_line_number
+                                if line_data.line_number >= start_line_number
                                     && line_data.line_number <= received_end_line_number
                                 {
                                     final_data.push(line_data.clone());
@@ -134,13 +138,13 @@ impl DB {
                             output_vec = Some(final_data);
                             let final_start_line_number = received_end_line_number + 1;
                             output_string = format!("{final_start_line_number}_{end_line_number}");
-                        } else if start_line_number < received_start_line_number
-                            && end_line_number > received_start_line_number
+                        } else if start_line_number <= received_start_line_number
+                            && end_line_number >= received_start_line_number
                         {
                             let full_data = existing_lines.get(each_key_combination).unwrap();
                             let mut final_data: Vec<AuthorDetails> = Vec::new();
                             for line_data in full_data {
-                                if line_data.line_number > received_start_line_number
+                                if line_data.line_number >= received_start_line_number
                                     && line_data.line_number <= end_line_number
                                 {
                                     final_data.push(line_data.clone());
@@ -159,11 +163,13 @@ impl DB {
                             output_string = search_field_second.to_string();
                         }
                     }
+                    // println!("output vec stirng: {:?}, {:?}", output_vec, output_string);
                     (output_vec, output_string)
                 }
                 _ => (None, search_field_second.to_string()),
             }
         } else {
+            // println!("None**2 output vec stirng");
             (None, search_field_second.to_string())
         }
     }

@@ -69,8 +69,7 @@ pub fn get_contextual_authors(
     end_line_number: usize,
     db_obj: &mut DB,
 ) -> String {
-    let configured_file_path: String =
-        format!("{file_path}**{start_line_number}**{end_line_number}");
+    let configured_file_path: String = file_path.clone();
     let line_str: String = format!("{start_line_number}_{end_line_number}");
     // Check in the DB first
     let mut res = String::new();
@@ -92,6 +91,7 @@ pub fn get_contextual_authors(
             res.pop();
         }
         if search_field_second.is_empty() {
+            println!("Found empty, returning...");
             return res;
         } else {
             // find if multiple splits are there
