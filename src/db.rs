@@ -48,24 +48,28 @@ impl DB {
         let mut existing_data = vec![];
         let line_str: String = format!("{start_line_number}_{end_line_number}");
         if self.current_data.contains_key(configured_file_path) {
-            let existing_data = self
-                .current_data
-                .get_mut(configured_file_path)
-                .unwrap();
-            if !existing_data.contains_key(&line_str) {
-                existing_data.insert(line_str.clone(), vec![data]);
+            let file_data = self.current_data.get_mut(configured_file_path).unwrap();
+            if !file_data.contains_key(&line_str) {
+                file_data.insert(line_str.clone(), vec![data]);
+                return;
             } else {
-                existing_data.get_mut(&line_str).unwrap().append(&mut vec![data]);
+                file_data
+                    .get_mut(&line_str)
+                    .unwrap()
+                    .append(&mut vec![data.clone()]);
+                return;
             }
         } else {
             existing_data.append(&mut vec![data]);
+            let mut map = HashMap::new();
+            map.insert(line_str, existing_data).unwrap();
             self.current_data
-                .insert(configured_file_path.to_string(), HashMap::new());
+                .insert(configured_file_path.to_string(), map);
         }
-        self.current_data
-            .get_mut(configured_file_path)
-            .unwrap()
-            .insert(line_str, existing_data);
+        // self.current_data
+        //     .get_mut(configured_file_path)
+        //     .unwrap()
+        //     .insert(line_str, existing_data);
     }
 
     pub fn store(&mut self) {
@@ -120,10 +124,10 @@ impl DB {
                             }
                             output_vec = Some(final_data);
                             output_string = "".to_string();
-                        } else if start_line_number >= received_end_line_number {
+                        } else if start_line_number > received_end_line_number {
                             output_vec = None;
                             output_string = search_field_second.to_string();
-                        }else if start_line_number >= received_start_line_number
+                        } else if start_line_number >= received_start_line_number
                         // && end_line_number > received_start_line_number
                         {
                             let full_data = existing_lines.get(each_key_combination).unwrap();
@@ -163,13 +167,11 @@ impl DB {
                             output_string = search_field_second.to_string();
                         }
                     }
-                    // println!("output vec stirng: {:?}, {:?}", output_vec, output_string);
                     (output_vec, output_string)
                 }
                 _ => (None, search_field_second.to_string()),
             }
         } else {
-            // println!("None**2 output vec stirng");
             (None, search_field_second.to_string())
         }
     }

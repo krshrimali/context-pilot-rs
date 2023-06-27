@@ -90,10 +90,7 @@ pub fn get_contextual_authors(
         if res.ends_with(',') {
             res.pop();
         }
-        if search_field_second.is_empty() {
-            println!("Found empty, returning...");
-            return res;
-        } else {
+        if !search_field_second.is_empty() {
             // find if multiple splits are there
             let split_search_field: Vec<&str> = search_field_second.split('_').collect();
             if split_search_field.len() == 4 {
