@@ -8,31 +8,61 @@ pub fn get_unique_files_changed(
     end_line_number: usize,
     db_obj: &mut DB,
 ) -> String {
-    // check collision first
-    // let output_if_existed = check_collision(start_line_number, end_line_number, db_obj);
-    // let configured_file_path: String =
-    //     format!("{origin_file_path}**{start_line_number}**{end_line_number}");
     let configured_file_path: String = origin_file_path.clone();
+    let line_str: String = format!("{start_line_number}_{end_line_number}");
     // Check in the DB first
-    // let mut res = String::new();
-    // let mut visited: HashMap<String, usize> = HashMap::new();
-    // if let Some(obj) = db_obj.exists(&configured_file_path) {
-    //     for author_detail in obj {
-    //         for each_file in author_detail.contextual_file_paths.clone() {
-    //             if visited.contains_key(&each_file) {
-    //                 continue;
-    //             }
-    //             visited.insert(each_file.clone(), 1);
-    //             res.push_str(&each_file);
-    //             res.push(',');
-    //         }
-    //     }
-    //     if res.ends_with(',') {
-    //         res.pop();
-    //     }
-    //     return res;
-    // }
-    // INSERT HERE
+    let mut res = String::new();
+    let mut visited: HashMap<String, usize> = HashMap::new();
+    if let (Some(obj), search_field_second) = db_obj.exists(&configured_file_path, &line_str) {
+        // means nothing to do...
+        for author_detail in obj {
+            for each_file in author_detail.contextual_file_paths.clone() {
+                if visited.contains_key(&each_file) {
+                    continue;
+                }
+                visited.insert(each_file.clone(), 1);
+                res.push_str(&each_file);
+                res.push(',');
+            }
+        }
+        if res.ends_with(',') {
+            res.pop();
+        }
+        if !search_field_second.is_empty() {
+            // find if multiple splits are there
+            let split_search_field: Vec<&str> = search_field_second.split('_').collect();
+            if split_search_field.len() == 4 {
+                let start_line_number: usize = split_search_field.first().unwrap().parse().unwrap();
+                let end_line_number: usize = split_search_field.get(1).unwrap().parse().unwrap();
+                let output = get_unique_files_changed(
+                    origin_file_path.clone(),
+                    start_line_number,
+                    end_line_number,
+                    db_obj,
+                );
+                let start_line_number: usize = split_search_field.get(2).unwrap().parse().unwrap();
+                let end_line_number: usize = split_search_field.get(3).unwrap().parse().unwrap();
+                let output_second = get_unique_files_changed(
+                    origin_file_path,
+                    start_line_number,
+                    end_line_number,
+                    db_obj,
+                );
+                return output + &output_second;
+            } else {
+                let start_line_number: usize = split_search_field.first().unwrap().parse().unwrap();
+                let end_line_number: usize = split_search_field.get(1).unwrap().parse().unwrap();
+                return get_unique_files_changed(
+                    origin_file_path,
+                    start_line_number,
+                    end_line_number,
+                    db_obj,
+                );
+            }
+        } else {
+            return res;
+        }
+    }
     let output = extract_details(start_line_number, end_line_number, origin_file_path);
     let mut res: HashMap<String, usize> = HashMap::new();
     for single_struct in output {
@@ -117,6 +147,8 @@ pub fn get_contextual_authors(
                     db_obj,
                 );
             }
+        } else {
+            return res;
         }
     }
     let output = extract_details(start_line_number, end_line_number, file_path);

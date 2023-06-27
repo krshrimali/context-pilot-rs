@@ -51,25 +51,19 @@ impl DB {
             let file_data = self.current_data.get_mut(configured_file_path).unwrap();
             if !file_data.contains_key(&line_str) {
                 file_data.insert(line_str.clone(), vec![data]);
-                return;
             } else {
                 file_data
                     .get_mut(&line_str)
                     .unwrap()
-                    .append(&mut vec![data.clone()]);
-                return;
+                    .append(&mut vec![data]);
             }
         } else {
             existing_data.append(&mut vec![data]);
             let mut map = HashMap::new();
-            map.insert(line_str, existing_data).unwrap();
+            map.insert(line_str, existing_data);
             self.current_data
                 .insert(configured_file_path.to_string(), map);
         }
-        // self.current_data
-        //     .get_mut(configured_file_path)
-        //     .unwrap()
-        //     .insert(line_str, existing_data);
     }
 
     pub fn store(&mut self) {
