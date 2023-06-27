@@ -4,6 +4,7 @@ mod config;
 mod contextgpt_structs;
 mod db;
 mod git_command_algo;
+mod collisions;
 
 use linecount::count_lines;
 use quicli::prelude::*;
