@@ -68,10 +68,10 @@ pub fn perform_for_single_line(
     is_author_mode: bool,
 ) -> String {
     let output = extract_details(start_line_number, end_line_number, origin_file_path.clone());
-    println!(
-        "Only computing for {:?} -> {:?}",
-        start_line_number, end_line_number
-    );
+    // println!(
+    //     "Only computing for {:?} -> {:?}",
+    //     start_line_number, end_line_number
+    // );
     let mut res: HashMap<String, usize> = HashMap::new();
     db_obj.append(
         &origin_file_path,
