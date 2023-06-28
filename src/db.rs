@@ -5,14 +5,14 @@ use crate::{config, contextgpt_structs::AuthorDetails};
 #[derive(Default)]
 pub struct DB {
     pub db_file_name: String,
-    pub current_data: HashMap<String, HashMap<String, Vec<AuthorDetails>>>,
+    pub current_data: HashMap<String, HashMap<usize, Vec<AuthorDetails>>>,
     pub db_file_path: String,
 }
 
 impl DB {
-    pub fn read(&mut self) -> HashMap<String, HashMap<String, Vec<AuthorDetails>>> {
+    pub fn read(&mut self) -> HashMap<String, HashMap<usize, Vec<AuthorDetails>>> {
         let data_buffer = std::fs::read_to_string(self.db_file_path.clone()).unwrap();
-        let v: HashMap<String, HashMap<String, Vec<AuthorDetails>>> =
+        let v: HashMap<String, HashMap<usize, Vec<AuthorDetails>>> =
             serde_json::from_str(data_buffer.as_str())
                 .expect("Unable to deserialize the file, something went wrong");
         v
@@ -41,28 +41,32 @@ impl DB {
     pub fn append(
         &mut self,
         configured_file_path: &String,
-        start_line_number: usize,
-        end_line_number: usize,
-        data: AuthorDetails,
+        start_line_idx: usize,
+        end_line_idx: usize,
+        all_data: Vec<AuthorDetails>,
     ) {
-        let mut existing_data = vec![];
-        let line_str: String = format!("{start_line_number}_{end_line_number}");
-        if self.current_data.contains_key(configured_file_path) {
-            let file_data = self.current_data.get_mut(configured_file_path).unwrap();
-            if !file_data.contains_key(&line_str) {
-                file_data.insert(line_str.clone(), vec![data]);
+        for line_idx in start_line_idx..end_line_idx + 1 {
+            let mut existing_data = vec![];
+            if self.current_data.contains_key(configured_file_path) {
+                let file_data = self.current_data.get_mut(configured_file_path).unwrap();
+                match file_data.contains_key(&line_idx) {
+                    false => {
+                        file_data.insert(line_idx, all_data.clone());
+                    }
+                    true => {
+                        file_data
+                            .get_mut(&line_idx)
+                            .unwrap()
+                            .append(&mut all_data.clone());
+                    }
+                }
             } else {
-                file_data
-                    .get_mut(&line_str)
-                    .unwrap()
-                    .append(&mut vec![data]);
+                existing_data.extend(all_data.clone());
+                let mut map = HashMap::new();
+                map.insert(line_idx, existing_data);
+                self.current_data
+                    .insert(configured_file_path.to_string(), map);
             }
-        } else {
-            existing_data.append(&mut vec![data]);
-            let mut map = HashMap::new();
-            map.insert(line_str, existing_data);
-            self.current_data
-                .insert(configured_file_path.to_string(), map);
         }
     }
 
@@ -74,99 +78,35 @@ impl DB {
         write!(file_obj, "{}", output_string).expect("Couldn't write, uhmmm");
     }
 
-    pub fn exists(
-        &self,
+    pub fn exists_and_return(
+        &mut self,
         search_field_first: &String,
-        search_field_second: &String,
-    ) -> (Option<Vec<AuthorDetails>>, String) {
+        start_line_number: &usize,
+        end_line_number: &usize,
+    ) -> (Option<Vec<&AuthorDetails>>, Vec<usize>) {
+        let mut already_computed_data: Vec<&AuthorDetails> = vec![];
+        let mut uncovered_indices: Vec<usize> = vec![];
         if self.current_data.contains_key(search_field_first) {
-            let line_numbers: Vec<&str> = search_field_second.split('_').collect();
-            let start_line_number: usize = line_numbers.first().unwrap().parse().unwrap();
-            let end_line_number: usize = line_numbers.last().unwrap().parse().unwrap();
-            let file_searched = self.current_data.get(search_field_first);
-            match file_searched {
-                Some(existing_lines) => {
-                    let keys = existing_lines.keys();
-                    if keys.len() == 0 {
-                        return (None, search_field_second.to_string());
+            let output = self.current_data.get_mut(search_field_first);
+            if let Some(all_line_data) = output {
+                for each_line_idx in *start_line_number..*end_line_number+1 {
+                    if let Some(eligible_data) = all_line_data.get(&each_line_idx) {
+                        already_computed_data.extend(eligible_data);
+                    } else {
+                        uncovered_indices.push(each_line_idx);
                     }
-                    let mut output_vec = None;
-                    let mut output_string = "".to_string();
-                    for each_key_combination in keys {
-                        let line_numbers: Vec<&str> = each_key_combination.split('_').collect();
-                        let received_start_line_number: usize =
-                            line_numbers.first().unwrap().parse().unwrap();
-                        let received_end_line_number: usize =
-                            line_numbers.last().unwrap().parse().unwrap();
-                        if start_line_number == received_start_line_number
-                            && end_line_number == received_end_line_number
-                        {
-                            output_vec = existing_lines.get(each_key_combination).cloned();
-                            output_string = "".to_string();
-                        } else if start_line_number >= received_start_line_number
-                            && end_line_number <= received_end_line_number
-                        {
-                            // in between
-                            let full_data = existing_lines.get(each_key_combination).unwrap();
-                            let mut final_data: Vec<AuthorDetails> = Vec::new();
-                            for line_data in full_data {
-                                if line_data.line_number >= start_line_number
-                                    && line_data.line_number <= end_line_number
-                                {
-                                    final_data.push(line_data.clone());
-                                }
-                            }
-                            output_vec = Some(final_data);
-                            output_string = "".to_string();
-                        } else if start_line_number > received_end_line_number {
-                            output_vec = None;
-                            output_string = search_field_second.to_string();
-                        } else if start_line_number >= received_start_line_number
-                        // && end_line_number > received_start_line_number
-                        {
-                            let full_data = existing_lines.get(each_key_combination).unwrap();
-                            let mut final_data: Vec<AuthorDetails> = Vec::new();
-                            for line_data in full_data {
-                                if line_data.line_number >= start_line_number
-                                    && line_data.line_number <= received_end_line_number
-                                {
-                                    final_data.push(line_data.clone());
-                                }
-                            }
-                            output_vec = Some(final_data);
-                            let final_start_line_number = received_end_line_number + 1;
-                            output_string = format!("{final_start_line_number}_{end_line_number}");
-                        } else if start_line_number <= received_start_line_number
-                            && end_line_number >= received_start_line_number
-                        {
-                            let full_data = existing_lines.get(each_key_combination).unwrap();
-                            let mut final_data: Vec<AuthorDetails> = Vec::new();
-                            for line_data in full_data {
-                                if line_data.line_number >= received_start_line_number
-                                    && line_data.line_number <= end_line_number
-                                {
-                                    final_data.push(line_data.clone());
-                                }
-                            }
-                            output_vec = Some(final_data);
-                            if end_line_number > received_end_line_number {
-                                let final_received_end_line_number = received_end_line_number + 1;
-                                output_string = format!("{start_line_number}_{received_start_line_number}_{final_received_end_line_number}_{end_line_number}");
-                            } else {
-                                output_string =
-                                    format!("{start_line_number}_{received_start_line_number}");
-                            }
-                        } else {
-                            output_vec = None;
-                            output_string = search_field_second.to_string();
-                        }
-                    }
-                    (output_vec, output_string)
                 }
-                _ => (None, search_field_second.to_string()),
+            }
+            if already_computed_data.is_empty() {
+                (None, uncovered_indices)
+            } else {
+                (Some(already_computed_data), uncovered_indices)
             }
         } else {
-            (None, search_field_second.to_string())
+            for idx in *start_line_number..*end_line_number+1 {
+                uncovered_indices.push(idx);
+            }
+            (None, uncovered_indices)
         }
     }
 }
