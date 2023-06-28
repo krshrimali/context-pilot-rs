@@ -38,7 +38,11 @@ pub fn get_unique_files_changed(
                         origin_file_path.clone(),
                         db_obj,
                         false,
+                        res_string.clone(),
                     );
+                }
+                if res_string.ends_with(',') {
+                    let _ = res_string.pop();
                 }
                 return res_string;
             }
@@ -53,7 +57,11 @@ pub fn get_unique_files_changed(
                     origin_file_path.clone(),
                     db_obj,
                     false,
+                    final_result.clone(),
                 );
+            }
+            if final_result.ends_with(',') {
+                let _ = final_result.pop();
             }
             final_result
         }
@@ -66,6 +74,7 @@ pub fn perform_for_single_line(
     origin_file_path: String,
     db_obj: &mut DB,
     is_author_mode: bool,
+    current_output: String,
 ) -> String {
     let output = extract_details(start_line_number, end_line_number, origin_file_path.clone());
     // println!(
@@ -85,27 +94,28 @@ pub fn perform_for_single_line(
                 let count = res.get(&single_struct.author_full_name).unwrap() + 1;
                 res.insert(single_struct.author_full_name, count);
                 continue;
+            } else {
+                res.insert(single_struct.author_full_name, 0);
             }
-            res.insert(single_struct.author_full_name, 0);
         } else {
             for each_file in single_struct.contextual_file_paths {
                 if res.contains_key(&each_file) {
                     let count = res.get(&each_file).unwrap() + 1;
                     res.insert(each_file, count);
-                    continue;
+                } else {
+                    res.insert(each_file, 0);
                 }
-                res.insert(each_file, 0);
             }
         }
     }
     db_obj.store();
     let mut res_string: String = String::new();
     for key in res.keys() {
+        if current_output.contains(key) {
+            continue;
+        }
         res_string.push_str(key.as_str());
         res_string.push(',');
-    }
-    if res_string.ends_with(',') {
-        res_string.pop();
     }
     res_string
 }
@@ -147,7 +157,11 @@ pub fn get_contextual_authors(
                         origin_file_path.clone(),
                         db_obj,
                         true,
+                        res_string.clone(),
                     );
+                }
+                if res_string.ends_with(',') {
+                    let _ = res_string.pop();
                 }
                 return res_string;
             }
@@ -162,7 +176,11 @@ pub fn get_contextual_authors(
                     origin_file_path.clone(),
                     db_obj,
                     true,
+                    final_result.clone(),
                 );
+            }
+            if final_result.ends_with(',') {
+                let _ = final_result.pop();
             }
             final_result
         }
