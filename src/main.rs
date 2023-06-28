@@ -43,8 +43,8 @@ fn main() -> CliResult {
         auth_db_obj.init_db();
         let output = get_contextual_authors(
             args.file,
-            args.start_number,
-            valid_end_line_number,
+            &args.start_number,
+            &valid_end_line_number,
             &mut auth_db_obj,
         );
         println!("{:?}", output);
@@ -52,8 +52,8 @@ fn main() -> CliResult {
         file_db_obj.init_db();
         let output = get_unique_files_changed(
             args.file,
-            args.start_number,
-            valid_end_line_number,
+            &args.start_number,
+            &valid_end_line_number,
             &mut file_db_obj,
         );
         println!("{:?}", output);
