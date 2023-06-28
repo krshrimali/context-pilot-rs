@@ -2,19 +2,21 @@ use std::{collections::HashMap, fs::File, io::Write, path::Path};
 
 use crate::{config, contextgpt_structs::AuthorDetails};
 
+// Type of the DB stored, to be used in this file
+type DBType = HashMap<String, HashMap<usize, Vec<AuthorDetails>>>;
+
 #[derive(Default)]
 pub struct DB {
     pub db_file_name: String,
-    pub current_data: HashMap<String, HashMap<usize, Vec<AuthorDetails>>>,
+    pub current_data: DBType,
     pub db_file_path: String,
 }
 
 impl DB {
-    pub fn read(&mut self) -> HashMap<String, HashMap<usize, Vec<AuthorDetails>>> {
+    pub fn read(&mut self) -> DBType {
         let data_buffer = std::fs::read_to_string(self.db_file_path.clone()).unwrap();
-        let v: HashMap<String, HashMap<usize, Vec<AuthorDetails>>> =
-            serde_json::from_str(data_buffer.as_str())
-                .expect("Unable to deserialize the file, something went wrong");
+        let v: DBType = serde_json::from_str(data_buffer.as_str())
+            .expect("Unable to deserialize the file, something went wrong");
         v
     }
 
@@ -89,7 +91,7 @@ impl DB {
         if self.current_data.contains_key(search_field_first) {
             let output = self.current_data.get_mut(search_field_first);
             if let Some(all_line_data) = output {
-                for each_line_idx in *start_line_number..*end_line_number+1 {
+                for each_line_idx in *start_line_number..*end_line_number + 1 {
                     if let Some(eligible_data) = all_line_data.get(&each_line_idx) {
                         already_computed_data.extend(eligible_data);
                     } else {
@@ -103,7 +105,7 @@ impl DB {
                 (Some(already_computed_data), uncovered_indices)
             }
         } else {
-            for idx in *start_line_number..*end_line_number+1 {
+            for idx in *start_line_number..*end_line_number + 1 {
                 uncovered_indices.push(idx);
             }
             (None, uncovered_indices)
