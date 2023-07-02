@@ -1,5 +1,5 @@
-use structopt::StructOpt;
 use serde::{Deserialize, Serialize};
+use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
 pub struct Cli {
