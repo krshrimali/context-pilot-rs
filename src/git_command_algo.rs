@@ -156,7 +156,12 @@ pub fn extract_details(
                     }
                     all_files_changed.push(each_file);
                 }
-                all_files_changed.extend(all_files_changed_initial_commit.clone());
+                for each_initial_commit_file in all_files_changed_initial_commit.clone() {
+                    if all_files_changed.contains(&each_initial_commit_file) {
+                        continue;
+                    }
+                    all_files_changed.push(each_initial_commit_file);
+                }
                 to_append_struct.contextual_file_paths = all_files_changed;
                 result_author_details.push(to_append_struct);
             }
