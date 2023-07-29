@@ -4,6 +4,7 @@ use structopt::StructOpt;
 #[derive(Debug, StructOpt)]
 pub struct Cli {
     pub file: String,
+    pub workspace_path: String,
 
     #[structopt(short = "s")]
     pub start_number: usize,

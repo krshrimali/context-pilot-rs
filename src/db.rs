@@ -20,17 +20,24 @@ impl DB {
         v
     }
 
-    pub fn init_db(&mut self) {
-        let folder_path = Path::new(simple_home_dir::home_dir().unwrap().to_str().unwrap())
+    pub fn init_db(&mut self, project_path: &str) {
+        let root_folder_path = Path::new(simple_home_dir::home_dir().unwrap().to_str().unwrap())
             .join(config::DB_FOLDER);
-        self.db_file_path = folder_path
+        let project_name = project_path.split('/').last().unwrap();
+        let db_folder_path = root_folder_path
+            .join(project_name)
+            .to_str()
+            .unwrap()
+            .to_string();
+        self.db_file_path = root_folder_path
+            .join(project_name)
             .join(&self.db_file_name)
             .to_str()
             .unwrap()
             .to_string();
         // Create folder
-        std::fs::create_dir_all(folder_path)
-            .expect("unable to create folder, something went wrong");
+        let db_file_path = self.db_file_path.as_str();
+        std::fs::create_dir_all(db_folder_path).expect(db_file_path);
         let db_path_obj: &Path = Path::new(&self.db_file_path);
         if !db_path_obj.exists() {
             File::create(db_path_obj).expect("Couldn't create the file for some reason");

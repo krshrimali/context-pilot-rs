@@ -40,7 +40,7 @@ fn main() -> CliResult {
         ..Default::default()
     };
     if args.request_type.starts_with("aut") {
-        auth_db_obj.init_db();
+        auth_db_obj.init_db(&args.workspace_path);
         let output = get_contextual_authors(
             args.file,
             &args.start_number,
@@ -49,7 +49,7 @@ fn main() -> CliResult {
         );
         println!("{:?}", output);
     } else {
-        file_db_obj.init_db();
+        file_db_obj.init_db(&args.workspace_path);
         let output = get_unique_files_changed(
             args.file,
             &args.start_number,
