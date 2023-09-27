@@ -10,7 +10,7 @@ use quicli::prelude::*;
 use structopt::StructOpt;
 
 use algo_loc::get_unique_files_changed;
-use contextgpt_structs::Cli;
+use contextgpt_structs::{Cli, RequestTypeOptions};
 
 use crate::algo_loc::get_contextual_authors;
 
@@ -39,24 +39,27 @@ fn main() -> CliResult {
         db_file_name: config::FILE_DB_PATH.to_string(),
         ..Default::default()
     };
-    if args.request_type.starts_with("aut") {
-        auth_db_obj.init_db();
-        let output = get_contextual_authors(
-            args.file,
-            &args.start_number,
-            &valid_end_line_number,
-            &mut auth_db_obj,
-        );
-        println!("{:?}", output);
-    } else {
-        file_db_obj.init_db();
-        let output = get_unique_files_changed(
-            args.file,
-            &args.start_number,
-            &valid_end_line_number,
-            &mut file_db_obj,
-        );
-        println!("{:?}", output);
-    }
+    match args.request_type {
+        RequestTypeOptions::File => {
+            file_db_obj.init_db();
+            let output = get_unique_files_changed(
+                args.file,
+                &args.start_number,
+                &valid_end_line_number,
+                &mut file_db_obj,
+            );
+            println!("{:?}", output);
+        }
+        RequestTypeOptions::Author => {
+            auth_db_obj.init_db();
+            let output = get_contextual_authors(
+                args.file,
+                &args.start_number,
+                &valid_end_line_number,
+                &mut auth_db_obj,
+            );
+            println!("{:?}", output);
+        }
+    };
     Ok(())
 }
