@@ -14,7 +14,6 @@ impl FromStr for RequestTypeOptions {
         match request_type {
             "author" => Ok(RequestTypeOptions::Author),
             "file" => Ok(RequestTypeOptions::File),
-            // TODO: Pass the request_type in this error
             _ => Err(format!(
                 "Could not parse the request type: {}",
                 request_type
@@ -33,7 +32,6 @@ pub struct Cli {
     pub end_number: usize,
 
     // TODO: Add instructions on what request_type could be
-    // TODO: Conver this from String to an Enum
     #[structopt(short = "t")]
     pub request_type: RequestTypeOptions,
 }

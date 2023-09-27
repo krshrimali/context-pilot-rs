@@ -39,8 +39,6 @@ fn main() -> CliResult {
         db_file_name: config::FILE_DB_PATH.to_string(),
         ..Default::default()
     };
-    // FIXME: This is a very bad way to handle request_type, ideally this should be an enum
-    // if args.request_type == RequestTypeOptions::Author {
     match args.request_type {
         RequestTypeOptions::File => {
             file_db_obj.init_db();
