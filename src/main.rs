@@ -3,6 +3,7 @@ mod authordetails_impl;
 mod config;
 mod contextgpt_structs;
 mod db;
+mod db_new;
 mod git_command_algo;
 
 use linecount::count_lines;
