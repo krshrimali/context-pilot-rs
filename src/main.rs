@@ -31,35 +31,32 @@ fn main() -> CliResult {
     } else {
         end_line_number
     };
-    let mut auth_db_obj = db::DB {
-        db_file_name: config::AUTHOR_DB_PATH.to_string(),
-        ..Default::default()
-    };
-    let mut file_db_obj = db::DB {
-        db_file_name: config::FILE_DB_PATH.to_string(),
+    let mut db_obj = db::DB {
+        folder_path: args.folder_path,
         ..Default::default()
     };
     match args.request_type {
         RequestTypeOptions::File => {
-            file_db_obj.init_db();
+            db_obj.init_db(args.file.as_str());
             let output = get_unique_files_changed(
                 args.file,
                 &args.start_number,
                 &valid_end_line_number,
-                &mut file_db_obj,
+                &mut db_obj,
             );
             println!("{:?}", output);
         }
         RequestTypeOptions::Author => {
-            auth_db_obj.init_db();
+            db_obj.init_db(args.file.as_str());
             let output = get_contextual_authors(
                 args.file,
                 &args.start_number,
                 &valid_end_line_number,
-                &mut auth_db_obj,
+                &mut db_obj,
             );
             println!("{:?}", output);
         }
     };
     Ok(())
 }
+

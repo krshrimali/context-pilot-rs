@@ -25,6 +25,7 @@ impl FromStr for RequestTypeOptions {
 #[derive(Debug, StructOpt)]
 pub struct Cli {
     pub file: String,
+    pub folder_path: String,
 
     #[structopt(short = "s")]
     pub start_number: usize,
