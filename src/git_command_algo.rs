@@ -64,7 +64,7 @@ pub fn get_data_for_line(
             output_list.push(output);
         }
     }
-    // TOOD: Address when line number is not valid or found
+    // TODO: Address when line number is not valid or found
     if output_list.is_empty() {
         None
     } else {
@@ -111,7 +111,6 @@ pub fn extract_details(
             }
             all_files_changed_initial_commit.push(each_file);
         }
-
 
         let mut blame_count: i32 = 0;
         while blame_count != LAST_MANY_COMMIT_HASHES {
