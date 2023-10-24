@@ -6,6 +6,7 @@ use std::{collections::HashMap, fs::File, path::Path};
 
 // use simple_home_dir::home_dir;
 
+use crate::config::MAX_ITEMS_IN_EACH_DB_FILE;
 use crate::{config, contextgpt_structs::AuthorDetails};
 
 type DBType = HashMap<String, HashMap<u32, Vec<AuthorDetails>>>;
@@ -16,11 +17,13 @@ type MappingDBType = HashMap<String, Vec<u32>>;
 pub struct DB {
     pub index: u32,                // The line of code that you are at, right now? TODO:
     pub folder_path: String, // Current folder path that this DB is processing, or the binary is running
-    pub curr_lines: u32,     // TODO:
+    pub curr_items: u32,     // TODO:
     pub mapping_file_name: String, // This is for storing which file is in which folder/file? <-- TODO:
     pub current_data: DBType, // The data that we have from the loaded DB into our inhouse member
     pub db_file_path: String,
     pub mapping_file_path: String,
+    pub mapping_data: MappingDBType,
+    pub curr_file_path: String,
 }
 
 impl DB {
@@ -31,11 +34,11 @@ impl DB {
                 std::fs::read_to_string(&self.db_file_path).expect("Unable to read the file");
             let data: DBType =
                 serde_json::from_str(data_buffers.as_str()).expect("Unable to deserialize");
-            return data;
+            data
         } else {
             // TODO: Add a log that the DB doesn't exist
             // TODO: Enable logging into a logging file and add two modes: debug and info
-            return HashMap::new();
+            HashMap::new()
         }
     }
 
@@ -61,6 +64,7 @@ impl DB {
         //     .join(config::DB_FOLDER);
         // let db_folder = config::DB_FOLDER.to_owned() + &self.folder_path;
         let db_folder = format!("{}/{}", config::DB_FOLDER, self.folder_path);
+        self.curr_file_path = String::from(curr_file_path);
         // let mut main_folder_path = String::new();
 
         if let Some(home) = simple_home_dir::home_dir() {
@@ -77,15 +81,13 @@ impl DB {
             return;
         }
         self.index = 0;
-        self.curr_lines = 0;
+        self.curr_items = 0;
         // self.mapping_file_name = String::from("mapping.json");
 
         // Now initialise all relevant folders/files
         // When the child folders are also not present - we just want to iteratively create all folders
-        std::fs::create_dir_all(&self.folder_path).expect(&format!(
-            "Unable to create folder for: {}",
-            self.folder_path
-        ));
+        std::fs::create_dir_all(&self.folder_path)
+            .unwrap_or_else(|_| panic!("Unable to create folder for: {}", self.folder_path));
 
         // Search for the index
         let db_file_index = self.find_index(curr_file_path);
@@ -94,6 +96,8 @@ impl DB {
             self.current_data = self.read_all(valid_indices);
         } else {
             // TODO: Calculate what should be the index here when it's not found
+            let valid_indices = vec![self.index];
+            self.current_data = self.read_all(valid_indices);
         }
     }
 
@@ -106,8 +110,11 @@ impl DB {
             // mapping file doesn't exist yet... we'll create one with the index as 0 for the given curr_file_path
             let mut data: MappingDBType = HashMap::new();
             data.insert(curr_file_path.to_string(), vec![self.index]);
+            self.mapping_data = data.clone();
+            self.mapping_data
+                .insert(String::from("last_used_index"), [self.index].to_vec());
             let init_mapping_string =
-                serde_json::to_string_pretty(&data).expect("Unable to create data");
+                serde_json::to_string_pretty(&self.mapping_data).expect("Unable to create data");
             let mut mapping_path_file: File =
                 File::create(&self.mapping_file_path).expect("Couldn't create this new file...");
             write!(mapping_path_file, "{}", init_mapping_string)
@@ -116,26 +123,30 @@ impl DB {
             self.current_data = HashMap::new();
             return None;
         }
-        let mapping_data = std::fs::read_to_string(&self.mapping_file_path).expect(&format!(
-            "Unable to read the mapping file into string, file path: {}",
-            self.mapping_file_path
-        ));
-        let mut mapping_json: HashMap<String, Vec<u32>> =
-            serde_json::from_str(mapping_data.as_str()).expect(&format!(
-                "Unable to deserialize the mapping file, path: {}",
+        let mapping_data = std::fs::read_to_string(&self.mapping_file_path).unwrap_or_else(|_| {
+            panic!(
+                "Unable to read the mapping file into string, file path: {}",
                 self.mapping_file_path
-            ));
+            )
+        });
+        let mut mapping_json: HashMap<String, Vec<u32>> =
+            serde_json::from_str(mapping_data.as_str()).unwrap_or_else(|_| {
+                panic!(
+                    "Unable to deserialize the mapping file, path: {}",
+                    self.mapping_file_path
+                )
+            });
         let mapping_json_copy = mapping_json.clone();
         let indices = mapping_json_copy.get(curr_file_path);
         if indices.is_none() {
             // The mapping file is there but we just don't have the corresponding entry for it
-            // let mut data: MappingDBType = HashMap::new();
-            self.index = self.index + 1;
-            // File::create(format!("{}/{}.json", self.folder_path, self.index));
+            // TODO: Store last available index for the DB
+            // self.index = self.index + 1;
+            self.index = self.get_available_index(&mapping_json);
+
             self.db_file_path = format!("{}/{}.json", self.folder_path, self.index);
-            // data.insert(curr_file_path.to_string(), vec![self.index]);
-            // mapping_json.extend(data);
             mapping_json.insert(curr_file_path.to_string(), vec![self.index]);
+            self.mapping_data = mapping_json.clone();
             let init_mapping_string =
                 serde_json::to_string_pretty(&mapping_json).expect("Unable to create data");
             let mut file = OpenOptions::new()
@@ -144,8 +155,23 @@ impl DB {
                 .open(&self.mapping_file_path)
                 .unwrap();
             writeln!(file, "{}", init_mapping_string).expect("Couldn't write to the file, wow!");
+            return None;
+            // indices = Some(&vec![self.index]);
+            // let indices_vec: Vec<u32> = vec![self.index];
+            // return indices_vec;
+            // let new_indices = indices.insert(vec![self.index]);
+            // if let Some(ref mut indices) = indices.as_mut() {
+            //     indices.push(self.index);
+            // }
+            // indices = Some(vec![self.index]);
         }
         indices.cloned()
+    }
+
+    pub fn get_available_index(&self, mapping_json: &HashMap<String, Vec<u32>>) -> u32 {
+        let default_vec = &[0_u32].to_vec();
+        let last_used_index: &Vec<u32> = mapping_json.get("last_used_index").unwrap_or(default_vec);
+        last_used_index[0]
     }
 
     pub fn append(
@@ -181,12 +207,63 @@ impl DB {
         }
     }
 
+    pub fn _is_limit_crossed(&self) -> bool {
+        // Iter recursively and find the "total" number of elements/items in self.current_data
+        // let mut total_len = 0;
+        // for item in self.current_data.iter() {
+        //     total_len += item.1.len();
+        // }
+        // println!("Total len: {}", total_len);
+        // (total_len as u32) >= MAX_ITEMS_IN_EACH_DB_FILE
+        println!("curr items: {}", &self.curr_items);
+        self.curr_items >= MAX_ITEMS_IN_EACH_DB_FILE
+    }
+
     pub fn store(&mut self) {
-        let mut file_obj = File::create(self.db_file_path.as_str())
-            .expect(format!("Couldn't open the given file: {}", self.db_file_path).as_str());
+        // We should check if the limit has crossed and then modify self.db_file_path
+        let mut we_crossed_limit: bool = false;
+        self.curr_items += 1;
+        if self._is_limit_crossed() {
+            // We'll have to make sure that the new file is created
+            self.curr_items = 0;
+            self.index += 1;
+            self.db_file_path = format!("{}/{}.json", self.folder_path, self.index);
+
+            // Updating mapping content and file as well
+            self.mapping_data
+                .insert(String::from("last_used_index"), [self.index].to_vec());
+            self.mapping_data
+                .insert(self.curr_file_path.clone(), [self.index].to_vec());
+            let mapping_string = serde_json::to_string_pretty(&self.mapping_data)
+                .expect("Unable to deserialize data");
+            // Update the mapping file accordingly
+            let mut file = OpenOptions::new()
+                .write(true)
+                .append(false) // TODO: Would love to append here instead
+                .open(&self.mapping_file_path)
+                .unwrap();
+            writeln!(file, "{}", mapping_string).expect("Couldn't write to the file, wow!");
+            we_crossed_limit = true;
+        }
+
         let output_string =
-            serde_json::to_string_pretty(&self.current_data).expect("Unable to write data");
-        write!(file_obj, "{}", output_string).expect("Couldn't write, uhmmm");
+            serde_json::to_string_pretty(&self.current_data).expect("Unable to deserialize data");
+        if we_crossed_limit {
+            self.current_data.clear();
+            println!("Done clearing");
+        }
+        if Path::new(&self.db_file_path).exists() {
+            let mut file_obj = OpenOptions::new()
+                .write(true)
+                .append(false) // TODO: Would love to append here instead
+                .open(&self.db_file_path)
+                .unwrap();
+            write!(file_obj, "{}", output_string).expect("Couldn't write, uhmmm");
+        } else {
+            let mut file_obj = File::create(self.db_file_path.as_str())
+                .unwrap_or_else(|_| panic!("Couldn't open the given file: {}", self.db_file_path));
+            write!(file_obj, "{}", output_string).expect("Couldn't write, uhmmm");
+        }
     }
 
     pub fn exists_and_return(
