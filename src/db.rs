@@ -1,5 +1,3 @@
-// use crate::{config, contextgpt_structs::AuthorDetails};
-
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::{collections::HashMap, fs::File, path::Path};
@@ -53,7 +51,16 @@ impl DB {
                 return HashMap::new();
             }
             let current_data = self.read();
-            init_data.extend(current_data);
+            let values = current_data.get(&self.curr_file_path);
+            if let Some(valid_values) = values {
+                let mut default: HashMap<u32, Vec<AuthorDetails>> = HashMap::new();
+                let insert_data_here = init_data
+                    .get_mut(&self.curr_file_path)
+                    .unwrap_or(&mut default);
+                insert_data_here.extend(valid_values.clone());
+                let copy_data = insert_data_here.clone();
+                init_data.insert(self.curr_file_path.clone(), copy_data);
+            }
         }
         init_data
     }
@@ -82,7 +89,6 @@ impl DB {
         }
         self.index = 0;
         self.curr_items = 0;
-        // self.mapping_file_name = String::from("mapping.json");
 
         // Now initialise all relevant folders/files
         // When the child folders are also not present - we just want to iteratively create all folders
@@ -92,13 +98,8 @@ impl DB {
         // Search for the index
         let db_file_index = self.find_index(curr_file_path);
         // Filename will be: <db_file_index>.json
-        if let Some(valid_indices) = db_file_index {
-            self.current_data = self.read_all(valid_indices);
-        } else {
-            // TODO: Calculate what should be the index here when it's not found
-            let valid_indices = vec![self.index];
-            self.current_data = self.read_all(valid_indices);
-        }
+        let valid_indices = db_file_index.unwrap_or(vec![self.index]);
+        self.current_data = self.read_all(valid_indices.clone());
     }
 
     fn find_index(&mut self, curr_file_path: &str) -> Option<Vec<u32>> {
@@ -138,6 +139,7 @@ impl DB {
             });
         let mapping_json_copy = mapping_json.clone();
         let indices = mapping_json_copy.get(curr_file_path);
+        self.mapping_data = mapping_json.clone();
         if indices.is_none() {
             // The mapping file is there but we just don't have the corresponding entry for it
             // TODO: Store last available index for the DB
@@ -156,14 +158,6 @@ impl DB {
                 .unwrap();
             writeln!(file, "{}", init_mapping_string).expect("Couldn't write to the file, wow!");
             return None;
-            // indices = Some(&vec![self.index]);
-            // let indices_vec: Vec<u32> = vec![self.index];
-            // return indices_vec;
-            // let new_indices = indices.insert(vec![self.index]);
-            // if let Some(ref mut indices) = indices.as_mut() {
-            //     indices.push(self.index);
-            // }
-            // indices = Some(vec![self.index]);
         }
         indices.cloned()
     }
@@ -208,14 +202,6 @@ impl DB {
     }
 
     pub fn _is_limit_crossed(&self) -> bool {
-        // Iter recursively and find the "total" number of elements/items in self.current_data
-        // let mut total_len = 0;
-        // for item in self.current_data.iter() {
-        //     total_len += item.1.len();
-        // }
-        // println!("Total len: {}", total_len);
-        // (total_len as u32) >= MAX_ITEMS_IN_EACH_DB_FILE
-        println!("curr items: {}", &self.curr_items);
         self.curr_items >= MAX_ITEMS_IN_EACH_DB_FILE
     }
 
@@ -232,16 +218,17 @@ impl DB {
             // Updating mapping content and file as well
             self.mapping_data
                 .insert(String::from("last_used_index"), [self.index].to_vec());
-            self.mapping_data
-                .insert(self.curr_file_path.clone(), [self.index].to_vec());
+
+            let list_indices_before = self.mapping_data.get_mut(&self.curr_file_path);
+            list_indices_before
+                .unwrap_or(&mut vec![])
+                .append(&mut vec![self.index]);
+
             let mapping_string = serde_json::to_string_pretty(&self.mapping_data)
                 .expect("Unable to deserialize data");
             // Update the mapping file accordingly
-            let mut file = OpenOptions::new()
-                .write(true)
-                .append(false) // TODO: Would love to append here instead
-                .open(&self.mapping_file_path)
-                .unwrap();
+            let mut file = File::create(&self.mapping_file_path)
+                .expect("Couldn't create the mapping file for some reason.");
             writeln!(file, "{}", mapping_string).expect("Couldn't write to the file, wow!");
             we_crossed_limit = true;
         }
@@ -250,14 +237,10 @@ impl DB {
             serde_json::to_string_pretty(&self.current_data).expect("Unable to deserialize data");
         if we_crossed_limit {
             self.current_data.clear();
-            println!("Done clearing");
         }
         if Path::new(&self.db_file_path).exists() {
-            let mut file_obj = OpenOptions::new()
-                .write(true)
-                .append(false) // TODO: Would love to append here instead
-                .open(&self.db_file_path)
-                .unwrap();
+            let mut file_obj = File::create(self.db_file_path.as_str())
+                .unwrap_or_else(|_| panic!("Couldn't open the given file: {}", self.db_file_path));
             write!(file_obj, "{}", output_string).expect("Couldn't write, uhmmm");
         } else {
             let mut file_obj = File::create(self.db_file_path.as_str())
