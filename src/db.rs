@@ -119,7 +119,7 @@ impl DB {
             let mut mapping_path_file: File =
                 File::create(&self.mapping_file_path).expect("Couldn't create this new file...");
             write!(mapping_path_file, "{}", init_mapping_string)
-                .expect("Couldn't write a very simple data object into a new file...wow!");
+                .expect("Couldn't write a very simple data object into a new mapping file...wow!");
             self.db_file_path = format!("{}/{}.json", self.folder_path, self.index);
             self.current_data = HashMap::new();
             return None;
@@ -156,7 +156,8 @@ impl DB {
                 .append(false) // TODO: Would love to append here instead
                 .open(&self.mapping_file_path)
                 .unwrap();
-            writeln!(file, "{}", init_mapping_string).expect("Couldn't write to the file, wow!");
+            writeln!(file, "{}", init_mapping_string)
+                .expect("Couldn't write to the mapping file, wow!");
             return None;
         }
         indices.cloned()
@@ -229,7 +230,7 @@ impl DB {
             // Update the mapping file accordingly
             let mut file = File::create(&self.mapping_file_path)
                 .expect("Couldn't create the mapping file for some reason.");
-            writeln!(file, "{}", mapping_string).expect("Couldn't write to the file, wow!");
+            writeln!(file, "{}", mapping_string).expect("Couldn't write to the mapping file, wow!");
             we_crossed_limit = true;
         }
 
@@ -241,11 +242,9 @@ impl DB {
         if Path::new(&self.db_file_path).exists() {
             let mut file_obj = File::create(self.db_file_path.as_str())
                 .unwrap_or_else(|_| panic!("Couldn't open the given file: {}", self.db_file_path));
-            write!(file_obj, "{}", output_string).expect("Couldn't write, uhmmm");
         } else {
             let mut file_obj = File::create(self.db_file_path.as_str())
                 .unwrap_or_else(|_| panic!("Couldn't open the given file: {}", self.db_file_path));
-            write!(file_obj, "{}", output_string).expect("Couldn't write, uhmmm");
         }
     }
 
