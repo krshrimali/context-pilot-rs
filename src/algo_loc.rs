@@ -62,10 +62,11 @@ pub fn get_unique_files_changed(
             if !unvisited_indices.is_empty() {
                 // find if multiple splits are there
                 let mut res_string: String = res;
-                for each_unvisited_index in unvisited_indices {
+                for each_unvisited_index in unvisited_indices.iter() {
+                    // let is_end = (*each_unvisited_index as usize) == (unvisited_indices.len() - 1);
                     let output_single_line = perform_for_single_line(
-                        each_unvisited_index as usize,
-                        each_unvisited_index as usize,
+                        *each_unvisited_index as usize,
+                        *each_unvisited_index as usize,
                         origin_file_path.clone(),
                         db_obj,
                         false,
@@ -86,10 +87,11 @@ pub fn get_unique_files_changed(
         }
         None => {
             let mut final_result = "".to_string();
-            for each_unvisited_index in unvisited_indices {
+            for each_unvisited_index in unvisited_indices.iter() {
+                // let is_end = (*each_unvisited_index as usize) == (unvisited_indices.len() - 1);
                 let output_single_line = perform_for_single_line(
-                    each_unvisited_index as usize,
-                    each_unvisited_index as usize,
+                    *each_unvisited_index as usize,
+                    *each_unvisited_index as usize,
                     origin_file_path.clone(),
                     db_obj,
                     false,
@@ -194,10 +196,10 @@ pub fn get_contextual_authors(
             if !unvisited_indices.is_empty() {
                 // find if multiple splits are there
                 let mut res_string: String = res;
-                for each_unvisited_index in unvisited_indices {
+                for each_unvisited_index in unvisited_indices.iter() {
                     let output_single_line = perform_for_single_line(
-                        each_unvisited_index as usize,
-                        each_unvisited_index as usize,
+                        *each_unvisited_index as usize,
+                        *each_unvisited_index as usize,
                         origin_file_path.clone(),
                         db_obj,
                         true,
@@ -218,10 +220,10 @@ pub fn get_contextual_authors(
         }
         None => {
             let mut final_result = "".to_string();
-            for each_unvisited_index in unvisited_indices {
+            for each_unvisited_index in unvisited_indices.iter() {
                 let output_single_line = perform_for_single_line(
-                    each_unvisited_index as usize,
-                    each_unvisited_index as usize,
+                    *each_unvisited_index as usize,
+                    *each_unvisited_index as usize,
                     origin_file_path.clone(),
                     db_obj,
                     true,
