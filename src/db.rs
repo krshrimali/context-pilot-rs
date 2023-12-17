@@ -35,6 +35,7 @@ impl DB {
             data
         } else {
             // TODO: Add a log that the DB doesn't exist
+            eprintln!("The DB file doesn't exist for the given path: {}", self.db_file_path);
             // TODO: Enable logging into a logging file and add two modes: debug and info
             HashMap::new()
         }
@@ -234,16 +235,16 @@ impl DB {
             we_crossed_limit = true;
         }
 
-        let output_string =
+        let _output_string =
             serde_json::to_string_pretty(&self.current_data).expect("Unable to deserialize data");
         if we_crossed_limit {
             self.current_data.clear();
         }
         if Path::new(&self.db_file_path).exists() {
-            let mut file_obj = File::create(self.db_file_path.as_str())
+            let mut _file_obj = File::create(self.db_file_path.as_str())
                 .unwrap_or_else(|_| panic!("Couldn't open the given file: {}", self.db_file_path));
         } else {
-            let mut file_obj = File::create(self.db_file_path.as_str())
+            let mut _file_obj = File::create(self.db_file_path.as_str())
                 .unwrap_or_else(|_| panic!("Couldn't open the given file: {}", self.db_file_path));
         }
     }
