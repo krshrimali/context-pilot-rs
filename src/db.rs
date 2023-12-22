@@ -242,9 +242,13 @@ impl DB {
         if Path::new(&self.db_file_path).exists() {
             let mut file_obj = File::create(self.db_file_path.as_str())
                 .unwrap_or_else(|_| panic!("Couldn't open the given file: {}", self.db_file_path));
+            write!(file_obj, "{}", output_string)
+                .expect("Couldn't write the data to the DB File Path");
         } else {
             let mut file_obj = File::create(self.db_file_path.as_str())
                 .unwrap_or_else(|_| panic!("Couldn't open the given file: {}", self.db_file_path));
+            write!(file_obj, "{}", output_string)
+                .expect("Couldn't write the data to the DB File Path");
         }
     }
 
