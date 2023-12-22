@@ -250,18 +250,6 @@ impl DB {
             write!(file_obj, "{}", output_string)
                 .expect("Couldn't write the data to the DB File Path");
         }
-
-        // Write output_string to the file_obj
-        // write!(
-        //     OpenOptions::new()
-        //         .write(true)
-        //         .append(false)
-        //         .open(&self.db_file_path)
-        //         .unwrap(),
-        //     "{}",
-        //     output_string
-        // )
-        // .expect("Unable to write to the file");
     }
 
     pub fn exists_and_return(
