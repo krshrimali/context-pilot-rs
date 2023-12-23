@@ -35,8 +35,6 @@ pub fn read_config(config_file_name: &str) -> Config {
         }
         Err(_) => {
             // TODO: Add a log that you are using defaults
-            println!("Using default config");
-            println!("Config file not found at: {:?}", &joined_path);
             Config::default()
         }
     }
