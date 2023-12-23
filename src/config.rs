@@ -12,7 +12,7 @@ pub const CONFIG_FILE_NAME: &str = "context_pilot.json";
 
 // Default for the output to be shown in UI for selector
 // For both request types: file and author
-pub const OUTPUT_COUNT_THRESHOLD: usize = 2;
+pub const OUTPUT_COUNT_THRESHOLD: usize = 10;
 
 
 // TODO: Implement threshold for confidence for relevance
