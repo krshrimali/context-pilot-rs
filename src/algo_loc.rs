@@ -1,4 +1,4 @@
-// use crate::db::DB;
+use crate::config_impl;
 use crate::db::DB;
 use crate::git_command_algo::extract_details;
 use std::collections::HashMap;
@@ -31,6 +31,7 @@ pub fn get_unique_files_changed(
     start_line_number: &usize,
     end_line_number: &usize,
     db_obj: &mut DB,
+    config_obj: &config_impl::Config,
 ) -> String {
     // Check in the DB first
     let mut res = String::new();
@@ -70,6 +71,7 @@ pub fn get_unique_files_changed(
                         origin_file_path.clone(),
                         db_obj,
                         false,
+                        config_obj,
                     );
                     split_output_and_create_map(
                         output_single_line,
@@ -81,9 +83,9 @@ pub fn get_unique_files_changed(
                 if res_string.ends_with(',') {
                     let _ = res_string.pop();
                 }
-                return res_string;
+                return config_impl::trim_result(res_string, config_obj.file_count_threshold);
             }
-            res
+            config_impl::trim_result(res, config_obj.file_count_threshold)
         }
         None => {
             let mut final_result = "".to_string();
@@ -95,6 +97,7 @@ pub fn get_unique_files_changed(
                     origin_file_path.clone(),
                     db_obj,
                     false,
+                    config_obj,
                 );
                 split_output_and_create_map(
                     output_single_line,
@@ -106,7 +109,7 @@ pub fn get_unique_files_changed(
             if final_result.ends_with(',') {
                 let _ = final_result.pop();
             }
-            final_result
+            config_impl::trim_result(final_result, config_obj.file_count_threshold)
         }
     }
 }
@@ -117,8 +120,14 @@ pub fn perform_for_single_line(
     origin_file_path: String,
     db_obj: &mut DB,
     is_author_mode: bool,
+    config_obj: &config_impl::Config,
 ) -> String {
-    let output = extract_details(start_line_number, end_line_number, origin_file_path.clone());
+    let output = extract_details(
+        start_line_number,
+        end_line_number,
+        origin_file_path.clone(),
+        config_obj,
+    );
     // println!(
     //     "Only computing for {:?} -> {:?}",
     //     start_line_number, end_line_number
@@ -164,6 +173,7 @@ pub fn get_contextual_authors(
     start_line_number: &usize,
     end_line_number: &usize,
     db_obj: &mut DB,
+    config_obj: &config_impl::Config,
 ) -> String {
     // Check in the DB first
     let mut res = String::new();
@@ -203,6 +213,7 @@ pub fn get_contextual_authors(
                         origin_file_path.clone(),
                         db_obj,
                         true,
+                        config_obj,
                     );
                     split_output_and_create_map(
                         output_single_line,
@@ -214,9 +225,9 @@ pub fn get_contextual_authors(
                 if res_string.ends_with(',') {
                     let _ = res_string.pop();
                 }
-                return res_string;
+                return config_impl::trim_result(res_string, config_obj.file_count_threshold);
             }
-            res
+            config_impl::trim_result(res, config_obj.file_count_threshold)
         }
         None => {
             let mut final_result = "".to_string();
@@ -227,6 +238,7 @@ pub fn get_contextual_authors(
                     origin_file_path.clone(),
                     db_obj,
                     true,
+                    config_obj,
                 );
                 split_output_and_create_map(
                     output_single_line,
@@ -238,7 +250,7 @@ pub fn get_contextual_authors(
             if final_result.ends_with(',') {
                 let _ = final_result.pop();
             }
-            final_result
+            config_impl::trim_result(final_result, config_obj.file_count_threshold)
         }
     }
 }

@@ -1,9 +1,11 @@
+use crate::config_impl;
+
 use std::{
     path::Path,
     process::{Command, Stdio},
 };
 
-use crate::{config::LAST_MANY_COMMIT_HASHES, contextgpt_structs::AuthorDetails};
+use crate::contextgpt_structs::AuthorDetails;
 
 pub fn parse_str(input_str: &str, file_path: &str) -> Vec<AuthorDetails> {
     let mut author_details_vec: Vec<AuthorDetails> = vec![];
@@ -76,6 +78,7 @@ pub fn extract_details(
     start_line_number: usize,
     end_line_number: usize,
     file_path: String,
+    config_obj: &config_impl::Config,
 ) -> Vec<AuthorDetails> {
     let mut binding = Command::new("git");
     let command = binding.args([
@@ -112,8 +115,8 @@ pub fn extract_details(
             all_files_changed_initial_commit.push(each_file);
         }
 
-        let mut blame_count: i32 = 0;
-        while blame_count != LAST_MANY_COMMIT_HASHES {
+        let mut blame_count: usize = 0;
+        while blame_count != config_obj.commit_hashes_threshold {
             blame_count += 1;
             let line_string: String =
                 val.line_number.to_string() + &','.to_string() + &val.line_number.to_string();

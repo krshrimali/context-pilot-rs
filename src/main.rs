@@ -1,6 +1,7 @@
 mod algo_loc;
 mod authordetails_impl;
 mod config;
+mod config_impl;
 mod contextgpt_structs;
 mod db;
 mod git_command_algo;
@@ -35,6 +36,10 @@ fn main() -> CliResult {
         folder_path: args.folder_path,
         ..Default::default()
     };
+
+    // Read the config file and pass defaults
+    let config_obj: config_impl::Config = config_impl::read_config(config::CONFIG_FILE_NAME);
+
     match args.request_type {
         RequestTypeOptions::File => {
             db_obj.init_db(args.file.as_str());
@@ -43,6 +48,7 @@ fn main() -> CliResult {
                 &args.start_number,
                 &valid_end_line_number,
                 &mut db_obj,
+                &config_obj,
             );
             println!("{:?}", output);
         }
@@ -53,10 +59,10 @@ fn main() -> CliResult {
                 &args.start_number,
                 &valid_end_line_number,
                 &mut db_obj,
+                &config_obj,
             );
             println!("{:?}", output);
         }
     };
     Ok(())
 }
-
