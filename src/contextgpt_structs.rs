@@ -8,15 +8,21 @@ pub enum RequestTypeOptions {
     File,
 }
 
-impl FromStr for RequestTypeOptions {
+impl RequestTypeOptions {
+    pub fn available_options() -> Vec<&'static str> {
+        vec!["author", "file"]
+    }
+}
+
+impl std::str::FromStr for RequestTypeOptions {
     type Err = String;
     fn from_str(request_type: &str) -> Result<Self, Self::Err> {
         match request_type {
             "author" => Ok(RequestTypeOptions::Author),
             "file" => Ok(RequestTypeOptions::File),
             _ => Err(format!(
-                "Could not parse the request type: {}. Available options are: author, file",
-                request_type
+                "Could not parse the request type: {}. Available options are: {}",
+                request_type, RequestTypeOptions::available_options().join(", ")
             )),
         }
     }
