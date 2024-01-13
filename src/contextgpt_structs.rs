@@ -15,7 +15,7 @@ impl FromStr for RequestTypeOptions {
             "author" => Ok(RequestTypeOptions::Author),
             "file" => Ok(RequestTypeOptions::File),
             _ => Err(format!(
-                "Could not parse the request type: {}",
+                "Could not parse the request type: {}. Available options are: author, file",
                 request_type
             )),
         }
