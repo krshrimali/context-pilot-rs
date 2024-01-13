@@ -22,7 +22,8 @@ impl std::str::FromStr for RequestTypeOptions {
             "file" => Ok(RequestTypeOptions::File),
             _ => Err(format!(
                 "Could not parse the request type: {}. Available options are: {}",
-                request_type, RequestTypeOptions::available_options().join(", ")
+                request_type,
+                RequestTypeOptions::available_options().join(", ")
             )),
         }
     }

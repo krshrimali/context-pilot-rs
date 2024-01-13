@@ -34,7 +34,10 @@ impl DB {
                 serde_json::from_str(data_buffers.as_str()).expect("Unable to deserialize");
             data
         } else {
-            eprintln!("The DB file doesn't exist for the given path: {}", self.db_file_path);
+            eprintln!(
+                "The DB file doesn't exist for the given path: {}",
+                self.db_file_path
+            );
             // TODO: Enable logging into a logging file and add two modes: debug and info
             HashMap::new()
         }
