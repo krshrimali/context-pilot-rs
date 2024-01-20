@@ -2,10 +2,35 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use structopt::StructOpt;
 
-#[derive(Debug)]
-pub enum RequestTypeOptions {
-    Author,
-    File,
+// This also adds an impl: get_field to get the corresponding field from the field name (&str)
+#[macro_export]
+macro_rules! get_struct_names {
+    (
+        #[derive($($derive_name:ident),*)]
+        pub enum $name:ident {
+            $($fname:ident), *
+        }
+    ) => {
+        #[derive($($derive_name),*)]
+        pub enum $name {
+            $($fname),*
+        }
+
+        impl $name {
+            fn field_names() -> &'static [&'static str] {
+                static NAMES: &'static [&'static str] = &[$(stringify!($fname)), *];
+                NAMES
+            }
+        }
+    }
+}
+
+get_struct_names! {
+    #[derive(Debug)]
+    pub enum RequestTypeOptions {
+        Author,
+        File
+    }
 }
 
 impl FromStr for RequestTypeOptions {
@@ -15,8 +40,9 @@ impl FromStr for RequestTypeOptions {
             "author" => Ok(RequestTypeOptions::Author),
             "file" => Ok(RequestTypeOptions::File),
             _ => Err(format!(
-                "Could not parse the request type: {}",
-                request_type
+                "Could not parse the request type: {}, available field names: {:?}",
+                request_type,
+                RequestTypeOptions::field_names()
             )),
         }
     }
