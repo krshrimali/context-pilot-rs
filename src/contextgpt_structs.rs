@@ -1,29 +1,44 @@
-use serde::{Deserialize, Serialize};
-use std::str::FromStr;
-use structopt::StructOpt;
+// This also adds an impl: get_field to get the corresponding field from the field name (&str)
+#[macro_export]
+macro_rules! get_struct_names {
+    (
+        #[derive($($derive_name:ident),*)]
+        pub enum $name:ident {
+            $($fname:ident), *
+        }
+    ) => {
+        #[derive($($derive_name),*)]
+        pub enum $name {
+            $($fname),*
+        }
 
-#[derive(Debug)]
-pub enum RequestTypeOptions {
-    Author,
-    File,
-}
-
-impl RequestTypeOptions {
-    pub fn available_options() -> Vec<&'static str> {
-        vec!["author", "file"]
+        impl $name {
+            fn field_names() -> &'static [&'static str] {
+                static NAMES: &'static [&'static str] = &[$(stringify!($fname)), *];
+                NAMES
+            }
+        }
     }
 }
 
-impl std::str::FromStr for RequestTypeOptions {
+get_struct_names! {
+    #[derive(Debug)]
+    pub enum RequestTypeOptions {
+        Author,
+        File
+    }
+}
+
+impl FromStr for RequestTypeOptions {
     type Err = String;
     fn from_str(request_type: &str) -> Result<Self, Self::Err> {
         match request_type {
             "author" => Ok(RequestTypeOptions::Author),
             "file" => Ok(RequestTypeOptions::File),
             _ => Err(format!(
-                "Could not parse the request type: {}. Available options are: {}",
+                "Could not parse the request type: {}, available field names: {:?}",
                 request_type,
-                RequestTypeOptions::available_options().join(", ")
+                RequestTypeOptions::field_names()
             )),
         }
     }
