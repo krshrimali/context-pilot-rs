@@ -30,11 +30,22 @@ impl DB {
         if Path::new(self.db_file_path.as_str()).exists() {
             let data_buffers =
                 std::fs::read_to_string(&self.db_file_path).expect("Unable to read the file");
-            let data: DBType =
-                serde_json::from_str(data_buffers.as_str()).expect("Unable to deserialize");
-            data
+            // In case db_file_path is an empty file
+            let data: Result<DBType, serde_json::Error> =
+                serde_json::from_str(data_buffers.as_str());
+            if data.is_err() {
+                eprintln!(
+                    "Deserializing data from the file path: {} failed",
+                    self.db_file_path
+                );
+                return HashMap::new();
+            }
+            data.unwrap()
         } else {
-            eprintln!("The DB file doesn't exist for the given path: {}", self.db_file_path);
+            eprintln!(
+                "The DB file doesn't exist for the given path: {}",
+                self.db_file_path
+            );
             // TODO: Enable logging into a logging file and add two modes: debug and info
             HashMap::new()
         }
