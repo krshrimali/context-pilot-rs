@@ -5,6 +5,7 @@ mod config_impl;
 mod contextgpt_structs;
 mod db;
 mod git_command_algo;
+mod server;
 
 use linecount::count_lines;
 use quicli::prelude::*;
@@ -18,11 +19,6 @@ use crate::algo_loc::get_contextual_authors;
 // #[warn(dead_code)]
 fn main() -> CliResult {
     let args = Cli::from_args();
-    let end_line_number: usize = if args.end_number == 0 {
-        0
-    } else {
-        args.end_number
-    };
     let count_lines: i32 = count_lines(std::fs::File::open(args.file.clone()).unwrap())
         .unwrap()
         .try_into()
@@ -30,7 +26,7 @@ fn main() -> CliResult {
     let valid_end_line_number: usize = if args.end_number == 0 {
         (count_lines - 1).try_into().unwrap()
     } else {
-        end_line_number
+        args.end_number
     };
     let mut db_obj = db::DB {
         folder_path: args.folder_path,

@@ -10,7 +10,10 @@ fn split_output_and_create_map(
     res_string: &mut String,
 ) {
     for single_string_from_output in output_single_line.split(',') {
-        if single_string_from_output == origin_file_path || single_string_from_output.is_empty() {
+        // if single_string_from_output == origin_file_path || single_string_from_output.is_empty() {
+        //     continue;
+        // }
+        if single_string_from_output.is_empty() {
             continue;
         }
         if visited_count_map.contains_key(single_string_from_output) {
