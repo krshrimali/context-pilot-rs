@@ -14,5 +14,4 @@ pub const CONFIG_FILE_NAME: &str = "context_pilot.json";
 // For both request types: file and author
 pub const OUTPUT_COUNT_THRESHOLD: usize = 10;
 
-
 // TODO: Implement threshold for confidence for relevance
