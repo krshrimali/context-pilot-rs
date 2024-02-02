@@ -1,6 +1,9 @@
+use crate::db::DB;
 use std::path::{Path, PathBuf};
 
 use quicli::prelude::log::{log, Level};
+
+use crate::{config_impl, config};
 
 
 #[derive(Default, Debug, Eq, PartialEq)]
@@ -61,6 +64,19 @@ impl Server {
     }
 
     fn _index_file(&self, file: &PathBuf) {
+        let start_line_number = 0 as usize;
+        let end_line_number = 0 as usize;
+        let file_path = file.to_str().unwrap();
+        let mut db_obj = DB {
+            folder_path: "".to_string(),
+            ..Default::default()
+        };
+
+        // Read the config file and pass defaults
+        let config_obj: config_impl::Config = config_impl::read_config(config::CONFIG_FILE_NAME);
+
+        db_obj.init_db(file_path);
+        let output_str = perform_for_whole_file(file_path.to_string(), &mut db_obj, true, &config_obj);
         return;
     }
 

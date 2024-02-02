@@ -117,6 +117,28 @@ pub fn get_unique_files_changed(
     }
 }
 
+pub fn perform_for_whole_file(
+    origin_file_path: String,
+    db_obj: &mut DB,
+    is_author_mode: bool,
+    config_obj: &config_impl::Config,
+) -> String {
+    let mut res: HashMap<String, usize> = HashMap::new();
+
+    let start_line_number = 0;
+    let end_line_number = 0;
+    let output = extract_details(
+        start_line_number,
+        end_line_number,
+        origin_file_path,
+        config_obj,
+    );
+
+    // TODO: I forgot what this does lol
+    db_obj.append(&origin_file_path, 0, 0, vec![]);
+    return "".to_string();
+}
+
 pub fn perform_for_single_line(
     start_line_number: usize,
     end_line_number: usize,
