@@ -1,4 +1,9 @@
-#[derive(Default, Debug)]
+use std::path::{Path, PathBuf};
+
+use quicli::prelude::log::{log, Level};
+
+
+#[derive(Default, Debug, Eq, PartialEq)]
 pub enum State {
     Starting,
     Running,
@@ -9,16 +14,20 @@ pub enum State {
 pub struct DBHandler {}
 
 impl DBHandler {
-    pub fn retry() {
+    pub fn retry(&mut self) {
         return;
     }
 
-    pub fn get_current_metadata() -> DBMetadata {
+    pub fn get_current_metadata(&mut self) -> DBMetadata {
         return DBMetadata::default();
     }
 
-    pub fn start() {
+    pub fn start(&mut self) {
         return;
+    }
+    
+    pub fn init(&mut self) {
+        todo!();
     }
 }
 
@@ -27,7 +36,7 @@ pub struct Server {
     state_db_handler: DBHandler,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct DBMetadata {
     state: State,
     workspace_path: String,
@@ -35,8 +44,67 @@ pub struct DBMetadata {
     total_count: i64,
 }
 
+impl DBMetadata {
+    fn as_mut(&self) -> &mut DBMetadata {
+        // TODO: idk what to do here
+        todo!()
+    }
+}
+
 impl Server {
-    pub fn start_server(&mut self, workspace_path: &str) {
+    fn _is_valid_file(&self, file: &PathBuf) -> bool {
+        if file.exists() && file.is_file() {
+            // not optimising one liners here for debugging later on
+            return true;
+        }
+        return false;
+    }
+
+    fn _index_file(&self, file: &PathBuf) {
+        return;
+    }
+
+    fn _iterate_through_workspace(&mut self, workspace_path: &PathBuf) {
+        let path = Path::new(&workspace_path);
+
+        if path.is_dir() {
+            // iterate through the directory and start indexing all the files
+            for entry in path.read_dir().expect(format!("failed reading directory {}", path.display()).as_str()) {
+                let entry = entry.unwrap();
+                let path = entry.path();
+                if path.is_dir() {
+                    self._iterate_through_workspace(&path);
+                } else {
+                    // check if the file is valid
+                    // if it is, then index it
+                    // if it's not, then just raise a warning
+                    if self._is_valid_file(&path) {
+                        self._index_file(&path);
+                    } else {
+                        log!(Level::Warn, "File is not valid: {}", path.display());
+                    }
+                }
+            }
+        } else {
+            // path is not a directory
+            // in which case, you might just want to index it if it's a valid file - or else - just raise a warning
+        }
+    }
+
+    pub fn start(&mut self, metadata: &mut DBMetadata) {
+        // start the server for the given workspace
+        // todo: see if you just want to pass the workspace path and avoiding passing the whole metadata here
+        let workspace_path = metadata.workspace_path;
+
+        // the server will start going through all the "valid" files in the workspace and will index them
+        // defn of valid: files that satisfy .gitignore check (if exists and not disabled in the config)
+        // and files that are not in the ignore list if provided in the config
+        
+        let workspace_path_buf = PathBuf::from(workspace_path);
+        self._iterate_through_workspace(&workspace_path_buf);
+    }
+
+    pub fn handle_server(&mut self, workspace_path: &str) {
         // this will initialise any required states
         self.state_db_handler.init();
 
@@ -50,6 +118,8 @@ impl Server {
             } else if metadata.state == State::Starting {
                 // the server is not in running state -> for state of it's attempting to start -> let it finish and then see if it was successful
                 // TODO: @krshrimali
+                self.state_db_handler.start();
+                self.start(metadata.as_mut());
             } else if metadata.state == State::Failed {
                 // in case of failure though, ideally it would have been alr handled by other process -> but in any case, starting from here as well to just see how it works out
                 // I'm in the favor of not restarting in case of failure from another process though
