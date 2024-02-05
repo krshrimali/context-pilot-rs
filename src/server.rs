@@ -7,11 +7,11 @@ use crate::{config, config_impl};
 
 #[derive(Default, Debug, Eq, PartialEq)]
 pub enum State {
-    Starting,
-    Running,
+    Starting, // Indexing alr
+    Running,  // Indexing finished
     #[default]
-    Stopped,
-    Failed,
+    Stopped, // Server is not running
+    Failed,   // On any failure, but the server is still running
 }
 
 pub struct DBHandler {
@@ -19,9 +19,9 @@ pub struct DBHandler {
 }
 
 impl DBHandler {
-    pub fn init(&mut self) {
+    pub fn init(&mut self, folder_path: &str) {
         self.db = DB {
-            folder_path: "".to_string(),
+            folder_path: folder_path.to_string(),
             ..Default::default()
         };
     }
@@ -51,8 +51,8 @@ pub struct Server {
 pub struct DBMetadata {
     state: State,
     workspace_path: String,
-    curr_progress: i64,
-    total_count: i64,
+    curr_progress: i64, // file index you're at OR percentage done
+    total_count: i64,   // how many files are indexing
 }
 
 impl DBMetadata {}
@@ -61,6 +61,7 @@ impl Server {
     fn _is_valid_file(&self, file: &Path) -> bool {
         if file.exists() && file.is_file() {
             // not optimising one liners here for debugging later on
+            log!(Level::Debug, "File exists: {}", file.display());
             return true;
         }
         false
@@ -82,8 +83,27 @@ impl Server {
         println!("output string: {output_str}");
     }
 
-    fn _iterate_through_workspace(&mut self, workspace_path: &PathBuf) {
+    async fn _iterate_through_workspace(&mut self, workspace_path: &PathBuf) {
+        async fn _reiterate_workspace(entry: std::fs::DirEntry) {
+            println!("workspace path: {}", entry.path().display());
+            // let entry = entry.unwrap();
+            // let path = entry.path();
+            // if path.is_dir() {
+            //     tasks.push(tokio::spawn(_reiterate_workspace(&path)));
+            // } else {
+            // check if the file is valid
+            // if it is, then index it
+            // if it's not, then just raise a warning
+            // if _is_valid_file(&path) {
+            //     _index_file(&path);
+            // } else {
+            //     log!(Level::Warn, "File is not valid: {}", path.display());
+            // }
+        }
+
         let path = Path::new(&workspace_path);
+
+        let mut tasks = vec![];
 
         if path.is_dir() {
             // iterate through the directory and start indexing all the files
@@ -91,20 +111,12 @@ impl Server {
                 .read_dir()
                 .unwrap_or_else(|_| panic!("failed reading directory {}", path.display()))
             {
-                let entry = entry.unwrap();
-                let path = entry.path();
-                if path.is_dir() {
-                    self._iterate_through_workspace(&path);
-                } else {
-                    // check if the file is valid
-                    // if it is, then index it
-                    // if it's not, then just raise a warning
-                    if self._is_valid_file(&path) {
-                        self._index_file(&path);
-                    } else {
-                        log!(Level::Warn, "File is not valid: {}", path.display());
-                    }
-                }
+                tasks.push(tokio::spawn(_reiterate_workspace(entry.unwrap())));
+            }
+
+            let mut outputs = vec![];
+            for task in tasks {
+                outputs.push(task.await.unwrap());
             }
         } else {
             // path is not a directory
@@ -117,7 +129,7 @@ impl Server {
         }
     }
 
-    pub fn start(&mut self, metadata: &mut DBMetadata) {
+    pub async fn start(&mut self, metadata: &mut DBMetadata) {
         // start the server for the given workspace
         // todo: see if you just want to pass the workspace path and avoiding passing the whole metadata here
         let workspace_path = &metadata.workspace_path;
@@ -132,7 +144,7 @@ impl Server {
 
     pub fn handle_server(&mut self, workspace_path: &str) {
         // this will initialise any required states
-        self.state_db_handler.init();
+        self.state_db_handler.init(workspace_path);
 
         let mut metadata: DBMetadata = self.state_db_handler.get_current_metadata();
 
