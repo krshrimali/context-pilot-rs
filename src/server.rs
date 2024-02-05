@@ -1,36 +1,44 @@
-use crate::db::DB;
+use crate::{algo_loc::perform_for_whole_file, db::DB};
 use std::path::{Path, PathBuf};
 
 use quicli::prelude::log::{log, Level};
 
-use crate::{config_impl, config};
-
+use crate::{config, config_impl};
 
 #[derive(Default, Debug, Eq, PartialEq)]
 pub enum State {
     Starting,
     Running,
-    #[default] Stopped,
+    #[default]
+    Stopped,
     Failed,
 }
 
-pub struct DBHandler {}
+pub struct DBHandler {
+    db: DB,
+}
 
 impl DBHandler {
+    pub fn init(&mut self) {
+        self.db = DB {
+            folder_path: "".to_string(),
+            ..Default::default()
+        };
+    }
+
     pub fn retry(&mut self) {
-        return;
+        todo!();
     }
 
     pub fn get_current_metadata(&mut self) -> DBMetadata {
-        return DBMetadata::default();
+        DBMetadata::default()
     }
 
-    pub fn start(&mut self) {
-        return;
-    }
-    
-    pub fn init(&mut self) {
-        todo!();
+    pub fn start(&mut self, metadata: &DBMetadata) {
+        // this should ideally start the DB server
+        // DB Server and the other server should be kept separate
+        // this should not be async though - as we'll really want this to finish before it finishes
+        self.db.init_db(&metadata.workspace_path);
     }
 }
 
@@ -47,25 +55,18 @@ pub struct DBMetadata {
     total_count: i64,
 }
 
-impl DBMetadata {
-    fn as_mut(&self) -> &mut DBMetadata {
-        // TODO: idk what to do here
-        todo!()
-    }
-}
+impl DBMetadata {}
 
 impl Server {
-    fn _is_valid_file(&self, file: &PathBuf) -> bool {
+    fn _is_valid_file(&self, file: &Path) -> bool {
         if file.exists() && file.is_file() {
             // not optimising one liners here for debugging later on
             return true;
         }
-        return false;
+        false
     }
 
     fn _index_file(&self, file: &PathBuf) {
-        let start_line_number = 0 as usize;
-        let end_line_number = 0 as usize;
         let file_path = file.to_str().unwrap();
         let mut db_obj = DB {
             folder_path: "".to_string(),
@@ -76,8 +77,9 @@ impl Server {
         let config_obj: config_impl::Config = config_impl::read_config(config::CONFIG_FILE_NAME);
 
         db_obj.init_db(file_path);
-        let output_str = perform_for_whole_file(file_path.to_string(), &mut db_obj, true, &config_obj);
-        return;
+        let output_str =
+            perform_for_whole_file(file_path.to_string(), &mut db_obj, true, &config_obj);
+        println!("output string: {output_str}");
     }
 
     fn _iterate_through_workspace(&mut self, workspace_path: &PathBuf) {
@@ -85,7 +87,10 @@ impl Server {
 
         if path.is_dir() {
             // iterate through the directory and start indexing all the files
-            for entry in path.read_dir().expect(format!("failed reading directory {}", path.display()).as_str()) {
+            for entry in path
+                .read_dir()
+                .unwrap_or_else(|_| panic!("failed reading directory {}", path.display()))
+            {
                 let entry = entry.unwrap();
                 let path = entry.path();
                 if path.is_dir() {
@@ -104,18 +109,23 @@ impl Server {
         } else {
             // path is not a directory
             // in which case, you might just want to index it if it's a valid file - or else - just raise a warning
+            if self._is_valid_file(path) {
+                self._index_file(&path.to_path_buf());
+            } else {
+                log!(Level::Warn, "File is not valid: {}", path.display());
+            }
         }
     }
 
     pub fn start(&mut self, metadata: &mut DBMetadata) {
         // start the server for the given workspace
         // todo: see if you just want to pass the workspace path and avoiding passing the whole metadata here
-        let workspace_path = metadata.workspace_path;
+        let workspace_path = &metadata.workspace_path;
 
         // the server will start going through all the "valid" files in the workspace and will index them
         // defn of valid: files that satisfy .gitignore check (if exists and not disabled in the config)
         // and files that are not in the ignore list if provided in the config
-        
+
         let workspace_path_buf = PathBuf::from(workspace_path);
         self._iterate_through_workspace(&workspace_path_buf);
     }
@@ -124,7 +134,7 @@ impl Server {
         // this will initialise any required states
         self.state_db_handler.init();
 
-        let metadata: DBMetadata = self.state_db_handler.get_current_metadata();
+        let mut metadata: DBMetadata = self.state_db_handler.get_current_metadata();
 
         if metadata.workspace_path == workspace_path {
             if metadata.state == State::Running {
@@ -134,20 +144,21 @@ impl Server {
             } else if metadata.state == State::Starting {
                 // the server is not in running state -> for state of it's attempting to start -> let it finish and then see if it was successful
                 // TODO: @krshrimali
-                self.state_db_handler.start();
-                self.start(metadata.as_mut());
+                self.state_db_handler.start(&metadata);
+                self.start(&mut metadata);
             } else if metadata.state == State::Failed {
                 // in case of failure though, ideally it would have been alr handled by other process -> but in any case, starting from here as well to just see how it works out
                 // I'm in the favor of not restarting in case of failure from another process though
                 self.state_db_handler.retry();
-            } else if metadata.store == State::Stopped {
-                self.state_db_handler.start();
+            } else if metadata.state == State::Stopped {
+                self.state_db_handler.start(&metadata);
             }
             // in case the metadata workspace path matches with the input and the server is already running -> don't do indexing
         }
     }
 
-    fn continue(&mut self) {
+    fn cont(&mut self) {
         // Start from the line number and file that you were at and continue indexing
+        todo!();
     }
 }
