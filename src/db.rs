@@ -34,7 +34,10 @@ impl DB {
                 serde_json::from_str(data_buffers.as_str()).expect("Unable to deserialize");
             data
         } else {
-            eprintln!("The DB file doesn't exist for the given path: {}", self.db_file_path);
+            eprintln!(
+                "The DB file doesn't exist for the given path: {}",
+                self.db_file_path
+            );
             // TODO: Enable logging into a logging file and add two modes: debug and info
             HashMap::new()
         }
@@ -100,6 +103,7 @@ impl DB {
         // Filename will be: <db_file_index>.json
         let valid_indices = db_file_index.unwrap_or(vec![self.index]);
         self.current_data = self.read_all(valid_indices.clone());
+        println!("Current data: {:?}", self.current_data);
     }
 
     fn find_index(&mut self, curr_file_path: &str) -> Option<Vec<u32>> {
