@@ -187,7 +187,7 @@ impl Server {
         self._iterate_through_workspace(&workspace_path_buf).await
     }
 
-    pub fn handle_server(&mut self, workspace_path: &str) {
+    pub async fn handle_server(&mut self, workspace_path: &str) {
         // this will initialise any required states
         self.state_db_handler.init(workspace_path);
 
@@ -215,6 +215,8 @@ impl Server {
             } else if metadata.state == State::Stopped {
                 println!("Starting server...");
                 self.state_db_handler.start(&metadata);
+                self.start(&mut metadata).await;
+                println!("Done");
             }
             // in case the metadata workspace path matches with the input and the server is already running -> don't do indexing
         }
@@ -236,5 +238,5 @@ async fn main() {
         },
     };
 
-    server.handle_server("/home/krshrimali/Documents/Projects-Live-Stream/context-pilot-rs");
+    server.handle_server("/home/krshrimali/Documents/Projects-Live-Stream/context-pilot-rs").await;
 }
