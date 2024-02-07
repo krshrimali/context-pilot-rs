@@ -12,6 +12,7 @@ use crate::{algo_loc::perform_for_whole_file, db::DB};
 use std::path::{Path, PathBuf};
 
 use quicli::prelude::log::{log, Level};
+use tokio::task;
 
 #[derive(Default, Debug, Eq, PartialEq, Clone, Copy)]
 pub enum State {
@@ -126,7 +127,7 @@ impl Server {
         println!("output string: {output_str}");
     }
 
-    async fn _iterate_through_workspace(&mut self, workspace_path: &PathBuf) {
+    async fn _iterate_through_workspace(&mut self, workspace_path: &PathBuf) -> () {
         async fn _reiterate_workspace(entry: std::fs::DirEntry) {
             println!("workspace path: {}", entry.path().display());
             // let entry = entry.unwrap();
@@ -182,7 +183,8 @@ impl Server {
         // and files that are not in the ignore list if provided in the config
 
         let workspace_path_buf = PathBuf::from(workspace_path);
-        self._iterate_through_workspace(&workspace_path_buf);
+        println!("Now starting to iterate through the workspace...");
+        self._iterate_through_workspace(&workspace_path_buf).await
     }
 
     pub fn handle_server(&mut self, workspace_path: &str) {
@@ -194,6 +196,8 @@ impl Server {
         println!("metadata: {:?}", metadata);
         println!("workspace path: {}", workspace_path);
 
+        let mut tasks = vec![];
+
         if metadata.workspace_path == workspace_path {
             if metadata.state == State::Running {
                 // the server is already running
@@ -203,7 +207,7 @@ impl Server {
                 // the server is not in running state -> for state of it's attempting to start -> let it finish and then see if it was successful
                 // TODO: @krshrimali
                 self.state_db_handler.start(&metadata);
-                self.start(&mut metadata);
+                tasks.push(self.start(&mut metadata));
             } else if metadata.state == State::Failed {
                 // in case of failure though, ideally it would have been alr handled by other process -> but in any case, starting from here as well to just see how it works out
                 // I'm in the favor of not restarting in case of failure from another process though
