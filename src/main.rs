@@ -111,10 +111,10 @@ impl Server {
         false
     }
 
-    fn _index_file(&self, file: &PathBuf) {
+    async fn _index_file(file: PathBuf, workspace_path: String) {
         let file_path = file.to_str().unwrap();
         let mut db_obj = DB {
-            folder_path: "".to_string(),
+            folder_path: workspace_path,
             ..Default::default()
         };
 
@@ -123,27 +123,21 @@ impl Server {
 
         db_obj.init_db(file_path);
         let output_str =
-            perform_for_whole_file(file_path.to_string(), &mut db_obj, true, &config_obj);
+            perform_for_whole_file(file_path.to_string(), &mut db_obj, false, &config_obj);
         println!("output string: {output_str}");
     }
 
-    async fn _iterate_through_workspace(&mut self, workspace_path: &PathBuf) -> () {
-        async fn _reiterate_workspace(entry: std::fs::DirEntry) {
-            println!("workspace path: {}", entry.path().display());
-            // let entry = entry.unwrap();
-            // let path = entry.path();
-            // if path.is_dir() {
-            //     tasks.push(tokio::spawn(_reiterate_workspace(&path)));
-            // } else {
-            // check if the file is valid
-            // if it is, then index it
-            // if it's not, then just raise a warning
-            // if _is_valid_file(&path) {
-            //     _index_file(&path);
-            // } else {
-            //     log!(Level::Warn, "File is not valid: {}", path.display());
-            // }
-        }
+    async fn _iterate_through_workspace(&mut self, workspace_path: &PathBuf) {
+        // async fn _reiterate_workspace(entry: std::fs::DirEntry) {
+        //     println!("workspace path: {}", entry.path().display());
+        //     let path = entry.path();
+        //     let mut tasks = vec![];
+        //     if path.is_dir() {
+        //         tasks.push(tokio::spawn(_reiterate_workspace(entry)));
+        //     } else {
+        //         tasks.push(tokio::spawn(self._index_file(&path)));
+        //     }
+        // }
 
         let path = Path::new(&workspace_path);
 
@@ -155,18 +149,34 @@ impl Server {
                 .read_dir()
                 .unwrap_or_else(|_| panic!("failed reading directory {}", path.display()))
             {
-                tasks.push(tokio::spawn(_reiterate_workspace(entry.unwrap())));
+                let entry_path = entry.unwrap().path();
+                if entry_path.is_dir() {
+                    // Server::_iterate_through_workspace(self, &entry_path).await;
+                    // tasks.push(tokio::spawn(Server::_index_file(
+                    //     entry_path.clone(),
+                    //     &mut db_obj,
+                    // )));
+                } else {
+                    tasks.push(tokio::spawn(Server::_index_file(
+                        entry_path,
+                        workspace_path.to_str().unwrap().to_string(),
+                    )));
+                }
             }
 
             let mut outputs = vec![];
             for task in tasks {
-                outputs.push(task.await.unwrap());
+                outputs.push(task.await);
             }
         } else {
             // path is not a directory
             // in which case, you might just want to index it if it's a valid file - or else - just raise a warning
             if self._is_valid_file(path) {
-                self._index_file(&path.to_path_buf());
+                Server::_index_file(
+                    path.to_path_buf(),
+                    workspace_path.to_str().unwrap().to_string(),
+                )
+                .await;
             } else {
                 log!(Level::Warn, "File is not valid: {}", path.display());
             }
@@ -238,5 +248,7 @@ async fn main() {
         },
     };
 
-    server.handle_server("/home/krshrimali/Documents/Projects-Live-Stream/context-pilot-rs").await;
+    server
+        .handle_server("/home/krshrimali/Documents/Projects-Live-Stream/context-pilot-rs")
+        .await;
 }

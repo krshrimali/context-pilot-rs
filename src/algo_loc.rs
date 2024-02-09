@@ -1,4 +1,5 @@
 use crate::config_impl;
+use crate::contextgpt_structs::AuthorDetails;
 use crate::db::DB;
 use crate::git_command_algo::extract_details;
 use std::collections::HashMap;
@@ -117,6 +118,37 @@ pub fn get_unique_files_changed(
     }
 }
 
+fn extract_string_from_output(output: Vec<AuthorDetails>, is_author_mode: bool) -> String {
+    let mut res: HashMap<String, usize> = HashMap::new();
+    for single_struct in output {
+        if is_author_mode {
+            if res.contains_key(&single_struct.author_full_name) {
+                let count = res.get(&single_struct.author_full_name).unwrap() + 1;
+                res.insert(single_struct.author_full_name, count);
+                continue;
+            } else {
+                res.insert(single_struct.author_full_name, 0);
+            }
+        } else {
+            for each_file in single_struct.contextual_file_paths {
+                if res.contains_key(&each_file) {
+                    let count = res.get(&each_file).unwrap() + 1;
+                    res.insert(each_file, count);
+                } else {
+                    res.insert(each_file, 0);
+                }
+            }
+        }
+    }
+    // db_obj.store();
+    let mut res_string: String = String::new();
+    for key in res.keys() {
+        res_string.push_str(key.as_str());
+        res_string.push(',');
+    }
+    res_string
+}
+
 pub fn perform_for_whole_file(
     origin_file_path: String,
     db_obj: &mut DB,
@@ -125,8 +157,8 @@ pub fn perform_for_whole_file(
 ) -> String {
     let mut res: HashMap<String, usize> = HashMap::new();
 
-    let start_line_number = 0;
-    let end_line_number = 0;
+    let start_line_number = 1;
+    let end_line_number = 1000000;
     let output = extract_details(
         start_line_number,
         end_line_number,
@@ -134,9 +166,7 @@ pub fn perform_for_whole_file(
         config_obj,
     );
 
-    // TODO: I forgot what this does lol
-    db_obj.append(&origin_file_path, 0, 0, vec![]);
-    return "".to_string();
+    extract_string_from_output(output, is_author_mode)
 }
 
 pub fn perform_for_single_line(
