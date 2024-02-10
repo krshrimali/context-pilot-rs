@@ -1,4 +1,5 @@
 use crate::config_impl;
+use crate::contextgpt_structs::AuthorDetails;
 use crate::db::DB;
 use crate::git_command_algo::extract_details;
 use std::collections::HashMap;
@@ -10,7 +11,10 @@ fn split_output_and_create_map(
     res_string: &mut String,
 ) {
     for single_string_from_output in output_single_line.split(',') {
-        if single_string_from_output == origin_file_path || single_string_from_output.is_empty() {
+        // if single_string_from_output == origin_file_path || single_string_from_output.is_empty() {
+        //     continue;
+        // }
+        if single_string_from_output.is_empty() {
             continue;
         }
         if visited_count_map.contains_key(single_string_from_output) {
@@ -112,6 +116,57 @@ pub fn get_unique_files_changed(
             config_impl::trim_result(final_result, config_obj.file_count_threshold)
         }
     }
+}
+
+fn extract_string_from_output(output: Vec<AuthorDetails>, is_author_mode: bool) -> String {
+    let mut res: HashMap<String, usize> = HashMap::new();
+    for single_struct in output {
+        if is_author_mode {
+            if res.contains_key(&single_struct.author_full_name) {
+                let count = res.get(&single_struct.author_full_name).unwrap() + 1;
+                res.insert(single_struct.author_full_name, count);
+                continue;
+            } else {
+                res.insert(single_struct.author_full_name, 0);
+            }
+        } else {
+            for each_file in single_struct.contextual_file_paths {
+                if res.contains_key(&each_file) {
+                    let count = res.get(&each_file).unwrap() + 1;
+                    res.insert(each_file, count);
+                } else {
+                    res.insert(each_file, 0);
+                }
+            }
+        }
+    }
+    // db_obj.store();
+    let mut res_string: String = String::new();
+    for key in res.keys() {
+        res_string.push_str(key.as_str());
+        res_string.push(',');
+    }
+    res_string
+}
+
+pub fn perform_for_whole_file(
+    origin_file_path: String,
+    db_obj: &mut DB,
+    is_author_mode: bool,
+    config_obj: &config_impl::Config,
+) -> String {
+    let mut res: HashMap<String, usize> = HashMap::new();
+
+    let start_line_number = 1;
+    let end_line_number = 1000000;
+    let output = extract_details(
+        start_line_number,
+        end_line_number,
+        origin_file_path,
+        config_obj,
+    );
+
+    extract_string_from_output(output, is_author_mode)
 }
 
 pub fn perform_for_single_line(
