@@ -11,7 +11,7 @@ type DBType = HashMap<String, HashMap<u32, Vec<AuthorDetails>>>;
 type MappingDBType = HashMap<String, Vec<u32>>;
 
 // index; folder_path; currLines;
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct DB {
     pub index: u32,                // The line of code that you are at, right now? TODO:
     pub folder_path: String, // Current folder path that this DB is processing, or the binary is running
@@ -103,7 +103,7 @@ impl DB {
         // Filename will be: <db_file_index>.json
         let valid_indices = db_file_index.unwrap_or(vec![self.index]);
         self.current_data = self.read_all(valid_indices.clone());
-        println!("Current data: {:?}", self.current_data);
+        // println!("Current data: {:?}", self.current_data);
     }
 
     fn find_index(&mut self, curr_file_path: &str) -> Option<Vec<u32>> {
@@ -287,5 +287,29 @@ impl DB {
             }
             (None, uncovered_indices)
         }
+    }
+}
+
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_loading_mapping_file() {
+        let mapping_path = "/home/krshrimali/.context_pilot_db/mapping.json";
+        let mapping_data = std::fs::read_to_string(mapping_path).unwrap_or_else(|_| {
+            panic!(
+                "Unable to read the mapping file into string, file path: {}",
+                mapping_path
+            )
+        });
+        let mapping_path_obj = Path::new(mapping_path);
+        serde_json::from_str(mapping_data.as_str()).unwrap_or_else(|_| {
+            panic!(
+                "Unable to deserialize the mapping file, path: {}",
+                mapping_path
+            )
+        });
+
+        assert!(mapping_path_obj.exists());
     }
 }

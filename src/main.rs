@@ -9,7 +9,11 @@ mod git_command_algo;
 
 mod async_check;
 use crate::{algo_loc::perform_for_whole_file, db::DB};
-use std::path::{Path, PathBuf};
+use async_recursion::async_recursion;
+use std::{
+    collections::HashSet,
+    path::{Path, PathBuf},
+};
 
 use quicli::prelude::log::{log, Level};
 use tokio::task;
@@ -30,7 +34,7 @@ pub struct DBHandler {
 
 impl DBHandler {
     fn _is_eligible(&mut self, path: &PathBuf) -> bool {
-        return true;
+        true
     }
 
     // TODO: this is something I'm repeating in the server as well
@@ -102,7 +106,7 @@ pub struct DBMetadata {
 impl DBMetadata {}
 
 impl Server {
-    fn _is_valid_file(&self, file: &Path) -> bool {
+    fn _is_valid_file(file: &Path) -> bool {
         if file.exists() && file.is_file() {
             // not optimising one liners here for debugging later on
             log!(Level::Debug, "File exists: {}", file.display());
@@ -111,7 +115,7 @@ impl Server {
         false
     }
 
-    async fn _index_file(file: PathBuf, workspace_path: String) {
+    async fn _index_file(file: PathBuf, workspace_path: String) -> String {
         let file_path = file.to_str().unwrap();
         let mut db_obj = DB {
             folder_path: workspace_path,
@@ -121,27 +125,23 @@ impl Server {
         // Read the config file and pass defaults
         let config_obj: config_impl::Config = config_impl::read_config(config::CONFIG_FILE_NAME);
 
-        db_obj.init_db(file_path);
+        // db_obj.init_db(file_path);
         let output_str =
             perform_for_whole_file(file_path.to_string(), &mut db_obj, false, &config_obj);
         println!("output string: {output_str}");
+        output_str
     }
 
-    async fn _iterate_through_workspace(&mut self, workspace_path: &PathBuf) {
-        // async fn _reiterate_workspace(entry: std::fs::DirEntry) {
-        //     println!("workspace path: {}", entry.path().display());
-        //     let path = entry.path();
-        //     let mut tasks = vec![];
-        //     if path.is_dir() {
-        //         tasks.push(tokio::spawn(_reiterate_workspace(entry)));
-        //     } else {
-        //         tasks.push(tokio::spawn(self._index_file(&path)));
-        //     }
-        // }
+    #[async_recursion]
+    async fn _iterate_through_workspace(
+        // &mut self,
+        workspace_path: PathBuf,
+        default_folder_path: PathBuf,
+    ) {
+        let mut set: task::JoinSet<()> = task::JoinSet::new();
+        let mut files_set: task::JoinSet<String> = task::JoinSet::new();
 
         let path = Path::new(&workspace_path);
-
-        let mut tasks = vec![];
 
         if path.is_dir() {
             // iterate through the directory and start indexing all the files
@@ -151,32 +151,56 @@ impl Server {
             {
                 let entry_path = entry.unwrap().path();
                 if entry_path.is_dir() {
-                    // Server::_iterate_through_workspace(self, &entry_path).await;
-                    // tasks.push(tokio::spawn(Server::_index_file(
-                    //     entry_path.clone(),
-                    //     &mut db_obj,
-                    // )));
+                    // FIXME: This is a case of having a sub-directory
+                    // println!("ignoring directory: {}", entry_path.display());
+                    set.spawn(Server::_iterate_through_workspace(
+                        // self,
+                        entry_path.clone(),
+                        default_folder_path.clone(),
+                    ));
                 } else {
-                    tasks.push(tokio::spawn(Server::_index_file(
+                    log!(Level::Info, "File is valid: {}", entry_path.display());
+                    files_set.spawn(Server::_index_file(
                         entry_path,
-                        workspace_path.to_str().unwrap().to_string(),
-                    )));
+                        default_folder_path.display().to_string(),
+                    ));
                 }
             }
 
-            let mut outputs = vec![];
-            for task in tasks {
-                outputs.push(task.await);
+            let mut seen = HashSet::new();
+
+            // for res in tasks_list.iter() {
+            //     let idx = res.await.unwrap();
+            //     seen.insert(idx.clone());
+            //     log!(Level::Info, "Done with file: {}", idx);
+            // }
+
+            while let Some(res) = set.join_next().await {
+                let idx = res.unwrap();
+                seen.insert(idx.clone());
+                // log!(Level::Info, "Done with file: {:?}", idx);
+            }
+
+            let mut files_seen = HashSet::new();
+            while let Some(res) = files_set.join_next().await {
+                let idx = res.unwrap();
+                files_seen.insert(idx.clone());
+                log!(Level::Info, "Done with file: {:?}", idx);
             }
         } else {
             // path is not a directory
             // in which case, you might just want to index it if it's a valid file - or else - just raise a warning
-            if self._is_valid_file(path) {
-                Server::_index_file(
-                    path.to_path_buf(),
-                    workspace_path.to_str().unwrap().to_string(),
-                )
-                .await;
+            if Server::_is_valid_file(path) {
+                log!(
+                    Level::Warn,
+                    "File is valid but not in a sub-directory: {}",
+                    path.display()
+                );
+                // Server::_index_file(
+                //     path.to_path_buf(),
+                //     workspace_path.to_str().unwrap().to_string(),
+                // )
+                // .await;
             } else {
                 log!(Level::Warn, "File is not valid: {}", path.display());
             }
@@ -194,7 +218,7 @@ impl Server {
 
         let workspace_path_buf = PathBuf::from(workspace_path);
         println!("Now starting to iterate through the workspace...");
-        self._iterate_through_workspace(&workspace_path_buf).await
+        Server::_iterate_through_workspace(workspace_path_buf.clone(), workspace_path_buf).await
     }
 
     pub async fn handle_server(&mut self, workspace_path: &str) {
@@ -224,7 +248,10 @@ impl Server {
                 self.state_db_handler.retry();
             } else if metadata.state == State::Stopped {
                 println!("Starting server...");
+
+                // not an async call rn
                 self.state_db_handler.start(&metadata);
+
                 self.start(&mut metadata).await;
                 println!("Done");
             }
@@ -240,6 +267,7 @@ impl Server {
 
 #[tokio::main]
 async fn main() {
+    env_logger::init();
     let mut server = Server {
         state: State::Stopped,
         state_db_handler: DBHandler {
