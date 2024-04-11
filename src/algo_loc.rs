@@ -155,6 +155,10 @@ pub fn perform_for_whole_file(
     is_author_mode: bool,
     config_obj: &config_impl::Config,
 ) -> String {
+    println!(
+        "db file path while performing for whole file: {}",
+        db_obj.db_file_path.clone()
+    );
     let mut res: HashMap<String, usize> = HashMap::new();
 
     let start_line_number = 1;
@@ -162,11 +166,19 @@ pub fn perform_for_whole_file(
     let output = extract_details(
         start_line_number,
         end_line_number,
-        origin_file_path,
+        origin_file_path.clone(),
         config_obj,
     );
+    db_obj.append(
+        &origin_file_path,
+        start_line_number,
+        end_line_number,
+        output.clone(), // TODO: don't clone everywhere!!
+    );
 
-    extract_string_from_output(output, is_author_mode)
+    let output_str = extract_string_from_output(output, is_author_mode);
+    db_obj.store();
+    output_str
 }
 
 pub fn perform_for_single_line(

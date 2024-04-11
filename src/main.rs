@@ -7,7 +7,7 @@ mod db;
 mod git_command_algo;
 // mod server;
 
-mod async_check;
+// mod async_check;
 use crate::{algo_loc::perform_for_whole_file, db::DB};
 use async_recursion::async_recursion;
 use std::{
@@ -86,7 +86,7 @@ impl DBHandler {
         // this should ideally start the DB server
         // DB Server and the other server should be kept separate
         // this should not be async though - as we'll really want this to finish before it finishes
-        self.db.init_db(&metadata.workspace_path);
+        println!("Passing workspace path to init_db: {}", metadata.workspace_path);
     }
 }
 
@@ -118,9 +118,10 @@ impl Server {
     async fn _index_file(file: PathBuf, workspace_path: String) -> String {
         let file_path = file.to_str().unwrap();
         let mut db_obj = DB {
-            folder_path: workspace_path,
+            folder_path: workspace_path.clone(),
             ..Default::default()
         };
+        db_obj.init_db(workspace_path.as_str());
 
         // Read the config file and pass defaults
         let config_obj: config_impl::Config = config_impl::read_config(config::CONFIG_FILE_NAME);
@@ -277,6 +278,6 @@ async fn main() {
     };
 
     server
-        .handle_server("/home/krshrimali/Documents/Projects-Live-Stream/context-pilot-rs")
+        .handle_server("/home/krshrimali/Documents/Projects/context-pilot-rs")
         .await;
 }

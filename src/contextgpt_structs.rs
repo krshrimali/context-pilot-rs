@@ -1,3 +1,8 @@
+use std::str::FromStr;
+
+use serde::{Deserialize, Serialize};
+use structopt::StructOpt;
+
 // This also adds an impl: get_field to get the corresponding field from the field name (&str)
 #[macro_export]
 macro_rules! get_struct_names {
