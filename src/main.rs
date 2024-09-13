@@ -8,11 +8,12 @@ mod git_command_algo;
 // mod server;
 
 // mod async_check;
-use crate::{algo_loc::perform_for_whole_file, db::DB};
+use crate::{algo_loc::extract_string_from_output, algo_loc::perform_for_whole_file, db::DB};
 use async_recursion::async_recursion;
 use std::{
     collections::HashSet,
     path::{Path, PathBuf},
+    sync::{Arc, Mutex},
 };
 
 use quicli::prelude::log::{log, Level};
@@ -23,7 +24,7 @@ pub enum State {
     Starting, // Indexing alr
     Running,  // Indexing finished
     #[default]
-    Stopped, // Server is not running
+    Dead, // Server is not running
     Failed,   // On any failure, but the server is still running
 }
 
@@ -33,7 +34,7 @@ pub struct DBHandler {
 }
 
 impl DBHandler {
-    fn _is_eligible(&mut self, path: &PathBuf) -> bool {
+    fn _is_eligible(&mut self, _: &PathBuf) -> bool {
         true
     }
 
@@ -67,7 +68,8 @@ impl DBHandler {
         let total_valid_file_count = self._valid_file_count(folder_path);
 
         self.metadata = DBMetadata {
-            state: State::Stopped,
+            // Initial state should be stopped or..?
+            state: State::Dead,
             workspace_path: folder_path.to_string(),
             curr_progress: 0,
             total_count: total_valid_file_count,
@@ -86,12 +88,16 @@ impl DBHandler {
         // this should ideally start the DB server
         // DB Server and the other server should be kept separate
         // this should not be async though - as we'll really want this to finish before it finishes
-        println!("Passing workspace path to init_db: {}", metadata.workspace_path);
+        println!(
+            "Passing workspace path to init_db: {}",
+            metadata.workspace_path
+        );
     }
 }
 
 pub struct Server {
     state: State,
+    // curr_db: Option<Arc<Mutex<DB>>>,
     state_db_handler: DBHandler,
 }
 
@@ -115,30 +121,30 @@ impl Server {
         false
     }
 
-    async fn _index_file(file: PathBuf, workspace_path: String) -> String {
+    async fn _index_file(file: PathBuf) -> String {
+        // Don't make it write to the DB, write it atomically later.
+        // For now, just store the output somewhere in the DB.
         let file_path = file.to_str().unwrap();
-        let mut db_obj = DB {
-            folder_path: workspace_path.clone(),
-            ..Default::default()
-        };
-        db_obj.init_db(workspace_path.as_str());
+        // let mut db_obj = DB {
+        //     folder_path: workspace_path.clone(),
+        //     ..Default::default()
+        // };
+        // db_obj.init_db(workspace_path.as_str());
 
         // Read the config file and pass defaults
         let config_obj: config_impl::Config = config_impl::read_config(config::CONFIG_FILE_NAME);
 
-        // db_obj.init_db(file_path);
+        // curr_db.init_db(file_path);
+        let output_author_details = perform_for_whole_file(file_path.to_string(), &config_obj);
+        // Now extract output string from the output_author_details.
         let output_str =
-            perform_for_whole_file(file_path.to_string(), &mut db_obj, false, &config_obj);
-        println!("output string: {output_str}");
+            extract_string_from_output(output_author_details, /*is_author_mode=*/ false);
+        // println!("output string: {output_str}");
         output_str
     }
 
     #[async_recursion]
-    async fn _iterate_through_workspace(
-        // &mut self,
-        workspace_path: PathBuf,
-        default_folder_path: PathBuf,
-    ) {
+    async fn _iterate_through_workspace(&mut self, workspace_path: PathBuf, _: PathBuf) {
         let mut set: task::JoinSet<()> = task::JoinSet::new();
         let mut files_set: task::JoinSet<String> = task::JoinSet::new();
 
@@ -154,17 +160,17 @@ impl Server {
                 if entry_path.is_dir() {
                     // FIXME: This is a case of having a sub-directory
                     // println!("ignoring directory: {}", entry_path.display());
-                    set.spawn(Server::_iterate_through_workspace(
-                        // self,
-                        entry_path.clone(),
-                        default_folder_path.clone(),
-                    ));
+                    // set.spawn(Server::_iterate_through_workspace(
+                    //     // self,
+                    //     entry_path.clone(),
+                    //     default_folder_path.clone(),
+                    // ));
+                    println!("Continuing...");
+                    continue;
                 } else {
                     log!(Level::Info, "File is valid: {}", entry_path.display());
-                    files_set.spawn(Server::_index_file(
-                        entry_path,
-                        default_folder_path.display().to_string(),
-                    ));
+
+                    files_set.spawn(Server::_index_file(entry_path));
                 }
             }
 
@@ -210,7 +216,7 @@ impl Server {
 
     pub async fn start(&mut self, metadata: &mut DBMetadata) {
         // start the server for the given workspace
-        // todo: see if you just want to pass the workspace path and avoiding passing the whole metadata here
+        // TODO: see if you just want to pass the workspace path and avoiding passing the whole metadata here
         let workspace_path = &metadata.workspace_path;
 
         // the server will start going through all the "valid" files in the workspace and will index them
@@ -219,7 +225,19 @@ impl Server {
 
         let workspace_path_buf = PathBuf::from(workspace_path);
         println!("Now starting to iterate through the workspace...");
-        Server::_iterate_through_workspace(workspace_path_buf.clone(), workspace_path_buf).await
+        // let curr_db = DB {
+        //     folder_path: workspace_path.clone(),
+        //     ..Default::default()
+        // };
+
+        let db = DB {
+            folder_path: workspace_path.clone(),
+            ..Default::default()
+        };
+        let curr_db: Arc<Mutex<DB>> = Arc::new(db.into());
+        curr_db.lock().unwrap().init_db(workspace_path.as_str());
+        self._iterate_through_workspace(workspace_path_buf.clone(), workspace_path_buf)
+            .await
     }
 
     pub async fn handle_server(&mut self, workspace_path: &str) {
@@ -246,11 +264,12 @@ impl Server {
             } else if metadata.state == State::Failed {
                 // in case of failure though, ideally it would have been alr handled by other process -> but in any case, starting from here as well to just see how it works out
                 // I'm in the favor of not restarting in case of failure from another process though
+                // TODO: Have a limit here, can't retry for infinite count.
                 self.state_db_handler.retry();
-            } else if metadata.state == State::Stopped {
+            } else if metadata.state == State::Dead {
                 println!("Starting server...");
 
-                // not an async call rn
+                // should be blocking rn
                 self.state_db_handler.start(&metadata);
 
                 self.start(&mut metadata).await;
@@ -270,7 +289,7 @@ impl Server {
 async fn main() {
     env_logger::init();
     let mut server = Server {
-        state: State::Stopped,
+        state: State::Dead,
         state_db_handler: DBHandler {
             db: DB::default(),
             metadata: DBMetadata::default(),

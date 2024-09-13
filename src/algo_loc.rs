@@ -3,6 +3,7 @@ use crate::contextgpt_structs::AuthorDetails;
 use crate::db::DB;
 use crate::git_command_algo::extract_details;
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 fn split_output_and_create_map(
     output_single_line: String,
@@ -118,7 +119,7 @@ pub fn get_unique_files_changed(
     }
 }
 
-fn extract_string_from_output(output: Vec<AuthorDetails>, is_author_mode: bool) -> String {
+pub fn extract_string_from_output(output: Vec<AuthorDetails>, is_author_mode: bool) -> String {
     let mut res: HashMap<String, usize> = HashMap::new();
     for single_struct in output {
         if is_author_mode {
@@ -151,15 +152,13 @@ fn extract_string_from_output(output: Vec<AuthorDetails>, is_author_mode: bool) 
 
 pub fn perform_for_whole_file(
     origin_file_path: String,
-    db_obj: &mut DB,
-    is_author_mode: bool,
     config_obj: &config_impl::Config,
-) -> String {
-    println!(
-        "db file path while performing for whole file: {}",
-        db_obj.db_file_path.clone()
-    );
-    let mut res: HashMap<String, usize> = HashMap::new();
+) -> Vec<AuthorDetails> {
+    // println!(
+    //     "db file path while performing for whole file: {}",
+    //     curr_db.db_file_path.clone()
+    // );
+    // let mut res: HashMap<String, usize> = HashMap::new();
 
     let start_line_number = 1;
     let end_line_number = 1000000;
@@ -169,16 +168,18 @@ pub fn perform_for_whole_file(
         origin_file_path.clone(),
         config_obj,
     );
-    db_obj.append(
-        &origin_file_path,
-        start_line_number,
-        end_line_number,
-        output.clone(), // TODO: don't clone everywhere!!
-    );
-
-    let output_str = extract_string_from_output(output, is_author_mode);
-    db_obj.store();
-    output_str
+    output
+    // db_obj.append(
+    //     &origin_file_path,
+    //     start_line_number,
+    //     end_line_number,
+    //     output.clone(), // TODO: don't clone everywhere!!
+    // );
+    
+    // FIXME: DO NOT STORE.
+    // We should instead persist db_obj somehow.
+    // db_obj.store();
+    // extract_string_from_output(output, is_author_mode)
 }
 
 pub fn perform_for_single_line(
