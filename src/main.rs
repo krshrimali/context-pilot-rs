@@ -10,6 +10,7 @@ mod git_command_algo;
 // mod async_check;
 use crate::{algo_loc::extract_string_from_output, algo_loc::perform_for_whole_file, db::DB};
 use async_recursion::async_recursion;
+use contextgpt_structs::AuthorDetails;
 use std::{
     collections::HashSet,
     path::{Path, PathBuf},
@@ -121,7 +122,7 @@ impl Server {
         false
     }
 
-    async fn _index_file(file: PathBuf) -> String {
+    async fn _index_file(file: PathBuf) -> Vec<AuthorDetails> {
         // Don't make it write to the DB, write it atomically later.
         // For now, just store the output somewhere in the DB.
         let file_path = file.to_str().unwrap();
@@ -136,19 +137,22 @@ impl Server {
 
         // curr_db.init_db(file_path);
         let output_author_details = perform_for_whole_file(file_path.to_string(), &config_obj);
+        output_author_details
         // Now extract output string from the output_author_details.
-        let output_str =
-            extract_string_from_output(output_author_details, /*is_author_mode=*/ false);
-        // println!("output string: {output_str}");
-        output_str
+        // extract_string_from_output(output_author_details, /*is_author_mode=*/ false)
     }
 
     #[async_recursion]
-    async fn _iterate_through_workspace(&mut self, workspace_path: PathBuf, _: PathBuf) {
+    async fn _iterate_through_workspace(
+        &mut self,
+        workspace_path: PathBuf,
+        _: PathBuf,
+    ) -> Vec<AuthorDetails> {
         let mut set: task::JoinSet<()> = task::JoinSet::new();
-        let mut files_set: task::JoinSet<String> = task::JoinSet::new();
+        let mut files_set: task::JoinSet<Vec<AuthorDetails>> = task::JoinSet::new();
 
         let path = Path::new(&workspace_path);
+        let mut final_authordetails: Vec<AuthorDetails> = Vec::new();
 
         if path.is_dir() {
             // iterate through the directory and start indexing all the files
@@ -174,7 +178,12 @@ impl Server {
                 }
             }
 
-            let mut seen = HashSet::new();
+            while let Some(res) = files_set.join_next().await {
+                let output_authordetails = res.unwrap();
+                final_authordetails.extend(output_authordetails);
+            }
+
+            // let mut seen = HashSet::new();
 
             // for res in tasks_list.iter() {
             //     let idx = res.await.unwrap();
@@ -182,18 +191,19 @@ impl Server {
             //     log!(Level::Info, "Done with file: {}", idx);
             // }
 
-            while let Some(res) = set.join_next().await {
-                let idx = res.unwrap();
-                seen.insert(idx.clone());
-                // log!(Level::Info, "Done with file: {:?}", idx);
-            }
+            // while let Some(res) = set.join_next().await {
+            
+            //     let idx = res.unwrap();
+            //     seen.insert(idx.clone());
+            //     // log!(Level::Info, "Done with file: {:?}", idx);
+            // }
 
-            let mut files_seen = HashSet::new();
-            while let Some(res) = files_set.join_next().await {
-                let idx = res.unwrap();
-                files_seen.insert(idx.clone());
-                log!(Level::Info, "Done with file: {:?}", idx);
-            }
+            // let mut files_seen = HashSet::new();
+            // while let Some(res) = files_set.join_next().await {
+            //     let idx = res.unwrap();
+            //     files_seen.insert(idx.clone());
+            //     log!(Level::Info, "Done with file: {:?}", idx);
+            // }
         } else {
             // path is not a directory
             // in which case, you might just want to index it if it's a valid file - or else - just raise a warning
@@ -212,6 +222,8 @@ impl Server {
                 log!(Level::Warn, "File is not valid: {}", path.display());
             }
         }
+
+        final_authordetails
     }
 
     pub async fn start(&mut self, metadata: &mut DBMetadata) {
@@ -236,8 +248,12 @@ impl Server {
         };
         let curr_db: Arc<Mutex<DB>> = Arc::new(db.into());
         curr_db.lock().unwrap().init_db(workspace_path.as_str());
-        self._iterate_through_workspace(workspace_path_buf.clone(), workspace_path_buf)
-            .await
+        let output = self
+            ._iterate_through_workspace(workspace_path_buf.clone(), workspace_path_buf)
+            .await;
+        curr_db.lock().unwrap().store();
+        println!("{:?}", output);
+        // output
     }
 
     pub async fn handle_server(&mut self, workspace_path: &str) {
