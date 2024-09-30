@@ -27,7 +27,6 @@ pub struct DB {
 impl DB {
     pub fn read(&mut self) -> DBType {
         // let db_file_path = format!("{}/{}", self.folder_path, self.index);
-        println!("path at this point: {}", self.db_file_path.clone());
         if Path::new(self.db_file_path.as_str()).exists() {
             let data_buffers =
                 std::fs::read_to_string(&self.db_file_path).expect("Unable to read the file");
@@ -52,7 +51,6 @@ impl DB {
             self.index = *valid_index;
 
             self.db_file_path = format!("{}/{}.json", self.folder_path, self.index);
-            println!("db_file_path: {}", self.db_file_path);
             let db_obj = Path::new(&self.db_file_path);
             if !db_obj.exists() {
                 File::create(db_obj).expect("Couldn't find the DB file");
@@ -104,23 +102,16 @@ impl DB {
             .unwrap_or_else(|_| panic!("Unable to create folder for: {}", self.folder_path));
 
         // Search for the index
-        println!("curr_file_path: {}", curr_file_path);
         let db_file_index = self.find_index(curr_file_path);
         // Filename will be: <db_file_index>.json
         let valid_indices = db_file_index.unwrap_or(vec![self.index]);
-        println!("Printing valid indices with len: {}", valid_indices.len());
-        for val in valid_indices.iter() {
-            println!("Val: {}", val);
-        }
         self.current_data = self.read_all(valid_indices.clone());
-        // println!("Current data: {:?}", self.current_data);
     }
 
     fn find_index(&mut self, curr_file_path: &str) -> Option<Vec<u32>> {
         // In each folder -> we'll have a mapping file which contains which filename corresponds to which index (to be used in the DB file)
         self.mapping_file_name = "mapping.json".to_string();
         self.mapping_file_path = format!("{}/{}", self.folder_path, self.mapping_file_name);
-        println!("mapping_file_path: {}", self.mapping_file_path.clone());
         let mapping_path_obj = Path::new(&self.mapping_file_path);
         if !mapping_path_obj.exists() {
             // mapping file doesn't exist yet... we'll create one with the index as 0 for the given curr_file_path
@@ -136,7 +127,6 @@ impl DB {
             write!(mapping_path_file, "{}", init_mapping_string)
                 .expect("Couldn't write a very simple data object into a new mapping file...wow!");
             self.db_file_path = format!("{}/{}.json", self.folder_path, self.index);
-            println!("we created the file, yayy: {}", self.db_file_path.clone());
             self.current_data = HashMap::new();
             return None;
         }
@@ -176,10 +166,6 @@ impl DB {
                 .expect("Couldn't write to the mapping file, wow!");
             return None;
         }
-        println!(
-            "Mapping file path, first index: {}, file path: {}",
-            self.index, self.db_file_path
-        );
         indices.cloned()
     }
 
@@ -193,10 +179,9 @@ impl DB {
         &mut self,
         configured_file_path: &String,
         start_line_idx: usize,
-        end_line_idx: usize,
         all_data: Vec<AuthorDetails>,
     ) {
-        println!("Before appending: {}", self.db_file_path.clone());
+        let end_line_idx = all_data[0].end_line_number as usize;
         for line_idx in start_line_idx..end_line_idx + 1 {
             let line_idx = line_idx as u32;
             let mut existing_data = vec![];
@@ -221,7 +206,6 @@ impl DB {
                     .insert(configured_file_path.to_string(), map);
             }
         }
-        println!("After appending: {}", self.db_file_path.clone());
     }
 
     pub fn _is_limit_crossed(&self) -> bool {
@@ -229,7 +213,6 @@ impl DB {
     }
 
     pub fn store(&mut self) {
-        println!("I'm storing...\n");
         // We should check if the limit has crossed and then modify self.db_file_path
         let mut we_crossed_limit: bool = false;
         self.curr_items += 1;
@@ -259,11 +242,9 @@ impl DB {
 
         let output_string =
             serde_json::to_string_pretty(&self.current_data).expect("Unable to deserialize data");
-        // println!("output string: {}", output_string);
         if we_crossed_limit {
             self.current_data.clear();
         }
-        println!("Db file path: {}", self.db_file_path);
         if Path::new(&self.db_file_path).exists() {
             let mut file_obj = File::create(self.db_file_path.as_str())
                 .unwrap_or_else(|_| panic!("Couldn't open the given file: {}", self.db_file_path));

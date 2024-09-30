@@ -1,3 +1,5 @@
+use linecount::count_lines;
+
 use crate::config_impl;
 use crate::contextgpt_structs::AuthorDetails;
 use crate::db::DB;
@@ -161,10 +163,12 @@ pub fn perform_for_whole_file(
     // let mut res: HashMap<String, usize> = HashMap::new();
 
     let start_line_number = 1;
-    let end_line_number = 1000000;
+    let file = std::fs::File::open(origin_file_path.clone()).unwrap();
+    // let end_line_number = 1000000;
+    let end_line_number = count_lines(file).unwrap() as i32 - 1;
     let output = extract_details(
         start_line_number,
-        end_line_number,
+        end_line_number as usize,
         origin_file_path.clone(),
         config_obj,
     );
@@ -204,7 +208,6 @@ pub fn perform_for_single_line(
     db_obj.append(
         &origin_file_path,
         start_line_number,
-        end_line_number,
         output.clone(),
     );
     for single_struct in output {

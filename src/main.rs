@@ -8,12 +8,12 @@ mod git_command_algo;
 // mod server;
 
 // mod async_check;
-use crate::{algo_loc::extract_string_from_output, algo_loc::perform_for_whole_file, db::DB};
+use crate::{algo_loc::perform_for_whole_file, db::DB};
 use async_recursion::async_recursion;
 use contextgpt_structs::AuthorDetails;
 use std::{
-    collections::HashSet,
     path::{Path, PathBuf},
+    str::FromStr,
     sync::{Arc, Mutex},
 };
 
@@ -146,7 +146,8 @@ impl Server {
     async fn _iterate_through_workspace(
         &mut self,
         workspace_path: PathBuf,
-        _: PathBuf,
+        config_file_path: PathBuf,
+        db_obj: Arc<Mutex<DB>>,
     ) -> Vec<AuthorDetails> {
         let mut set: task::JoinSet<()> = task::JoinSet::new();
         let mut files_set: task::JoinSet<Vec<AuthorDetails>> = task::JoinSet::new();
@@ -169,7 +170,6 @@ impl Server {
                     //     entry_path.clone(),
                     //     default_folder_path.clone(),
                     // ));
-                    println!("Continuing...");
                     continue;
                 } else {
                     log!(Level::Info, "File is valid: {}", entry_path.display());
@@ -192,7 +192,7 @@ impl Server {
             // }
 
             // while let Some(res) = set.join_next().await {
-            
+
             //     let idx = res.unwrap();
             //     seen.insert(idx.clone());
             //     // log!(Level::Info, "Done with file: {:?}", idx);
@@ -204,6 +204,16 @@ impl Server {
             //     files_seen.insert(idx.clone());
             //     log!(Level::Info, "Done with file: {:?}", idx);
             // }
+            let start_line_number = 0;
+            // let sample_vec: Vec<AuthorDetails> = {};
+            let con_str = config_file_path.as_path().to_str().unwrap();
+            let config_string = String::from_str(con_str).unwrap();
+
+            db_obj.lock().unwrap().append(
+                &config_string,
+                start_line_number,
+                final_authordetails.clone(),
+            )
         } else {
             // path is not a directory
             // in which case, you might just want to index it if it's a valid file - or else - just raise a warning
@@ -236,7 +246,6 @@ impl Server {
         // and files that are not in the ignore list if provided in the config
 
         let workspace_path_buf = PathBuf::from(workspace_path);
-        println!("Now starting to iterate through the workspace...");
         // let curr_db = DB {
         //     folder_path: workspace_path.clone(),
         //     ..Default::default()
@@ -249,10 +258,21 @@ impl Server {
         let curr_db: Arc<Mutex<DB>> = Arc::new(db.into());
         curr_db.lock().unwrap().init_db(workspace_path.as_str());
         let output = self
-            ._iterate_through_workspace(workspace_path_buf.clone(), workspace_path_buf)
+            ._iterate_through_workspace(
+                workspace_path_buf.clone(),
+                workspace_path_buf,
+                curr_db.clone(),
+            )
             .await;
+
+        let origin_file_path = metadata.workspace_path.clone();
+        let start_line_number = 0;
+        curr_db.lock().unwrap().append(
+            &origin_file_path,
+            start_line_number,
+            output.clone(),
+        );
         curr_db.lock().unwrap().store();
-        println!("{:?}", output);
         // output
     }
 
@@ -261,9 +281,6 @@ impl Server {
         self.state_db_handler.init(workspace_path);
 
         let mut metadata: DBMetadata = self.state_db_handler.get_current_metadata();
-
-        println!("metadata: {:?}", metadata);
-        println!("workspace path: {}", workspace_path);
 
         let mut tasks = vec![];
 

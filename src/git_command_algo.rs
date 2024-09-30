@@ -7,7 +7,7 @@ use std::{
 
 use crate::contextgpt_structs::AuthorDetails;
 
-pub fn parse_str(input_str: &str, file_path: &str) -> Vec<AuthorDetails> {
+pub fn parse_str(input_str: &str, file_path: &str, end_line_number: usize) -> Vec<AuthorDetails> {
     let mut author_details_vec: Vec<AuthorDetails> = vec![];
     for split_line in input_str.split('\n') {
         if split_line.len() < 3 {
@@ -26,6 +26,7 @@ pub fn parse_str(input_str: &str, file_path: &str) -> Vec<AuthorDetails> {
             commit_hash.to_string(),
             file_path,
             Vec::new(),
+            end_line_number,
         );
         author_details_vec.push(author_details);
     }
@@ -94,7 +95,7 @@ pub fn extract_details(
     // println!("Command: {:?}", command);
     let output = command.stdout(Stdio::piped()).output().unwrap();
     let stdout_buf = String::from_utf8(output.stdout).unwrap();
-    let parsed_output = parse_str(stdout_buf.as_str(), &file_path);
+    let parsed_output = parse_str(stdout_buf.as_str(), &file_path, end_line_number);
 
     // println!("parsed_output: {:?}", parsed_output);
     let vec_author_detail_for_line =
@@ -148,7 +149,7 @@ pub fn extract_details(
                 .unwrap();
             let out_buf = String::from_utf8(new_blame_command.stdout).unwrap();
             // let error_buf = String::from_utf8(new_blame_command.stderr).unwrap();
-            let parsed_buf = parse_str(out_buf.as_str(), &file_path);
+            let parsed_buf = parse_str(out_buf.as_str(), &file_path, end_line_number);
 
             if let Some(valid_val) = get_data_for_line(parsed_buf, val.line_number, val.line_number)
             {

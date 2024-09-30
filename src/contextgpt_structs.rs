@@ -71,4 +71,5 @@ pub struct AuthorDetails {
     pub origin_file_path: String,
     pub contextual_file_paths: Vec<String>,
     pub line_number: usize,
+    pub end_line_number: usize,
 }
