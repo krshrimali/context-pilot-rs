@@ -50,7 +50,7 @@ impl FromStr for RequestTypeOptions {
 }
 
 #[derive(Debug, StructOpt)]
-pub struct Cli {
+pub(crate) struct Cli {
     pub file: String,
     pub folder_path: String,
 

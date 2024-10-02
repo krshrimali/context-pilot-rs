@@ -10,14 +10,18 @@ mod git_command_algo;
 // mod async_check;
 use crate::{algo_loc::perform_for_whole_file, db::DB};
 use async_recursion::async_recursion;
-use contextgpt_structs::AuthorDetails;
+use contextgpt_structs::{AuthorDetails, Cli, RequestTypeOptions};
 use std::{
     path::{Path, PathBuf},
     str::FromStr,
     sync::{Arc, Mutex},
 };
+use structopt::StructOpt;
 
-use quicli::prelude::log::{log, Level};
+use quicli::prelude::{
+    log::{log, Level},
+    CliResult,
+};
 use tokio::task;
 
 #[derive(Default, Debug, Eq, PartialEq, Clone, Copy)]
@@ -144,10 +148,9 @@ impl Server {
 
     #[async_recursion]
     async fn _iterate_through_workspace(
-        &mut self,
         workspace_path: PathBuf,
         config_file_path: PathBuf,
-        db_obj: Arc<Mutex<DB>>,
+        // db_obj: Arc<Mutex<DB>>,
     ) -> Vec<AuthorDetails> {
         let mut set: task::JoinSet<()> = task::JoinSet::new();
         let mut files_set: task::JoinSet<Vec<AuthorDetails>> = task::JoinSet::new();
@@ -170,7 +173,12 @@ impl Server {
                     //     entry_path.clone(),
                     //     default_folder_path.clone(),
                     // ));
-                    continue;
+                    files_set.spawn(Server::_iterate_through_workspace(
+                        entry_path.clone(),
+                        config_file_path.clone(),
+                        // db_obj,
+                    ));
+                    println!("Spawned for {:?}", entry_path);
                 } else {
                     log!(Level::Info, "File is valid: {}", entry_path.display());
 
@@ -208,12 +216,6 @@ impl Server {
             // let sample_vec: Vec<AuthorDetails> = {};
             let con_str = config_file_path.as_path().to_str().unwrap();
             let config_string = String::from_str(con_str).unwrap();
-
-            db_obj.lock().unwrap().append(
-                &config_string,
-                start_line_number,
-                final_authordetails.clone(),
-            )
         } else {
             // path is not a directory
             // in which case, you might just want to index it if it's a valid file - or else - just raise a warning
@@ -223,11 +225,8 @@ impl Server {
                     "File is valid but not in a sub-directory: {}",
                     path.display()
                 );
-                // Server::_index_file(
-                //     path.to_path_buf(),
-                //     workspace_path.to_str().unwrap().to_string(),
-                // )
-                // .await;
+                let output = Server::_index_file(path.to_path_buf()).await;
+                return output;
             } else {
                 log!(Level::Warn, "File is not valid: {}", path.display());
             }
@@ -236,7 +235,7 @@ impl Server {
         final_authordetails
     }
 
-    pub async fn start(&mut self, metadata: &mut DBMetadata) {
+    pub async fn start(&mut self, metadata: &mut DBMetadata, file_path: Option<PathBuf>) {
         // start the server for the given workspace
         // TODO: see if you just want to pass the workspace path and avoiding passing the whole metadata here
         let workspace_path = &metadata.workspace_path;
@@ -256,27 +255,44 @@ impl Server {
             ..Default::default()
         };
         let curr_db: Arc<Mutex<DB>> = Arc::new(db.into());
-        curr_db.lock().unwrap().init_db(workspace_path.as_str());
-        let output = self
-            ._iterate_through_workspace(
+        let mut output: Vec<AuthorDetails> = Vec::new();
+        if file_path.is_none() {
+            curr_db.lock().unwrap().init_db(workspace_path.as_str());
+            output = Server::_iterate_through_workspace(
                 workspace_path_buf.clone(),
-                workspace_path_buf,
-                curr_db.clone(),
+                workspace_path_buf.clone(), // unused
             )
             .await;
+        } else {
+            curr_db
+                .lock()
+                .unwrap()
+                .init_db(&file_path.clone().unwrap().to_str().unwrap());
+            output = Server::_iterate_through_workspace(
+                file_path.clone().unwrap().into(),
+                file_path.unwrap().into(), // unused
+            )
+            .await;
+        }
+
+        // let start_line_number = 0;
+        // curr_db.lock().unwrap().append(
+        //     &workspace_path_buf.to_str().unwrap().to_string(),
+        //     start_line_number,
+        //     output.clone(),
+        // );
 
         let origin_file_path = metadata.workspace_path.clone();
         let start_line_number = 0;
-        curr_db.lock().unwrap().append(
-            &origin_file_path,
-            start_line_number,
-            output.clone(),
-        );
+        curr_db
+            .lock()
+            .unwrap()
+            .append(&origin_file_path, start_line_number, output.clone());
         curr_db.lock().unwrap().store();
         // output
     }
 
-    pub async fn handle_server(&mut self, workspace_path: &str) {
+    pub async fn handle_server(&mut self, workspace_path: &str, file_path: Option<PathBuf>) {
         // this will initialise any required states
         self.state_db_handler.init(workspace_path);
 
@@ -293,7 +309,7 @@ impl Server {
                 // the server is not in running state -> for state of it's attempting to start -> let it finish and then see if it was successful
                 // TODO: @krshrimali
                 self.state_db_handler.start(&metadata);
-                tasks.push(self.start(&mut metadata));
+                tasks.push(self.start(&mut metadata, file_path));
             } else if metadata.state == State::Failed {
                 // in case of failure though, ideally it would have been alr handled by other process -> but in any case, starting from here as well to just see how it works out
                 // I'm in the favor of not restarting in case of failure from another process though
@@ -305,7 +321,7 @@ impl Server {
                 // should be blocking rn
                 self.state_db_handler.start(&metadata);
 
-                self.start(&mut metadata).await;
+                self.start(&mut metadata, file_path).await;
                 println!("Done");
             }
             // in case the metadata workspace path matches with the input and the server is already running -> don't do indexing
@@ -319,7 +335,9 @@ impl Server {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> CliResult {
+    let args = Cli::from_args();
+
     env_logger::init();
     let mut server = Server {
         state: State::Dead,
@@ -329,7 +347,20 @@ async fn main() {
         },
     };
 
-    server
-        .handle_server("/home/krshrimali/Documents/Projects/context-pilot-rs")
-        .await;
+    let config_obj: config_impl::Config = config_impl::read_config(config::CONFIG_FILE_NAME);
+    let file_path: Option<PathBuf> = PathBuf::from_str(args.file.as_str()).unwrap().into();
+
+    match args.request_type {
+        RequestTypeOptions::File => {
+            server
+                .handle_server(args.folder_path.as_str(), file_path)
+                .await;
+        }
+        RequestTypeOptions::Author => {
+            server
+                .handle_server(args.folder_path.as_str(), file_path)
+                .await;
+        }
+    };
+    Ok(())
 }
