@@ -5,9 +5,7 @@ mod config_impl;
 mod contextgpt_structs;
 mod db;
 mod git_command_algo;
-// mod server;
 
-// mod async_check;
 use crate::{algo_loc::perform_for_whole_file, db::DB};
 use async_recursion::async_recursion;
 use contextgpt_structs::{AuthorDetails, Cli, RequestTypeOptions};
@@ -137,10 +135,12 @@ impl Server {
         // db_obj.init_db(workspace_path.as_str());
 
         // Read the config file and pass defaults
-        let config_obj: config_impl::Config = config_impl::read_config(config::CONFIG_FILE_NAME);
+        let config_obj: config_impl::Config =
+            config_impl::read_config(config::CONFIG_FILE_NAME);
 
         // curr_db.init_db(file_path);
-        let output_author_details = perform_for_whole_file(file_path.to_string(), &config_obj);
+        let output_author_details =
+            perform_for_whole_file(file_path.to_string(), &config_obj);
         output_author_details
         // Now extract output string from the output_author_details.
         // extract_string_from_output(output_author_details, /*is_author_mode=*/ false)
@@ -150,36 +150,32 @@ impl Server {
     async fn _iterate_through_workspace(
         workspace_path: PathBuf,
         config_file_path: PathBuf,
-        // db_obj: Arc<Mutex<DB>>,
     ) -> Vec<AuthorDetails> {
         let mut set: task::JoinSet<()> = task::JoinSet::new();
-        let mut files_set: task::JoinSet<Vec<AuthorDetails>> = task::JoinSet::new();
+        let mut files_set: task::JoinSet<Vec<AuthorDetails>> =
+            task::JoinSet::new();
 
         let path = Path::new(&workspace_path);
         let mut final_authordetails: Vec<AuthorDetails> = Vec::new();
 
         if path.is_dir() {
             // iterate through the directory and start indexing all the files
-            for entry in path
-                .read_dir()
-                .unwrap_or_else(|_| panic!("failed reading directory {}", path.display()))
-            {
+            for entry in path.read_dir().unwrap_or_else(|_| {
+                panic!("failed reading directory {}", path.display())
+            }) {
                 let entry_path = entry.unwrap().path();
                 if entry_path.is_dir() {
                     // FIXME: This is a case of having a sub-directory
-                    // println!("ignoring directory: {}", entry_path.display());
-                    // set.spawn(Server::_iterate_through_workspace(
-                    //     // self,
-                    //     entry_path.clone(),
-                    //     default_folder_path.clone(),
-                    // ));
                     files_set.spawn(Server::_iterate_through_workspace(
                         entry_path.clone(),
                         config_file_path.clone(),
-                        // db_obj,
                     ));
                 } else {
-                    log!(Level::Info, "File is valid: {}", entry_path.display());
+                    log!(
+                        Level::Info,
+                        "File is valid: {}",
+                        entry_path.display()
+                    );
 
                     files_set.spawn(Server::_index_file(entry_path));
                 }
@@ -189,32 +185,6 @@ impl Server {
                 let output_authordetails = res.unwrap();
                 final_authordetails.extend(output_authordetails);
             }
-
-            // let mut seen = HashSet::new();
-
-            // for res in tasks_list.iter() {
-            //     let idx = res.await.unwrap();
-            //     seen.insert(idx.clone());
-            //     log!(Level::Info, "Done with file: {}", idx);
-            // }
-
-            // while let Some(res) = set.join_next().await {
-
-            //     let idx = res.unwrap();
-            //     seen.insert(idx.clone());
-            //     // log!(Level::Info, "Done with file: {:?}", idx);
-            // }
-
-            // let mut files_seen = HashSet::new();
-            // while let Some(res) = files_set.join_next().await {
-            //     let idx = res.unwrap();
-            //     files_seen.insert(idx.clone());
-            //     log!(Level::Info, "Done with file: {:?}", idx);
-            // }
-            // let start_line_number = 0;
-            // let sample_vec: Vec<AuthorDetails> = {};
-            // let con_str = config_file_path.as_path().to_str().unwrap();
-            // let config_string = String::from_str(con_str).unwrap();
         } else {
             // path is not a directory
             // in which case, you might just want to index it if it's a valid file - or else - just raise a warning
@@ -234,7 +204,11 @@ impl Server {
         final_authordetails
     }
 
-    pub async fn start(&mut self, metadata: &mut DBMetadata, file_path: Option<PathBuf>) {
+    pub async fn start(
+        &mut self,
+        metadata: &mut DBMetadata,
+        file_path: Option<PathBuf>,
+    ) {
         // start the server for the given workspace
         // TODO: see if you just want to pass the workspace path and avoiding passing the whole metadata here
         let workspace_path = &metadata.workspace_path;
@@ -270,28 +244,26 @@ impl Server {
             .await;
         }
 
-        // let start_line_number = 0;
-        // curr_db.lock().unwrap().append(
-        //     &workspace_path_buf.to_str().unwrap().to_string(),
-        //     start_line_number,
-        //     output.clone(),
-        // );
-
         let origin_file_path = metadata.workspace_path.clone();
         let start_line_number = 0;
-        curr_db
-            .lock()
-            .unwrap()
-            .append(&origin_file_path, start_line_number, output.clone());
+        curr_db.lock().unwrap().append(
+            &origin_file_path,
+            start_line_number,
+            output.clone(),
+        );
         curr_db.lock().unwrap().store();
-        // output
     }
 
-    pub async fn handle_server(&mut self, workspace_path: &str, file_path: Option<PathBuf>) {
+    pub async fn handle_server(
+        &mut self,
+        workspace_path: &str,
+        file_path: Option<PathBuf>,
+    ) {
         // this will initialise any required states
         self.state_db_handler.init(workspace_path);
 
-        let mut metadata: DBMetadata = self.state_db_handler.get_current_metadata();
+        let mut metadata: DBMetadata =
+            self.state_db_handler.get_current_metadata();
 
         let mut tasks = vec![];
 
@@ -316,7 +288,8 @@ impl Server {
 
                 self.start(&mut metadata, file_path).await;
             }
-            // in case the metadata workspace path matches with the input and the server is already running -> don't do indexing
+            // in case the metadata workspace path matches with the input
+            // and the server is already running -> don't do indexing
         }
     }
 
@@ -341,7 +314,8 @@ async fn main() -> CliResult {
 
     // TODO: Add support for config file.
     // let config_obj: config_impl::Config = config_impl::read_config(config::CONFIG_FILE_NAME);
-    let file_path: Option<PathBuf> = PathBuf::from_str(args.file.as_str()).unwrap().into();
+    let file_path: Option<PathBuf> =
+        PathBuf::from_str(args.file.as_str()).unwrap().into();
 
     match args.request_type {
         RequestTypeOptions::File => {
