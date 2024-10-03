@@ -89,14 +89,14 @@ impl DBHandler {
         self.metadata.clone()
     }
 
-    pub fn start(&mut self, metadata: &DBMetadata) {
+    pub fn start(&mut self, _: &DBMetadata) {
         // this should ideally start the DB server
         // DB Server and the other server should be kept separate
         // this should not be async though - as we'll really want this to finish before it finishes
-        println!(
-            "Passing workspace path to init_db: {}",
-            metadata.workspace_path
-        );
+        // println!(
+        //     "Passing workspace path to init_db: {}",
+        //     metadata.workspace_path
+        // );
     }
 }
 
@@ -178,7 +178,6 @@ impl Server {
                         config_file_path.clone(),
                         // db_obj,
                     ));
-                    println!("Spawned for {:?}", entry_path);
                 } else {
                     log!(Level::Info, "File is valid: {}", entry_path.display());
 
@@ -212,10 +211,10 @@ impl Server {
             //     files_seen.insert(idx.clone());
             //     log!(Level::Info, "Done with file: {:?}", idx);
             // }
-            let start_line_number = 0;
+            // let start_line_number = 0;
             // let sample_vec: Vec<AuthorDetails> = {};
-            let con_str = config_file_path.as_path().to_str().unwrap();
-            let config_string = String::from_str(con_str).unwrap();
+            // let con_str = config_file_path.as_path().to_str().unwrap();
+            // let config_string = String::from_str(con_str).unwrap();
         } else {
             // path is not a directory
             // in which case, you might just want to index it if it's a valid file - or else - just raise a warning
@@ -245,10 +244,6 @@ impl Server {
         // and files that are not in the ignore list if provided in the config
 
         let workspace_path_buf = PathBuf::from(workspace_path);
-        // let curr_db = DB {
-        //     folder_path: workspace_path.clone(),
-        //     ..Default::default()
-        // };
 
         let db = DB {
             folder_path: workspace_path.clone(),
@@ -267,10 +262,10 @@ impl Server {
             curr_db
                 .lock()
                 .unwrap()
-                .init_db(&file_path.clone().unwrap().to_str().unwrap());
+                .init_db(file_path.clone().unwrap().to_str().unwrap());
             output = Server::_iterate_through_workspace(
-                file_path.clone().unwrap().into(),
-                file_path.unwrap().into(), // unused
+                file_path.clone().unwrap(),
+                file_path.unwrap(), // unused
             )
             .await;
         }
@@ -304,7 +299,7 @@ impl Server {
             if metadata.state == State::Running {
                 // the server is already running
                 // do nothing - let the indexing continue
-                println!("[CONTINUING] Progress: {}", metadata.curr_progress);
+                // println!("[CONTINUING] Progress: {}", metadata.curr_progress);
             } else if metadata.state == State::Starting {
                 // the server is not in running state -> for state of it's attempting to start -> let it finish and then see if it was successful
                 // TODO: @krshrimali
@@ -316,13 +311,10 @@ impl Server {
                 // TODO: Have a limit here, can't retry for infinite count.
                 self.state_db_handler.retry();
             } else if metadata.state == State::Dead {
-                println!("Starting server...");
-
                 // should be blocking rn
                 self.state_db_handler.start(&metadata);
 
                 self.start(&mut metadata, file_path).await;
-                println!("Done");
             }
             // in case the metadata workspace path matches with the input and the server is already running -> don't do indexing
         }
@@ -347,7 +339,8 @@ async fn main() -> CliResult {
         },
     };
 
-    let config_obj: config_impl::Config = config_impl::read_config(config::CONFIG_FILE_NAME);
+    // TODO: Add support for config file.
+    // let config_obj: config_impl::Config = config_impl::read_config(config::CONFIG_FILE_NAME);
     let file_path: Option<PathBuf> = PathBuf::from_str(args.file.as_str()).unwrap().into();
 
     match args.request_type {
