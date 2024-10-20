@@ -179,7 +179,7 @@ pub fn perform_for_whole_file(
     //     end_line_number,
     //     output.clone(), // TODO: don't clone everywhere!!
     // );
-    
+
     // FIXME: DO NOT STORE.
     // We should instead persist db_obj somehow.
     // db_obj.store();
@@ -205,11 +205,7 @@ pub fn perform_for_single_line(
     //     start_line_number, end_line_number
     // );
     let mut res: HashMap<String, usize> = HashMap::new();
-    db_obj.append(
-        &origin_file_path,
-        start_line_number,
-        output.clone(),
-    );
+    db_obj.append(&origin_file_path, start_line_number, output.clone());
     for single_struct in output {
         if is_author_mode {
             if res.contains_key(&single_struct.author_full_name) {

@@ -181,6 +181,9 @@ impl DB {
         start_line_idx: usize,
         all_data: Vec<AuthorDetails>,
     ) {
+        if all_data.is_empty() {
+            return;
+        }
         let end_line_idx = all_data[0].end_line_number as usize;
         for line_idx in start_line_idx..end_line_idx + 1 {
             let line_idx = line_idx as u32;
@@ -213,6 +216,10 @@ impl DB {
     }
 
     pub fn store(&mut self) {
+        if self.current_data.is_empty() {
+            return;
+        }
+
         // We should check if the limit has crossed and then modify self.db_file_path
         let mut we_crossed_limit: bool = false;
         self.curr_items += 1;
