@@ -92,12 +92,10 @@ pub fn extract_details(
         "--",
         file_path.as_str(),
     ]);
-    // println!("Command: {:?}", command);
     let output = command.stdout(Stdio::piped()).output().unwrap();
     let stdout_buf = String::from_utf8(output.stdout).unwrap();
     let parsed_output = parse_str(stdout_buf.as_str(), &file_path, end_line_number);
 
-    // println!("parsed_output: {:?}", parsed_output);
     let vec_author_detail_for_line =
         get_data_for_line(parsed_output, start_line_number, end_line_number);
 
@@ -148,7 +146,6 @@ pub fn extract_details(
                 .output()
                 .unwrap();
             let out_buf = String::from_utf8(new_blame_command.stdout).unwrap();
-            // let error_buf = String::from_utf8(new_blame_command.stderr).unwrap();
             let parsed_buf = parse_str(out_buf.as_str(), &file_path, end_line_number);
 
             if let Some(valid_val) = get_data_for_line(parsed_buf, val.line_number, val.line_number)
