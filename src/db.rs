@@ -11,7 +11,7 @@ type DBType = HashMap<String, HashMap<u32, Vec<AuthorDetails>>>;
 type MappingDBType = HashMap<String, Vec<u32>>;
 
 // index; folder_path; currLines;
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct DB {
     pub index: u32,                // The line of code that you are at, right now? TODO:
     pub folder_path: String, // Current folder path that this DB is processing, or the binary is running
@@ -30,9 +30,11 @@ impl DB {
         if Path::new(self.db_file_path.as_str()).exists() {
             let data_buffers =
                 std::fs::read_to_string(&self.db_file_path).expect("Unable to read the file");
-            let data: DBType =
-                serde_json::from_str(data_buffers.as_str()).expect("Unable to deserialize");
-            data
+            let data = serde_json::from_str(data_buffers.as_str());
+            if data.is_err() {
+                return HashMap::new();
+            }
+            data.unwrap()
         } else {
             eprintln!(
                 "The DB file doesn't exist for the given path: {}",
@@ -47,6 +49,7 @@ impl DB {
         let mut init_data: DBType = HashMap::new();
         for valid_index in valid_indices.iter() {
             self.index = *valid_index;
+
             self.db_file_path = format!("{}/{}.json", self.folder_path, self.index);
             let db_obj = Path::new(&self.db_file_path);
             if !db_obj.exists() {
@@ -176,9 +179,12 @@ impl DB {
         &mut self,
         configured_file_path: &String,
         start_line_idx: usize,
-        end_line_idx: usize,
         all_data: Vec<AuthorDetails>,
     ) {
+        if all_data.is_empty() {
+            return;
+        }
+        let end_line_idx = all_data[0].end_line_number as usize;
         for line_idx in start_line_idx..end_line_idx + 1 {
             let line_idx = line_idx as u32;
             let mut existing_data = vec![];
@@ -210,6 +216,10 @@ impl DB {
     }
 
     pub fn store(&mut self) {
+        if self.current_data.is_empty() {
+            return;
+        }
+
         // We should check if the limit has crossed and then modify self.db_file_path
         let mut we_crossed_limit: bool = false;
         self.curr_items += 1;
@@ -286,5 +296,29 @@ impl DB {
             }
             (None, uncovered_indices)
         }
+    }
+}
+
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_loading_mapping_file() {
+        let mapping_path = "/home/krshrimali/.context_pilot_db/mapping.json";
+        let mapping_data = std::fs::read_to_string(mapping_path).unwrap_or_else(|_| {
+            panic!(
+                "Unable to read the mapping file into string, file path: {}",
+                mapping_path
+            )
+        });
+        let mapping_path_obj = Path::new(mapping_path);
+        serde_json::from_str(mapping_data.as_str()).unwrap_or_else(|_| {
+            panic!(
+                "Unable to deserialize the mapping file, path: {}",
+                mapping_path
+            )
+        });
+
+        assert!(mapping_path_obj.exists());
     }
 }

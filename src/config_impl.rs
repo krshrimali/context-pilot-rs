@@ -8,7 +8,7 @@ use std::path::PathBuf;
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Config {
     pub file_count_threshold: usize,
-    pub commit_hashes_threshold: usize, // TODO: Have a default value here later on
+    pub commit_hashes_threshold: usize,
 }
 
 impl Default for Config {
@@ -64,7 +64,7 @@ mod test {
         let inp = "a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s,t,u,v,w,x,y,z".to_string();
         let threshold = 10;
         let out = trim_result(inp, threshold);
-        assert_eq!(out, "a,b,c,d,e,f,g,h,i,j,k");
+        assert_eq!(out, "a,b,c,d,e,f,g,h,i,j");
     }
 
     #[test]
@@ -75,6 +75,6 @@ mod test {
             commit_hashes_threshold: 10,
         };
         let out = trim_result(inp, config_obj.file_count_threshold);
-        assert_eq!("a,b,c,d,e,f,g,h,i,j,k", out);
+        assert_eq!("a,b,c,d,e,f,g,h,i,j", out);
     }
 }

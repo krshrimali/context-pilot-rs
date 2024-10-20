@@ -6,6 +6,7 @@ impl AuthorDetails {
         commit_hash: String,
         file_path: &str,
         context_file_paths: Vec<String>,
+        end_line_number: usize,
     ) -> AuthorDetails {
         let mut author_str_split: Vec<&str> = input_str.split(' ').collect();
         author_str_split.reverse();
@@ -25,12 +26,14 @@ impl AuthorDetails {
         let mut names: Vec<&str> = author_name.split(' ').collect();
         names.reverse();
         let author_original_name = names.join(" ");
-        AuthorDetails {
+        let author_details = AuthorDetails {
             commit_hash,
             author_full_name: author_original_name,
             origin_file_path: file_path.to_string(),
             line_number: author_str_split.first().unwrap().parse::<usize>().unwrap(),
             contextual_file_paths: context_file_paths,
-        }
+            end_line_number,
+        };
+        author_details
     }
 }

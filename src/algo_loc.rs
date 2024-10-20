@@ -1,7 +1,11 @@
+use linecount::count_lines;
+
 use crate::config_impl;
+use crate::contextgpt_structs::AuthorDetails;
 use crate::db::DB;
 use crate::git_command_algo::extract_details;
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 fn split_output_and_create_map(
     output_single_line: String,
@@ -10,7 +14,10 @@ fn split_output_and_create_map(
     res_string: &mut String,
 ) {
     for single_string_from_output in output_single_line.split(',') {
-        if single_string_from_output == origin_file_path || single_string_from_output.is_empty() {
+        // if single_string_from_output == origin_file_path || single_string_from_output.is_empty() {
+        //     continue;
+        // }
+        if single_string_from_output.is_empty() {
             continue;
         }
         if visited_count_map.contains_key(single_string_from_output) {
@@ -114,6 +121,71 @@ pub fn get_unique_files_changed(
     }
 }
 
+pub fn extract_string_from_output(output: Vec<AuthorDetails>, is_author_mode: bool) -> String {
+    let mut res: HashMap<String, usize> = HashMap::new();
+    for single_struct in output {
+        if is_author_mode {
+            if res.contains_key(&single_struct.author_full_name) {
+                let count = res.get(&single_struct.author_full_name).unwrap() + 1;
+                res.insert(single_struct.author_full_name, count);
+                continue;
+            } else {
+                res.insert(single_struct.author_full_name, 0);
+            }
+        } else {
+            for each_file in single_struct.contextual_file_paths {
+                if res.contains_key(&each_file) {
+                    let count = res.get(&each_file).unwrap() + 1;
+                    res.insert(each_file, count);
+                } else {
+                    res.insert(each_file, 0);
+                }
+            }
+        }
+    }
+    // db_obj.store();
+    let mut res_string: String = String::new();
+    for key in res.keys() {
+        res_string.push_str(key.as_str());
+        res_string.push(',');
+    }
+    res_string
+}
+
+pub fn perform_for_whole_file(
+    origin_file_path: String,
+    config_obj: &config_impl::Config,
+) -> Vec<AuthorDetails> {
+    // println!(
+    //     "db file path while performing for whole file: {}",
+    //     curr_db.db_file_path.clone()
+    // );
+    // let mut res: HashMap<String, usize> = HashMap::new();
+
+    let start_line_number = 1;
+    let file = std::fs::File::open(origin_file_path.clone()).unwrap();
+    // let end_line_number = 1000000;
+    let end_line_number = count_lines(file).unwrap() as i32 - 1;
+    let output = extract_details(
+        start_line_number,
+        end_line_number as usize,
+        origin_file_path.clone(),
+        config_obj,
+    );
+    output
+    // db_obj.append(
+    //     &origin_file_path,
+    //     start_line_number,
+    //     end_line_number,
+    //     output.clone(), // TODO: don't clone everywhere!!
+    // );
+
+    // FIXME: DO NOT STORE.
+    // We should instead persist db_obj somehow.
+    // db_obj.store();
+    // extract_string_from_output(output, is_author_mode)
+}
+
 pub fn perform_for_single_line(
     start_line_number: usize,
     end_line_number: usize,
@@ -133,12 +205,7 @@ pub fn perform_for_single_line(
     //     start_line_number, end_line_number
     // );
     let mut res: HashMap<String, usize> = HashMap::new();
-    db_obj.append(
-        &origin_file_path,
-        start_line_number,
-        end_line_number,
-        output.clone(),
-    );
+    db_obj.append(&origin_file_path, start_line_number, output.clone());
     for single_struct in output {
         if is_author_mode {
             if res.contains_key(&single_struct.author_full_name) {
