@@ -254,9 +254,30 @@ impl Server {
             .await;
     }
 
-    pub async fn handle_server(&mut self, workspace_path: &str, file_path: Option<PathBuf>) {
+    pub async fn handle_server(
+        &mut self,
+        workspace_path: &str,
+        file_path: Option<PathBuf>,
+        start_number: Option<usize>,
+        end_number: Option<usize>,
+        request_type: Option<RequestTypeOptions>,
+    ) {
         // this will initialise any required states
         self.state_db_handler.init(workspace_path);
+
+        // If this is a call to query and not to index ->
+        if request_type.is_some() && request_type.unwrap() == RequestTypeOptions::Query {
+            // Then you query
+            assert!(file_path.is_some());
+            assert!(start_number.is_some());
+            assert!(end_number.is_some());
+            self.curr_db
+                .clone()
+                .unwrap()
+                .lock()
+                .unwrap()
+                .query(file_path.clone(), start_number, end_number);
+        }
 
         let mut metadata: DBMetadata = self.state_db_handler.get_current_metadata();
 
@@ -321,16 +342,29 @@ async fn main() -> CliResult {
     match args.request_type {
         RequestTypeOptions::File => {
             server
-                .handle_server(args.folder_path.as_str(), file_path)
+                .handle_server(args.folder_path.as_str(), file_path, None, None, None)
                 .await;
         }
         RequestTypeOptions::Author => {
             server
-                .handle_server(args.folder_path.as_str(), file_path)
+                .handle_server(args.folder_path.as_str(), file_path, None, None, None)
                 .await;
         }
         RequestTypeOptions::Index => {
-            server.handle_server(args.folder_path.as_str(), None).await;
+            server
+                .handle_server(args.folder_path.as_str(), None, None, None, None)
+                .await;
+        }
+        RequestTypeOptions::Query => {
+            server
+                .handle_server(
+                    args.folder_path.as_str(),
+                    file_path,
+                    args.start_number,
+                    args.end_number,
+                    Some(RequestTypeOptions::Query),
+                )
+                .await;
         }
     };
     Ok(())

@@ -27,11 +27,12 @@ macro_rules! get_struct_names {
 }
 
 get_struct_names! {
-    #[derive(Debug)]
+    #[derive(Debug, Eq, PartialEq)]
     pub enum RequestTypeOptions {
         Author,
         File,
-        Index
+        Index,
+        Query
     }
 }
 
@@ -42,6 +43,7 @@ impl FromStr for RequestTypeOptions {
             "author" => Ok(RequestTypeOptions::Author),
             "file" => Ok(RequestTypeOptions::File),
             "index" => Ok(RequestTypeOptions::Index),
+            "query" => Ok(RequestTypeOptions::Query),
             _ => Err(format!(
                 "Could not parse the request type: {}, available field names: {:?}",
                 request_type,

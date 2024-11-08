@@ -1,5 +1,6 @@
 use std::fs::OpenOptions;
 use std::io::Write;
+use std::path::PathBuf;
 use std::{collections::HashMap, fs::File, path::Path};
 
 // use simple_home_dir::home_dir;
@@ -296,6 +297,15 @@ impl DB {
             }
             (None, uncovered_indices)
         }
+    }
+
+    pub fn query(
+        &mut self,
+        file_path: Option<PathBuf>,
+        start_number: Option<usize>,
+        end_number: Option<usize>,
+    ) {
+        return;
     }
 }
 
