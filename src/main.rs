@@ -201,6 +201,7 @@ impl Server {
                 let origin_file_path = self.state_db_handler.metadata.workspace_path.clone();
                 let start_line_number = 0;
                 db.lock().unwrap().append(
+                    &workspace_path.to_str().unwrap().to_string(),
                     &origin_file_path,
                     start_line_number,
                     output_authordetails.clone(),
@@ -226,7 +227,7 @@ impl Server {
         final_authordetails
     }
 
-    pub async fn start_file(&mut self, _: &mut DBMetadata, _: Option<PathBuf>) {
+    pub async fn start_file(&mut self, _: &mut DBMetadata, _: Option<String>) {
         return;
     }
 
@@ -257,29 +258,36 @@ impl Server {
     pub async fn handle_server(
         &mut self,
         workspace_path: &str,
-        file_path: Option<PathBuf>,
+        file_path: Option<String>,
         start_number: Option<usize>,
         end_number: Option<usize>,
         request_type: Option<RequestTypeOptions>,
     ) {
         // this will initialise any required states
         self.state_db_handler.init(workspace_path);
+        let mut metadata = self.state_db_handler.get_current_metadata();
 
         // If this is a call to query and not to index ->
         if request_type.is_some() && request_type.unwrap() == RequestTypeOptions::Query {
+            let db = DB {
+                folder_path: workspace_path.to_string().clone(),
+                ..Default::default()
+            };
+            let curr_db: Arc<Mutex<DB>> = Arc::new(db.into());
+            curr_db.lock().unwrap().init_db(workspace_path);
+            // let mut server = Server::new(State::Dead, DBHandler::new(metadata.clone()));
+            self.init_server(curr_db);
             // Then you query
-            assert!(file_path.is_some());
+            // assert!(file_path.is_some());
             assert!(start_number.is_some());
             assert!(end_number.is_some());
-            self.curr_db
-                .clone()
-                .unwrap()
-                .lock()
-                .unwrap()
-                .query(file_path.clone(), start_number, end_number);
+            assert!(self.curr_db.is_some());
+            self.curr_db.clone().unwrap().lock().unwrap().query(
+                file_path.clone().unwrap(),
+                start_number.unwrap(),
+                end_number.unwrap(),
+            );
         }
-
-        let mut metadata: DBMetadata = self.state_db_handler.get_current_metadata();
 
         let mut tasks = vec![];
 
@@ -332,22 +340,22 @@ async fn main() -> CliResult {
 
     // TODO: Add support for config file.
     // let config_obj: config_impl::Config = config_impl::read_config(config::CONFIG_FILE_NAME);
-    let mut file_path: Option<PathBuf> = None;
-    if args.file.is_some() {
-        file_path = PathBuf::from_str(args.file.unwrap().as_str())
-            .unwrap()
-            .into();
-    }
+    // let mut file_path: Option<PathBuf> = None;
+    // if args.file.is_some() {
+    //     file_path = PathBuf::from_str(args.file.unwrap().as_str())
+    //         .unwrap()
+    //         .into();
+    // }
 
     match args.request_type {
         RequestTypeOptions::File => {
             server
-                .handle_server(args.folder_path.as_str(), file_path, None, None, None)
+                .handle_server(args.folder_path.as_str(), args.file, None, None, None)
                 .await;
         }
         RequestTypeOptions::Author => {
             server
-                .handle_server(args.folder_path.as_str(), file_path, None, None, None)
+                .handle_server(args.folder_path.as_str(), args.file, None, None, None)
                 .await;
         }
         RequestTypeOptions::Index => {
@@ -359,7 +367,7 @@ async fn main() -> CliResult {
             server
                 .handle_server(
                     args.folder_path.as_str(),
-                    file_path,
+                    args.file,
                     args.start_number,
                     args.end_number,
                     Some(RequestTypeOptions::Query),

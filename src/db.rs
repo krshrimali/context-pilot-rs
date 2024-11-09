@@ -8,7 +8,7 @@ use std::{collections::HashMap, fs::File, path::Path};
 use crate::config::MAX_ITEMS_IN_EACH_DB_FILE;
 use crate::{config, contextgpt_structs::AuthorDetails};
 
-type DBType = HashMap<String, HashMap<u32, Vec<AuthorDetails>>>;
+type DBType = HashMap<String, HashMap<String, HashMap<u32, Vec<AuthorDetails>>>>;
 type MappingDBType = HashMap<String, Vec<u32>>;
 
 // index; folder_path; currLines;
@@ -23,6 +23,7 @@ pub struct DB {
     pub mapping_file_path: String,
     pub mapping_data: MappingDBType,
     pub curr_file_path: String,
+    pub workspace_path: String,
 }
 
 impl DB {
@@ -62,6 +63,7 @@ impl DB {
             if let Some(valid_values) = values {
                 let mut default: HashMap<u32, Vec<AuthorDetails>> = HashMap::new();
                 let insert_data_here = init_data
+                    .get_mut(&self.workspace_path)
                     .get_mut(&self.curr_file_path)
                     .unwrap_or(&mut default);
                 insert_data_here.extend(valid_values.clone());
@@ -73,12 +75,13 @@ impl DB {
     }
 
     // Initialise the DB if it doesn't exist already
-    pub fn init_db(&mut self, curr_file_path: &str) {
+    pub fn init_db(&mut self, workspace_path: &str, curr_file_path: Option<&str>) {
         // let folder_path = Path::new(simple_home_dir::home_dir().unwrap().to_str().unwrap())
         //     .join(config::DB_FOLDER);
         // let db_folder = config::DB_FOLDER.to_owned() + &self.folder_path;
         let db_folder = format!("{}/{}", config::DB_FOLDER, self.folder_path);
-        self.curr_file_path = String::from(curr_file_path);
+        self.workspace_path = String::from(workspace_path);
+        self.curr_file_path = String::from(curr_file_path.unwrap_or(""));
         // let mut main_folder_path = String::new();
 
         if let Some(home) = simple_home_dir::home_dir() {
@@ -189,17 +192,23 @@ impl DB {
         for line_idx in start_line_idx..end_line_idx + 1 {
             let line_idx = line_idx as u32;
             let mut existing_data = vec![];
-            if self.current_data.contains_key(configured_file_path) {
-                let file_data = self.current_data.get_mut(configured_file_path).unwrap();
-                match file_data.contains_key(&line_idx) {
-                    false => {
-                        file_data.insert(line_idx, all_data.clone());
+            if self.current_data.contains_key(self.workspace_path) {
+                let workspace_data = self.current_data.get(self.workspace_path).unwrap();
+                if workspace_data.contains_key(configured_file_path) {
+                    let file_data = workspace_data.get(configured_file_path).unwrap();
+                    if file_data.contains_key(&line_idx) {
+                        existing_data = file_data.get(&line_idx).unwrap().clone();
                     }
-                    true => {
-                        file_data
-                            .get_mut(&line_idx)
-                            .unwrap()
-                            .append(&mut all_data.clone());
+                    match file_data.contains_key(&line_idx) {
+                        false => {
+                            file_data.insert(line_idx, all_data.clone());
+                        }
+                        true => {
+                            file_data
+                                .get_mut(&line_idx)
+                                .unwrap()
+                                .append(&mut all_data.clone());
+                        }
                     }
                 }
             } else {
@@ -274,6 +283,7 @@ impl DB {
     ) -> (Option<Vec<&AuthorDetails>>, Vec<u32>) {
         let mut already_computed_data: Vec<&AuthorDetails> = vec![];
         let mut uncovered_indices: Vec<u32> = vec![];
+        println!("Searching for the given field: {}", search_field_first);
         if self.current_data.contains_key(search_field_first) {
             let output = self.current_data.get_mut(search_field_first);
             if let Some(all_line_data) = output {
@@ -299,12 +309,11 @@ impl DB {
         }
     }
 
-    pub fn query(
-        &mut self,
-        file_path: Option<PathBuf>,
-        start_number: Option<usize>,
-        end_number: Option<usize>,
-    ) {
+    pub fn query(&mut self, file_path: String, start_number: usize, end_number: usize) {
+        println!("Querying the DB for the given file path: {}", file_path);
+        // println!("Current data: {:?}", self.current_data);
+        let output = self.exists_and_return(&file_path, &start_number, &end_number);
+        println!("Output: {:?}", output);
         return;
     }
 }
