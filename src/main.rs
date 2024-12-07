@@ -139,10 +139,10 @@ impl Server {
         false
     }
 
-    async fn _index_file(file: PathBuf) -> Vec<AuthorDetails> {
+    async fn _index_file(file_path_inp: PathBuf) -> Vec<AuthorDetails> {
         // Don't make it write to the DB, write it atomically later.
         // For now, just store the output somewhere in the DB.
-        let file_path = file.to_str().unwrap();
+        let file_path = file_path_inp.to_str().unwrap();
         // println!("Calling file\n");
 
         // Read the config file and pass defaults
@@ -150,9 +150,15 @@ impl Server {
 
         // curr_db.init_db(file_path);
         let output_author_details = perform_for_whole_file(file_path.to_string(), &config_obj);
-        if output_author_details.is_empty() {
-            println!("File path: {:?}", file_path);
+
+        for each_output in output_author_details.iter() {
+            if each_output.origin_file_path != file_path {
+                panic!("Something went wrong");
+            }
         }
+        // if output_author_details.is_empty() {
+        //     println!("File path: {:?}", file_path);
+        // }
         // TODO: (@krshrimali) Add this back.
         // Now extract output string from the output_author_details.
         // extract_string_from_output(output_author_details, /*is_author_mode=*/ false)
@@ -192,7 +198,7 @@ impl Server {
                     // Handle file indexing
                     if Server::_is_valid_file(&entry_path) {
                         log!(Level::Info, "File is valid: {}", entry_path.display());
-                        // println!("File is valid: {:?}", entry_path.display());
+                        println!("File is valid: {:?}", entry_path.display());
                         files_set
                             .spawn(async move { Server::_index_file(entry_path.clone()).await });
                     }
@@ -220,6 +226,11 @@ impl Server {
                     .unwrap()
                     .origin_file_path
                     .clone();
+                // for each_author_detail in output_authordetails.iter() {
+                //     if each_author_detail.origin_file_path != origin_file_path {
+                //         println!("wrong");
+                //     }
+                // }
                 // println!("origin file path be better: {}", origin_file_path);
                 db.lock().unwrap().append_to_db(
                     // &workspace_path.to_str().unwrap().to_string(),

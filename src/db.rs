@@ -256,7 +256,7 @@ impl DB {
                     HashMap::new();
                 let mut another_map: HashMap<u32, Vec<AuthorDetails>> = HashMap::new();
                 another_map.insert(line_idx, existing_data);
-                // println!("Configurwed file path: {}", configured_file_path);
+                println!("Configurwed file path: {}", configured_file_path);
                 to_insert_map.insert(configured_file_path.clone(), another_map);
                 self.current_data
                     .insert(self.workspace_path.clone(), to_insert_map);
@@ -325,8 +325,8 @@ impl DB {
         search_field_first: &String,
         start_line_number: &usize,
         end_line_number: &usize,
-    ) -> (Option<Vec<&AuthorDetails>>, Vec<u32>) {
-        let mut already_computed_data: Vec<&AuthorDetails> = vec![];
+    ) -> (Option<Vec<AuthorDetails>>, Vec<u32>) {
+        let mut already_computed_data: Vec<AuthorDetails> = vec![];
         let mut uncovered_indices: Vec<u32> = vec![];
         // println!("Searching for the given field: {}", search_field_first);
         if self.current_data.contains_key(&self.workspace_path.clone()) {
@@ -335,11 +335,19 @@ impl DB {
                 .get_mut(&self.workspace_path.clone())
                 .unwrap()
                 .get_mut(search_field_first);
+
+            // Do some sanitization and ensure every item in output contains the key as search_field_first
             if let Some(all_line_data) = output {
+                println!("len(output): {:?}", all_line_data.len());
                 for each_line_idx in *start_line_number..*end_line_number + 1 {
                     let each_line_idx = each_line_idx as u32;
-                    if let Some(eligible_data) = all_line_data.get(&each_line_idx) {
-                        already_computed_data.extend(eligible_data);
+                    if let Some(eligible_data) = all_line_data.get_mut(&each_line_idx) {
+                        println!(
+                            "fpath: {:?}",
+                            eligible_data.get(100).unwrap().origin_file_path
+                        );
+                        already_computed_data.append(eligible_data);
+                        println!("length here: {:?}", already_computed_data.len());
                     } else {
                         uncovered_indices.push(each_line_idx);
                     }
@@ -348,6 +356,10 @@ impl DB {
             if already_computed_data.is_empty() {
                 (None, uncovered_indices)
             } else {
+                println!(
+                    "output length being returned: {:?}",
+                    already_computed_data.len()
+                );
                 (Some(already_computed_data), uncovered_indices)
             }
         } else {
@@ -362,7 +374,10 @@ impl DB {
         println!("Querying the DB for the given file path: {}", file_path);
         // println!("Current data: {:?}", self.current_data);
         let output = self.exists_and_return(&file_path, &start_number, &end_number);
-        println!("Output: {:?}", output);
+        // for each_output in output.0.unwrap_or(vec![]) {
+        //     println!("{:?}", each_output.origin_file_path);
+        // }
+        println!("Final leng: {:?}", output.0.unwrap().len());
         return;
     }
 }
