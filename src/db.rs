@@ -32,12 +32,14 @@ impl DB {
         // let db_file_path = format!("{}/{}", self.folder_path, self.index);
         if Path::new(self.db_file_path.as_str()).exists() {
             let data_buffers =
-                std::fs::read_to_string(&self.db_file_path).expect("Unable to read the file");
-            let data = serde_json::from_str(data_buffers.as_str());
-            if data.is_err() {
-                return HashMap::new();
+                &mut std::fs::read_to_string(&self.db_file_path).expect("Unable to read the file");
+            match serde_json::from_str(&data_buffers) {
+                Ok(data) => data,
+                Err(err) => {
+                    eprintln!("Failed to parse JSON: {}", err);
+                    HashMap::new()
+                }
             }
-            data.unwrap()
         } else {
             eprintln!(
                 "The DB file doesn't exist for the given path: {}",
@@ -50,42 +52,39 @@ impl DB {
 
     pub fn read_all(&mut self, valid_indices: Vec<u32>) -> DBType {
         let mut init_data: DBType = HashMap::new();
-        for valid_index in valid_indices.iter() {
-            self.index = *valid_index;
+        // let folder_path = self.folder_path.clone();
+        let workspace_path = self.workspace_path.clone();
+        let curr_file_path = self.curr_file_path.clone();
+
+        for &valid_index in valid_indices.iter() {
+            self.index = valid_index;
 
             self.db_file_path = format!("{}/{}.json", self.folder_path, self.index);
             let db_obj = Path::new(&self.db_file_path);
             if !db_obj.exists() {
                 File::create(db_obj).expect("Couldn't find the DB file");
-                return HashMap::new();
+                continue;
+                // return HashMap::new();
             }
-            let current_data = self.read();
-            // println!("current_data: {:?}", current_data);
+            let mut current_data = self.read();
+            let valid_values = current_data
+                .get(&workspace_path.clone())
+                .and_then(|ws| ws.get(&curr_file_path.clone()))
+                .cloned();
 
-            let default = HashMap::new();
+            let workspace_data = current_data
+                .entry(workspace_path.clone())
+                .or_insert_with(HashMap::new);
 
-            // Query back agian OR just return an empty output.
-            let values = current_data
-                .get(&self.workspace_path)
-                .unwrap_or(&default)
-                .get(&self.curr_file_path);
-            if let Some(valid_values) = values {
-                let mut default: HashMap<u32, Vec<AuthorDetails>> = HashMap::new(); // Empty
-                                                                                    // hashmap for some default
-                let insert_data_here = init_data
-                    .get_mut(&self.workspace_path)
-                    .unwrap() // TODO: This might fail one
-                    // day.
-                    .get_mut(&self.curr_file_path)
-                    .unwrap_or(&mut default);
-                insert_data_here.extend(valid_values.clone());
-                let copy_data = insert_data_here.clone();
-                // init_data.insert(self.curr_file_path.clone(), copy_data);
-                let mut temp_map: HashMap<String, HashMap<u32, Vec<AuthorDetails>>> =
-                    HashMap::new();
-                temp_map.insert(self.curr_file_path.clone(), copy_data);
-                init_data.insert(self.workspace_path.clone(), temp_map);
+            let file_data = workspace_data
+                .entry(curr_file_path.clone())
+                .or_insert_with(HashMap::new);
+            //
+            // Extend the file data with valid_values if present.
+            if let Some(valid_values) = valid_values {
+                file_data.extend(valid_values.clone());
             }
+            init_data.insert(workspace_path.clone(), workspace_data.clone());
         }
         init_data
     }
@@ -143,7 +142,7 @@ impl DB {
         // In each folder -> we'll have a mapping file which contains which filename corresponds to which index (to be used in the DB file)
         self.mapping_file_name = "mapping.json".to_string();
         self.mapping_file_path = format!("{}/{}", self.folder_path, self.mapping_file_name);
-        println!("Doing this\n");
+        // println!("Doing this\n");
         let mapping_path_obj = Path::new(&self.mapping_file_path);
         if !mapping_path_obj.exists() {
             // mapping file doesn't exist yet... we'll create one with the index as 0 for the given curr_file_path
@@ -257,7 +256,7 @@ impl DB {
                     HashMap::new();
                 let mut another_map: HashMap<u32, Vec<AuthorDetails>> = HashMap::new();
                 another_map.insert(line_idx, existing_data);
-                println!("Configurwed file path: {}", configured_file_path);
+                // println!("Configurwed file path: {}", configured_file_path);
                 to_insert_map.insert(configured_file_path.clone(), another_map);
                 self.current_data
                     .insert(self.workspace_path.clone(), to_insert_map);
@@ -296,7 +295,7 @@ impl DB {
             let mapping_string = serde_json::to_string_pretty(&self.mapping_data)
                 .expect("Unable to deserialize data");
             // Update the mapping file accordingly
-            println!("mapping file path: {}", self.mapping_file_path);
+            // println!("mapping file path: {}", self.mapping_file_path);
             let mut file = File::create(&self.mapping_file_path)
                 .expect("Couldn't create the mapping file for some reason.");
             writeln!(file, "{}", mapping_string).expect("Couldn't write to the mapping file, wow!");
@@ -329,7 +328,7 @@ impl DB {
     ) -> (Option<Vec<&AuthorDetails>>, Vec<u32>) {
         let mut already_computed_data: Vec<&AuthorDetails> = vec![];
         let mut uncovered_indices: Vec<u32> = vec![];
-        println!("Searching for the given field: {}", search_field_first);
+        // println!("Searching for the given field: {}", search_field_first);
         if self.current_data.contains_key(&self.workspace_path.clone()) {
             let output = self
                 .current_data
@@ -363,7 +362,7 @@ impl DB {
         println!("Querying the DB for the given file path: {}", file_path);
         // println!("Current data: {:?}", self.current_data);
         let output = self.exists_and_return(&file_path, &start_number, &end_number);
-        // println!("Output: {:?}", output);
+        println!("Output: {:?}", output);
         return;
     }
 }
