@@ -135,6 +135,7 @@ impl Server {
             log!(Level::Debug, "File exists: {}", file.display());
             return true;
         }
+        println!("File does not exist: {}", file.display());
         false
     }
 
@@ -142,12 +143,16 @@ impl Server {
         // Don't make it write to the DB, write it atomically later.
         // For now, just store the output somewhere in the DB.
         let file_path = file.to_str().unwrap();
+        // println!("Calling file\n");
 
         // Read the config file and pass defaults
         let config_obj: config_impl::Config = config_impl::read_config(config::CONFIG_FILE_NAME);
 
         // curr_db.init_db(file_path);
         let output_author_details = perform_for_whole_file(file_path.to_string(), &config_obj);
+        if output_author_details.is_empty() {
+            println!("File path: {:?}", file_path);
+        }
         // TODO: (@krshrimali) Add this back.
         // Now extract output string from the output_author_details.
         // extract_string_from_output(output_author_details, /*is_author_mode=*/ false)
@@ -156,6 +161,7 @@ impl Server {
 
     #[async_recursion]
     async fn _iterate_through_workspace(&mut self, workspace_path: PathBuf) -> Vec<AuthorDetails> {
+        // println!("workspace path: {:?}", workspace_path);
         let mut files_set: task::JoinSet<Vec<AuthorDetails>> = task::JoinSet::new();
         // let mut files_set: task::JoinSet<Result<Vec<AuthorDetails>, Box<dyn std::error::Error>>> = task::JoinSet::new();
         let path = Path::new(&workspace_path);
@@ -186,6 +192,7 @@ impl Server {
                     // Handle file indexing
                     if Server::_is_valid_file(&entry_path) {
                         log!(Level::Info, "File is valid: {}", entry_path.display());
+                        // println!("File is valid: {:?}", entry_path.display());
                         files_set
                             .spawn(async move { Server::_index_file(entry_path.clone()).await });
                     }
@@ -195,12 +202,26 @@ impl Server {
             // Collect and process results from spawned tasks
             while let Some(res) = files_set.join_next().await {
                 let output_authordetails = res.unwrap();
+                // println!("output: {:?}", output_authordetails.len());
+                if output_authordetails.is_empty() {
+                    continue;
+                }
+                println!(
+                    "Returned output for: {:?}",
+                    output_authordetails.get(0).unwrap().origin_file_path
+                );
 
                 // Update the DB with the collected results
                 let db: Arc<Mutex<DB>> = curr_db.clone().unwrap();
-                let origin_file_path = self.state_db_handler.metadata.workspace_path.clone();
+                // let origin_file_path = self.state_db_handler.metadata.workspace_path.clone();
                 let start_line_number = 0;
-                db.lock().unwrap().append(
+                let origin_file_path = output_authordetails
+                    .get(0)
+                    .unwrap()
+                    .origin_file_path
+                    .clone();
+                // println!("origin file path be better: {}", origin_file_path);
+                db.lock().unwrap().append_to_db(
                     // &workspace_path.to_str().unwrap().to_string(),
                     // &origin_file_path,
                     &origin_file_path,
@@ -219,6 +240,7 @@ impl Server {
                     path.display()
                 );
                 let output = Server::_index_file(path.to_path_buf()).await;
+                // println!("output: {:?}", output.len());
                 return output;
             } else {
                 log!(Level::Warn, "File is not valid: {}", path.display());

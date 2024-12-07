@@ -172,6 +172,8 @@ pub fn perform_for_whole_file(
         origin_file_path.clone(),
         config_obj,
     );
+    // println!("origin file path: {:?}", origin_file_path);
+    // println!("length of output: {:?}", output.len());
     output
     // db_obj.append(
     //     &origin_file_path,

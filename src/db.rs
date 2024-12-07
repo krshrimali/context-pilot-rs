@@ -60,9 +60,14 @@ impl DB {
                 return HashMap::new();
             }
             let current_data = self.read();
+            // println!("current_data: {:?}", current_data);
+
+            let default = HashMap::new();
+
+            // Query back agian OR just return an empty output.
             let values = current_data
                 .get(&self.workspace_path)
-                .unwrap()
+                .unwrap_or(&default)
                 .get(&self.curr_file_path);
             if let Some(valid_values) = values {
                 let mut default: HashMap<u32, Vec<AuthorDetails>> = HashMap::new(); // Empty
@@ -117,7 +122,13 @@ impl DB {
             .unwrap_or_else(|_| panic!("Unable to create folder for: {}", self.folder_path));
 
         // Search for the index
-        let db_file_index = self.find_index(curr_file_path.unwrap_or(""));
+        let mut db_file_index: Option<Vec<u32>> = None;
+        if curr_file_path.is_none() {
+            db_file_index = self.find_index(workspace_path);
+        } else {
+            db_file_index = self.find_index(curr_file_path.unwrap());
+        }
+        // let db_file_index = self.find_index(curr_file_path.unwrap_or(""));
         // Filename will be: <db_file_index>.json
         let valid_indices = db_file_index.unwrap_or(vec![self.index]);
         self.current_data = self.read_all(valid_indices.clone());
@@ -125,13 +136,14 @@ impl DB {
 
     fn find_index(&mut self, curr_file_path: &str) -> Option<Vec<u32>> {
         // In case the input path is empty.
-        if curr_file_path.is_empty() {
-            return None;
-        }
+        // if curr_file_path.is_empty() {
+        //     return None;
+        // }
 
         // In each folder -> we'll have a mapping file which contains which filename corresponds to which index (to be used in the DB file)
         self.mapping_file_name = "mapping.json".to_string();
         self.mapping_file_path = format!("{}/{}", self.folder_path, self.mapping_file_name);
+        println!("Doing this\n");
         let mapping_path_obj = Path::new(&self.mapping_file_path);
         if !mapping_path_obj.exists() {
             // mapping file doesn't exist yet... we'll create one with the index as 0 for the given curr_file_path
@@ -195,7 +207,7 @@ impl DB {
         last_used_index[0]
     }
 
-    pub fn append(
+    pub fn append_to_db(
         &mut self,
         configured_file_path: &String,
         start_line_idx: usize,
@@ -208,6 +220,7 @@ impl DB {
         for line_idx in start_line_idx..end_line_idx + 1 {
             let line_idx = line_idx as u32;
             let mut existing_data = vec![];
+            // println!("self.current-data: {:?}", self.current_data);
             if self.current_data.contains_key(&self.workspace_path) {
                 let workspace_data = self.current_data.get_mut(&self.workspace_path).unwrap();
                 if workspace_data.contains_key(configured_file_path) {
@@ -225,8 +238,18 @@ impl DB {
                                 .get_mut(&line_idx)
                                 .unwrap()
                                 .append(&mut all_data.clone());
-                        }
+                        } // config file; db_+size: 306
+                          // config_file_2: size; 108
                     }
+                } else {
+                    let mut another_map: HashMap<u32, Vec<AuthorDetails>> = HashMap::new();
+                    let mut to_insert_map: HashMap<String, HashMap<u32, Vec<AuthorDetails>>> =
+                        HashMap::new();
+                    another_map.insert(line_idx, all_data.clone());
+                    // workspace_data.insert(configured_file_path.clone(), another_map);
+                    to_insert_map.insert(configured_file_path.clone(), another_map);
+                    self.current_data
+                        .insert(self.workspace_path.clone(), to_insert_map);
                 }
             } else {
                 existing_data.extend(all_data.clone());
@@ -234,6 +257,7 @@ impl DB {
                     HashMap::new();
                 let mut another_map: HashMap<u32, Vec<AuthorDetails>> = HashMap::new();
                 another_map.insert(line_idx, existing_data);
+                println!("Configurwed file path: {}", configured_file_path);
                 to_insert_map.insert(configured_file_path.clone(), another_map);
                 self.current_data
                     .insert(self.workspace_path.clone(), to_insert_map);
@@ -246,6 +270,7 @@ impl DB {
     }
 
     pub fn store(&mut self) {
+        // TODO: Fix database sharding post DB format change.
         if self.current_data.is_empty() {
             return;
         }
@@ -271,6 +296,7 @@ impl DB {
             let mapping_string = serde_json::to_string_pretty(&self.mapping_data)
                 .expect("Unable to deserialize data");
             // Update the mapping file accordingly
+            println!("mapping file path: {}", self.mapping_file_path);
             let mut file = File::create(&self.mapping_file_path)
                 .expect("Couldn't create the mapping file for some reason.");
             writeln!(file, "{}", mapping_string).expect("Couldn't write to the mapping file, wow!");
@@ -337,7 +363,7 @@ impl DB {
         println!("Querying the DB for the given file path: {}", file_path);
         // println!("Current data: {:?}", self.current_data);
         let output = self.exists_and_return(&file_path, &start_number, &end_number);
-        println!("Output: {:?}", output);
+        // println!("Output: {:?}", output);
         return;
     }
 }
