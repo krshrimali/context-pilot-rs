@@ -8,6 +8,7 @@ use std::{collections::HashMap, fs::File, path::Path};
 use crate::config::MAX_ITEMS_IN_EACH_DB_FILE;
 use crate::{config, contextgpt_structs::AuthorDetails};
 
+// workspace_path: file_path: 1: AuthorDetails
 type DBType = HashMap<String, HashMap<String, HashMap<u32, Vec<AuthorDetails>>>>;
 type MappingDBType = HashMap<String, Vec<u32>>;
 
@@ -59,16 +60,26 @@ impl DB {
                 return HashMap::new();
             }
             let current_data = self.read();
-            let values = current_data.get(&self.curr_file_path);
+            let values = current_data
+                .get(&self.workspace_path)
+                .unwrap()
+                .get(&self.curr_file_path);
             if let Some(valid_values) = values {
-                let mut default: HashMap<u32, Vec<AuthorDetails>> = HashMap::new();
+                let mut default: HashMap<u32, Vec<AuthorDetails>> = HashMap::new(); // Empty
+                                                                                    // hashmap for some default
                 let insert_data_here = init_data
                     .get_mut(&self.workspace_path)
+                    .unwrap() // TODO: This might fail one
+                    // day.
                     .get_mut(&self.curr_file_path)
                     .unwrap_or(&mut default);
                 insert_data_here.extend(valid_values.clone());
                 let copy_data = insert_data_here.clone();
-                init_data.insert(self.curr_file_path.clone(), copy_data);
+                // init_data.insert(self.curr_file_path.clone(), copy_data);
+                let mut temp_map: HashMap<String, HashMap<u32, Vec<AuthorDetails>>> =
+                    HashMap::new();
+                temp_map.insert(self.curr_file_path.clone(), copy_data);
+                init_data.insert(self.workspace_path.clone(), temp_map);
             }
         }
         init_data
@@ -106,13 +117,18 @@ impl DB {
             .unwrap_or_else(|_| panic!("Unable to create folder for: {}", self.folder_path));
 
         // Search for the index
-        let db_file_index = self.find_index(curr_file_path);
+        let db_file_index = self.find_index(curr_file_path.unwrap_or(""));
         // Filename will be: <db_file_index>.json
         let valid_indices = db_file_index.unwrap_or(vec![self.index]);
         self.current_data = self.read_all(valid_indices.clone());
     }
 
     fn find_index(&mut self, curr_file_path: &str) -> Option<Vec<u32>> {
+        // In case the input path is empty.
+        if curr_file_path.is_empty() {
+            return None;
+        }
+
         // In each folder -> we'll have a mapping file which contains which filename corresponds to which index (to be used in the DB file)
         self.mapping_file_name = "mapping.json".to_string();
         self.mapping_file_path = format!("{}/{}", self.folder_path, self.mapping_file_name);
@@ -188,16 +204,17 @@ impl DB {
         if all_data.is_empty() {
             return;
         }
-        let end_line_idx = all_data[0].end_line_number as usize;
+        let end_line_idx = all_data[0].end_line_number;
         for line_idx in start_line_idx..end_line_idx + 1 {
             let line_idx = line_idx as u32;
             let mut existing_data = vec![];
-            if self.current_data.contains_key(self.workspace_path) {
-                let workspace_data = self.current_data.get(self.workspace_path).unwrap();
+            if self.current_data.contains_key(&self.workspace_path) {
+                let workspace_data = self.current_data.get_mut(&self.workspace_path).unwrap();
                 if workspace_data.contains_key(configured_file_path) {
-                    let file_data = workspace_data.get(configured_file_path).unwrap();
+                    let file_data = workspace_data.get_mut(configured_file_path).unwrap();
                     if file_data.contains_key(&line_idx) {
                         existing_data = file_data.get(&line_idx).unwrap().clone();
+                        // TODO: Add this to self.current_data once testing is successful.
                     }
                     match file_data.contains_key(&line_idx) {
                         false => {
@@ -213,10 +230,13 @@ impl DB {
                 }
             } else {
                 existing_data.extend(all_data.clone());
-                let mut map = HashMap::new();
-                map.insert(line_idx, existing_data);
+                let mut to_insert_map: HashMap<String, HashMap<u32, Vec<AuthorDetails>>> =
+                    HashMap::new();
+                let mut another_map: HashMap<u32, Vec<AuthorDetails>> = HashMap::new();
+                another_map.insert(line_idx, existing_data);
+                to_insert_map.insert(configured_file_path.clone(), another_map);
                 self.current_data
-                    .insert(configured_file_path.to_string(), map);
+                    .insert(self.workspace_path.clone(), to_insert_map);
             }
         }
     }
@@ -284,8 +304,12 @@ impl DB {
         let mut already_computed_data: Vec<&AuthorDetails> = vec![];
         let mut uncovered_indices: Vec<u32> = vec![];
         println!("Searching for the given field: {}", search_field_first);
-        if self.current_data.contains_key(search_field_first) {
-            let output = self.current_data.get_mut(search_field_first);
+        if self.current_data.contains_key(&self.workspace_path.clone()) {
+            let output = self
+                .current_data
+                .get_mut(&self.workspace_path.clone())
+                .unwrap()
+                .get_mut(search_field_first);
             if let Some(all_line_data) = output {
                 for each_line_idx in *start_line_number..*end_line_number + 1 {
                     let each_line_idx = each_line_idx as u32;

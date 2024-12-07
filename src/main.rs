@@ -201,7 +201,8 @@ impl Server {
                 let origin_file_path = self.state_db_handler.metadata.workspace_path.clone();
                 let start_line_number = 0;
                 db.lock().unwrap().append(
-                    &workspace_path.to_str().unwrap().to_string(),
+                    // &workspace_path.to_str().unwrap().to_string(),
+                    // &origin_file_path,
                     &origin_file_path,
                     start_line_number,
                     output_authordetails.clone(),
@@ -247,7 +248,10 @@ impl Server {
             ..Default::default()
         };
         let curr_db: Arc<Mutex<DB>> = Arc::new(db.into());
-        curr_db.lock().unwrap().init_db(workspace_path.as_str());
+        curr_db
+            .lock()
+            .unwrap()
+            .init_db(workspace_path.as_str(), None);
         let mut server = Server::new(State::Dead, DBHandler::new(metadata.clone()));
         server.init_server(curr_db);
         let _ = server
@@ -274,7 +278,10 @@ impl Server {
                 ..Default::default()
             };
             let curr_db: Arc<Mutex<DB>> = Arc::new(db.into());
-            curr_db.lock().unwrap().init_db(workspace_path);
+            curr_db
+                .lock()
+                .unwrap()
+                .init_db(workspace_path, file_path.clone().as_deref());
             // let mut server = Server::new(State::Dead, DBHandler::new(metadata.clone()));
             self.init_server(curr_db);
             // Then you query
