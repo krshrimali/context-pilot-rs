@@ -174,7 +174,7 @@ pub fn extract_details(
         }
     }
 
-    println!("Doing this for file path: {:?}", file_path);
+    // println!("Doing this for file path: {:?}", file_path);
     // for each_result in result_author_details.iter() {
     //     if each_result.origin_file_path == file_path {
     //         panic!("Wrong");

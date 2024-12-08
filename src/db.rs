@@ -215,6 +215,9 @@ impl DB {
         if all_data.is_empty() {
             return;
         }
+
+        println!("Appending for: {:?}", configured_file_path.clone());
+
         let end_line_idx = all_data[0].end_line_number;
         for line_idx in start_line_idx..end_line_idx + 1 {
             let line_idx = line_idx as u32;
@@ -226,6 +229,7 @@ impl DB {
                     let file_data = workspace_data.get_mut(configured_file_path).unwrap();
                     if file_data.contains_key(&line_idx) {
                         existing_data = file_data.get(&line_idx).unwrap().clone();
+                        println!("AHHH OKAYYY");
                         // TODO: Add this to self.current_data once testing is successful.
                     }
                     match file_data.contains_key(&line_idx) {
@@ -256,7 +260,7 @@ impl DB {
                     HashMap::new();
                 let mut another_map: HashMap<u32, Vec<AuthorDetails>> = HashMap::new();
                 another_map.insert(line_idx, existing_data);
-                println!("Configurwed file path: {}", configured_file_path);
+                // println!("Configurwed file path: {}", configured_file_path);
                 to_insert_map.insert(configured_file_path.clone(), another_map);
                 self.current_data
                     .insert(self.workspace_path.clone(), to_insert_map);
@@ -295,21 +299,30 @@ impl DB {
             let mapping_string = serde_json::to_string_pretty(&self.mapping_data)
                 .expect("Unable to deserialize data");
             // Update the mapping file accordingly
-            // println!("mapping file path: {}", self.mapping_file_path);
             let mut file = File::create(&self.mapping_file_path)
                 .expect("Couldn't create the mapping file for some reason.");
             writeln!(file, "{}", mapping_string).expect("Couldn't write to the mapping file, wow!");
             we_crossed_limit = true;
         }
 
+        // Print unique oriign file paths in self.current_data:
+        for (key, value) in self.current_data.iter() {
+            println!("Key: {}", key);
+            for (key, value) in value.iter() {
+                println!("Key: {}", key);
+            }
+        }
+        println!("Db file path: {:?}", self.db_file_path.clone());
         let output_string =
             serde_json::to_string_pretty(&self.current_data).expect("Unable to deserialize data");
         if we_crossed_limit {
             self.current_data.clear();
         }
         if Path::new(&self.db_file_path).exists() {
+            println!("Exists alr");
             let mut file_obj = File::create(self.db_file_path.as_str())
                 .unwrap_or_else(|_| panic!("Couldn't open the given file: {}", self.db_file_path));
+            // This is wrong as this just over-writes. We need to "append".
             write!(file_obj, "{}", output_string)
                 .expect("Couldn't write the data to the DB File Path");
         } else {
@@ -338,16 +351,10 @@ impl DB {
 
             // Do some sanitization and ensure every item in output contains the key as search_field_first
             if let Some(all_line_data) = output {
-                println!("len(output): {:?}", all_line_data.len());
                 for each_line_idx in *start_line_number..*end_line_number + 1 {
                     let each_line_idx = each_line_idx as u32;
                     if let Some(eligible_data) = all_line_data.get_mut(&each_line_idx) {
-                        println!(
-                            "fpath: {:?}",
-                            eligible_data.get(100).unwrap().origin_file_path
-                        );
                         already_computed_data.append(eligible_data);
-                        println!("length here: {:?}", already_computed_data.len());
                     } else {
                         uncovered_indices.push(each_line_idx);
                     }
@@ -356,10 +363,6 @@ impl DB {
             if already_computed_data.is_empty() {
                 (None, uncovered_indices)
             } else {
-                println!(
-                    "output length being returned: {:?}",
-                    already_computed_data.len()
-                );
                 (Some(already_computed_data), uncovered_indices)
             }
         } else {
@@ -372,11 +375,7 @@ impl DB {
 
     pub fn query(&mut self, file_path: String, start_number: usize, end_number: usize) {
         println!("Querying the DB for the given file path: {}", file_path);
-        // println!("Current data: {:?}", self.current_data);
         let output = self.exists_and_return(&file_path, &start_number, &end_number);
-        // for each_output in output.0.unwrap_or(vec![]) {
-        //     println!("{:?}", each_output.origin_file_path);
-        // }
         println!("Final leng: {:?}", output.0.unwrap().len());
         return;
     }

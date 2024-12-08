@@ -135,7 +135,7 @@ impl Server {
             log!(Level::Debug, "File exists: {}", file.display());
             return true;
         }
-        println!("File does not exist: {}", file.display());
+        // println!("File does not exist: {}", file.display());
         false
     }
 
@@ -143,6 +143,7 @@ impl Server {
         // Don't make it write to the DB, write it atomically later.
         // For now, just store the output somewhere in the DB.
         let file_path = file_path_inp.to_str().unwrap();
+        println!("Doing for file path: {:?}", file_path);
         // println!("Calling file\n");
 
         // Read the config file and pass defaults
@@ -150,15 +151,20 @@ impl Server {
 
         // curr_db.init_db(file_path);
         let output_author_details = perform_for_whole_file(file_path.to_string(), &config_obj);
+        println!(
+            "output path: {:?}",
+            output_author_details
+                .first()
+                .unwrap()
+                .origin_file_path
+                .clone()
+        );
 
         for each_output in output_author_details.iter() {
             if each_output.origin_file_path != file_path {
-                panic!("Something went wrong");
+                panic!("Something went wrong while indexing file and this is not expected.");
             }
         }
-        // if output_author_details.is_empty() {
-        //     println!("File path: {:?}", file_path);
-        // }
         // TODO: (@krshrimali) Add this back.
         // Now extract output string from the output_author_details.
         // extract_string_from_output(output_author_details, /*is_author_mode=*/ false)
@@ -172,7 +178,6 @@ impl Server {
         // let mut files_set: task::JoinSet<Result<Vec<AuthorDetails>, Box<dyn std::error::Error>>> = task::JoinSet::new();
         let path = Path::new(&workspace_path);
         let mut final_authordetails: Vec<AuthorDetails> = Vec::new();
-        let curr_db = self.curr_db.clone();
 
         if path.is_dir() {
             // Iterate through the directory and index files
@@ -180,25 +185,32 @@ impl Server {
                 .read_dir()
                 .unwrap_or_else(|_| panic!("failed reading directory {}", path.display()))
             {
+                let curr_db = self.curr_db.clone();
                 let entry_path = entry.unwrap().path();
                 if entry_path.is_dir() {
                     // Handle sub-directory: Recurse with the same server instance
-                    let state_db_handler_clone = self.state_db_handler.clone();
-                    let curr_db_clone = curr_db.clone();
-
-                    files_set.spawn(async move {
-                        let mut server = Server {
-                            state: State::Running,
-                            curr_db: curr_db_clone,
-                            state_db_handler: state_db_handler_clone,
-                        };
-                        server._iterate_through_workspace(entry_path.clone()).await
+                    files_set.spawn({
+                        let entry_path_clone = entry_path.clone();
+                        let state_db_handler_clone = self.state_db_handler.clone();
+                        let curr_db_clone = curr_db.clone();
+                        async move {
+                            let mut server = Server {
+                                state: State::Running,
+                                curr_db: curr_db_clone,
+                                state_db_handler: state_db_handler_clone,
+                            };
+                            println!("Recursing into: {:?}", entry_path_clone.display());
+                            let result = server
+                                ._iterate_through_workspace(entry_path_clone.clone())
+                                .await;
+                            println!("Recursing done: {:?}", entry_path_clone.display());
+                            result
+                        }
                     });
                 } else {
                     // Handle file indexing
                     if Server::_is_valid_file(&entry_path) {
                         log!(Level::Info, "File is valid: {}", entry_path.display());
-                        println!("File is valid: {:?}", entry_path.display());
                         files_set
                             .spawn(async move { Server::_index_file(entry_path.clone()).await });
                     }
@@ -208,33 +220,39 @@ impl Server {
             // Collect and process results from spawned tasks
             while let Some(res) = files_set.join_next().await {
                 let output_authordetails = res.unwrap();
-                // println!("output: {:?}", output_authordetails.len());
+                println!("Length received: {:?}", output_authordetails.len());
+                // Let's ensure that the result is "correct". Based on the testing, the best way to
+                // test is to check if the origin_file_path is the same for all the results.
+                let mut count: usize = 0;
+                for each_output in output_authordetails.iter() {
+                    if each_output.origin_file_path
+                        == output_authordetails.first().unwrap().origin_file_path
+                    {
+                        count += 1;
+                    }
+                }
+
+                if count != output_authordetails.len() {
+                    println!(
+                        "Some results are incorrect: {:?}/{:?}",
+                        count,
+                        output_authordetails.len()
+                    );
+                }
+
                 if output_authordetails.is_empty() {
                     continue;
                 }
-                println!(
-                    "Returned output for: {:?}",
-                    output_authordetails.get(0).unwrap().origin_file_path
-                );
 
                 // Update the DB with the collected results
-                let db: Arc<Mutex<DB>> = curr_db.clone().unwrap();
-                // let origin_file_path = self.state_db_handler.metadata.workspace_path.clone();
+                let db: Arc<Mutex<DB>> = self.curr_db.clone().unwrap();
                 let start_line_number = 0;
                 let origin_file_path = output_authordetails
-                    .get(0)
+                    .first()
                     .unwrap()
                     .origin_file_path
                     .clone();
-                // for each_author_detail in output_authordetails.iter() {
-                //     if each_author_detail.origin_file_path != origin_file_path {
-                //         println!("wrong");
-                //     }
-                // }
-                // println!("origin file path be better: {}", origin_file_path);
                 db.lock().unwrap().append_to_db(
-                    // &workspace_path.to_str().unwrap().to_string(),
-                    // &origin_file_path,
                     &origin_file_path,
                     start_line_number,
                     output_authordetails.clone(),
@@ -251,7 +269,6 @@ impl Server {
                     path.display()
                 );
                 let output = Server::_index_file(path.to_path_buf()).await;
-                // println!("output: {:?}", output.len());
                 return output;
             } else {
                 log!(Level::Warn, "File is not valid: {}", path.display());
