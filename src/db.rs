@@ -416,7 +416,6 @@ impl DB {
                     relevance_counter.iter().collect();
                 contextual_paths.sort_by(|a, b| b.1.cmp(a.1)); // Sort by descending relevance
 
-                // println!("📁 Contextual file paths with relevance:");
                 for (path, count) in contextual_paths {
                     println!("{} - {} occurrences", path, count);
                 }

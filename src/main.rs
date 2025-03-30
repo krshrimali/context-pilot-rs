@@ -11,7 +11,6 @@ use async_recursion::async_recursion;
 use contextgpt_structs::{AuthorDetails, Cli, RequestTypeOptions};
 use std::{
     path::{Path, PathBuf},
-    str::FromStr,
     sync::Arc,
 };
 use structopt::StructOpt;
