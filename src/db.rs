@@ -390,8 +390,17 @@ impl DB {
     }
 
     pub fn query(&mut self, file_path: String, start_number: usize, end_number: usize) {
+        let mut end_line_number = end_number;
+        if end_number == 0 {
+            // Means, cover the whole file.
+            // end_number should be the last line number of the file.
+            end_line_number = std::fs::read_to_string(&file_path)
+                .unwrap_or_else(|_| panic!("Unable to read the file: {}", file_path))
+                .lines()
+                .count();
+        }
         let (maybe_results, _uncovered_indices) =
-            self.exists_and_return(&file_path, &start_number, &end_number);
+            self.exists_and_return(&file_path, &start_number, &end_line_number);
 
         match maybe_results {
             Some(results) => {
