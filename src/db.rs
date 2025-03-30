@@ -147,7 +147,6 @@ impl DB {
         // In each folder -> we'll have a mapping file which contains which filename corresponds to which index (to be used in the DB file)
         self.mapping_file_name = "mapping.json".to_string();
         self.mapping_file_path = format!("{}/{}", self.folder_path, self.mapping_file_name);
-        // println!("Doing this\n");
         let mapping_path_obj = Path::new(&self.mapping_file_path);
         if !mapping_path_obj.exists() {
             // mapping file doesn't exist yet... we'll create one with the index as 0 for the given curr_file_path
@@ -226,11 +225,37 @@ impl DB {
         start_line_idx: usize,
         all_data: Vec<AuthorDetails>,
     ) {
-        println!("Appending for: {:?}", configured_file_path);
         if all_data.is_empty() {
             return;
         }
 
+        // Sharding logic:
+        self.curr_items += all_data.len() as u32;
+        if self._is_limit_crossed() {
+            self.curr_items = 0;
+            self.index += 1;
+            self.db_file_path = format!("{}/{}.json", self.folder_path, self.index);
+
+            // Update mapping
+            self.mapping_data
+                .insert("last_used_index".to_string(), vec![self.index]);
+
+            self.mapping_data
+                .entry(configured_file_path.clone())
+                .or_insert_with(Vec::new)
+                .push(self.index);
+
+            // Persist updated mapping
+            if let Ok(mut file) = File::create(&self.mapping_file_path) {
+                let mapping_string = serde_json::to_string_pretty(&self.mapping_data)
+                    .expect("Unable to serialize mapping");
+                if let Err(e) = write!(file, "{}", mapping_string) {
+                    eprintln!("Failed to write mapping: {}", e);
+                }
+            }
+        }
+
+        // Normal DB append
         let end_line_idx = all_data[0].end_line_number;
 
         let workspace_entry = self
@@ -252,73 +277,12 @@ impl DB {
         }
     }
 
-    // pub fn append_to_db(
-    //     &mut self,
-    //     configured_file_path: &String,
-    //     start_line_idx: usize,
-    //     all_data: Vec<AuthorDetails>,
-    // ) {
-    //     println!("Appending for: {:?}", configured_file_path.clone());
-    //     if all_data.is_empty() {
-    //         return;
-    //     }
-    //
-    //     let end_line_idx = all_data[0].end_line_number;
-    //     for line_idx in start_line_idx..end_line_idx + 1 {
-    //         let line_idx = line_idx as u32;
-    //         let mut existing_data = vec![];
-    //         // println!("self.current-data: {:?}", self.current_data);
-    //         if self.current_data.contains_key(&self.workspace_path) {
-    //             let workspace_data = self.current_data.get_mut(&self.workspace_path).unwrap();
-    //             if workspace_data.contains_key(configured_file_path) {
-    //                 let file_data = workspace_data.get_mut(configured_file_path).unwrap();
-    //                 if file_data.contains_key(&line_idx) {
-    //                     existing_data = file_data.get(&line_idx).unwrap().clone();
-    //                     println!("AHHH OKAYYY");
-    //                     // TODO: Add this to self.current_data once testing is successful.
-    //                 }
-    //                 match file_data.contains_key(&line_idx) {
-    //                     false => {
-    //                         file_data.insert(line_idx, all_data.clone());
-    //                     }
-    //                     true => {
-    //                         file_data
-    //                             .get_mut(&line_idx)
-    //                             .unwrap()
-    //                             .append(&mut all_data.clone());
-    //                     } // config file; db_+size: 306
-    //                       // config_file_2: size; 108
-    //                 }
-    //             } else {
-    //                 let mut another_map: HashMap<u32, Vec<AuthorDetails>> = HashMap::new();
-    //                 let mut to_insert_map: HashMap<String, HashMap<u32, Vec<AuthorDetails>>> =
-    //                     HashMap::new();
-    //                 another_map.insert(line_idx, all_data.clone());
-    //                 // workspace_data.insert(configured_file_path.clone(), another_map);
-    //                 to_insert_map.insert(configured_file_path.clone(), another_map);
-    //                 self.current_data
-    //                     .insert(self.workspace_path.clone(), to_insert_map);
-    //             }
-    //         } else {
-    //             existing_data.extend(all_data.clone());
-    //             let mut to_insert_map: HashMap<String, HashMap<u32, Vec<AuthorDetails>>> =
-    //                 HashMap::new();
-    //             let mut another_map: HashMap<u32, Vec<AuthorDetails>> = HashMap::new();
-    //             another_map.insert(line_idx, existing_data);
-    //             // println!("Configurwed file path: {}", configured_file_path);
-    //             to_insert_map.insert(configured_file_path.clone(), another_map);
-    //             self.current_data
-    //                 .insert(self.workspace_path.clone(), to_insert_map);
-    //         }
-    //     }
-    // }
-
     pub fn _is_limit_crossed(&self) -> bool {
         self.curr_items >= MAX_ITEMS_IN_EACH_DB_FILE
     }
     pub fn store(&mut self) {
         if self.current_data.is_empty() {
-            println!("No data to store.");
+            eprintln!("No data to store.");
             return;
         }
 
@@ -357,12 +321,12 @@ impl DB {
         }
 
         // Debug: What is being stored?
-        for (workspace_path, files_map) in &self.current_data {
-            println!("🔑 Workspace: {}", workspace_path);
-            for file in files_map.keys() {
-                println!("  └── File: {}", file);
-            }
-        }
+        // for (workspace_path, files_map) in &self.current_data {
+        //     println!("🔑 Workspace: {}", workspace_path);
+        //     for file in files_map.keys() {
+        //         println!("  └── File: {}", file);
+        //     }
+        // }
 
         // Write DB file
         let output_string = serde_json::to_string_pretty(&self.current_data)
@@ -387,50 +351,71 @@ impl DB {
     ) -> (Option<Vec<AuthorDetails>>, Vec<u32>) {
         let mut already_computed_data: Vec<AuthorDetails> = vec![];
         let mut uncovered_indices: Vec<u32> = vec![];
-        // println!("Searching for the given field: {}", search_field_first);
-        if self.current_data.contains_key(&self.workspace_path.clone()) {
-            let check = self.current_data.get_mut(&self.workspace_path.clone());
-            println!("check: {:?}", check.unwrap().clone().keys());
-            let output = self
-                .current_data
-                .get_mut(&self.workspace_path.clone())
-                .unwrap()
-                .get_mut(search_field_first);
-            println!("output length: {:?}", output);
 
-            // Do some sanitization and ensure every item in output contains the key as search_field_first
-            if let Some(all_line_data) = output {
-                for each_line_idx in *start_line_number..*end_line_number + 1 {
+        // Normalize path to absolute
+        let abs_search_path = PathBuf::from(search_field_first)
+            .canonicalize()
+            .unwrap_or_else(|_| {
+                panic!("Failed to canonicalize search path: {}", search_field_first)
+            })
+            .to_str()
+            .unwrap()
+            .to_string();
+
+        if let Some(workspace_data) = self.current_data.get_mut(&self.workspace_path) {
+            if let Some(file_line_data) = workspace_data.get_mut(&abs_search_path) {
+                for each_line_idx in *start_line_number..=*end_line_number {
                     let each_line_idx = each_line_idx as u32;
-                    if let Some(eligible_data) = all_line_data.get_mut(&each_line_idx) {
+                    if let Some(eligible_data) = file_line_data.get_mut(&each_line_idx) {
                         already_computed_data.append(eligible_data);
                     } else {
                         uncovered_indices.push(each_line_idx);
                     }
                 }
-            }
-            if already_computed_data.is_empty() {
-                (None, uncovered_indices)
             } else {
-                (Some(already_computed_data), uncovered_indices)
+                // File not present under current workspace
+                uncovered_indices
+                    .extend((*start_line_number..=*end_line_number).map(|idx| idx as u32));
             }
         } else {
-            for idx in *start_line_number..*end_line_number + 1 {
-                uncovered_indices.push(idx as u32);
-            }
+            // Workspace not found
+            uncovered_indices.extend((*start_line_number..=*end_line_number).map(|idx| idx as u32));
+        }
+
+        if already_computed_data.is_empty() {
             (None, uncovered_indices)
+        } else {
+            (Some(already_computed_data), uncovered_indices)
         }
     }
 
     pub fn query(&mut self, file_path: String, start_number: usize, end_number: usize) {
-        println!("Querying the DB for the given file path: {}", file_path);
-        println!("End number: {}", end_number);
-        println!("Start number: {}", start_number);
-        println!("File path: {}", file_path);
-        let output = self.exists_and_return(&file_path, &start_number, &end_number);
-        println!("output: {:?}", output);
-        println!("Final leng: {:?}", output.0.unwrap().len());
-        return;
+        let (maybe_results, _uncovered_indices) =
+            self.exists_and_return(&file_path, &start_number, &end_number);
+
+        match maybe_results {
+            Some(results) => {
+                let mut relevance_counter: HashMap<String, usize> = HashMap::new();
+
+                for author_detail in results {
+                    for path in &author_detail.contextual_file_paths {
+                        *relevance_counter.entry(path.clone()).or_insert(0) += 1;
+                    }
+                }
+
+                let mut contextual_paths: Vec<(&String, &usize)> =
+                    relevance_counter.iter().collect();
+                contextual_paths.sort_by(|a, b| b.1.cmp(a.1)); // Sort by descending relevance
+
+                // println!("📁 Contextual file paths with relevance:");
+                for (path, count) in contextual_paths {
+                    println!("{} - {} occurrences", path, count);
+                }
+            }
+            None => {
+                println!("⚠️ No matching data found for: {}", file_path);
+            }
+        }
     }
 }
 

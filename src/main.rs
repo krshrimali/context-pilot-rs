@@ -117,7 +117,6 @@ impl DBMetadata {}
 
 impl Server {
     // Constructor
-
     fn new(state: State, db_handler: DBHandler) -> Server {
         Self {
             state,
@@ -136,7 +135,6 @@ impl Server {
             log!(Level::Debug, "File exists: {}", file.display());
             return true;
         }
-        // println!("File does not exist: {}", file.display());
         false
     }
 
@@ -145,7 +143,6 @@ impl Server {
         // For now, just store the output somewhere in the DB.
         let file_path = std::fs::canonicalize(file_path_inp).expect("Failed");
         let file_path_str = file_path.to_str().unwrap();
-        println!("Doing for file path: {:?}", file_path_str);
         // println!("Calling file\n");
 
         // Read the config file and pass defaults
@@ -153,15 +150,6 @@ impl Server {
 
         // curr_db.init_db(file_path);
         let output_author_details = perform_for_whole_file(file_path_str.to_string(), &config_obj);
-        println!(
-            "output path: {:?}",
-            output_author_details
-                .first()
-                .unwrap()
-                .origin_file_path
-                .clone()
-        );
-        println!("Length of output: {:?}", output_author_details.len());
 
         for each_output in output_author_details.iter() {
             if each_output.origin_file_path != file_path_str {
@@ -198,15 +186,9 @@ impl Server {
                                 curr_db: curr_db_clone,
                                 state_db_handler: state_db_handler_clone,
                             };
-                            println!("Recursing into: {:?}", entry_path_clone.display());
                             let result = server
                                 ._iterate_through_workspace(entry_path_clone.clone())
                                 .await;
-                            println!(
-                                "result ====================\n======================: {:?}",
-                                result
-                            );
-                            println!("Recursing done: {:?}", entry_path_clone.display());
                             result
                         }
                     });
@@ -216,7 +198,6 @@ impl Server {
                         // files_set
                         //     .spawn(async move { Server::_index_file(entry_path.clone()).await });
                         let output = Server::_index_file(entry_path.clone()).await;
-                        println!("Done for file");
 
                         // ✅ Save to DB manually since it's not in a JoinSet
                         if !output.is_empty() {
@@ -229,7 +210,7 @@ impl Server {
                                 start_line_number,
                                 output.clone(),
                             );
-            db_locked.store();
+                            db_locked.store();
 
                             // Offload to blocking thread
                             // let mut db_locked = db_locked.clone(); // if needed, depending on interior mutability
@@ -245,25 +226,6 @@ impl Server {
 
             while let Some(res) = files_set.join_next().await {
                 let output_authordetails = res.unwrap();
-                println!("Length received: {:?}", output_authordetails);
-
-                // Validate output consistency
-                let mut count: usize = 0;
-                for each_output in output_authordetails.iter() {
-                    if each_output.origin_file_path
-                        == output_authordetails.first().unwrap().origin_file_path
-                    {
-                        count += 1;
-                    }
-                }
-
-                if count != output_authordetails.len() {
-                    println!(
-                        "Some results are inconsistent: {:?}/{:?}",
-                        count,
-                        output_authordetails.len()
-                    );
-                }
 
                 if output_authordetails.is_empty() {
                     continue;
@@ -301,7 +263,6 @@ impl Server {
                     path.display()
                 );
                 let output = Server::_index_file(path.to_path_buf()).await;
-                println!("Done for file");
                 return output;
             } else {
                 log!(Level::Warn, "File is not valid: {}", path.display());
@@ -310,238 +271,6 @@ impl Server {
 
         final_authordetails
     }
-
-    // #[async_recursion]
-    // async fn _iterate_through_workspace(&mut self, workspace_path: PathBuf) -> Vec<AuthorDetails> {
-    //     let mut files_set: task::JoinSet<Vec<AuthorDetails>> = task::JoinSet::new();
-    //     let path = Path::new(&workspace_path);
-    //     let mut final_authordetails: Vec<AuthorDetails> = Vec::new();
-    //
-    //     if path.is_dir() {
-    //         // Iterate through the directory and index files
-    //         let entries = match path.read_dir() {
-    //             Ok(entries) => entries,
-    //             Err(e) => {
-    //                 eprintln!("Failed reading directory {}: {:?}", path.display(), e);
-    //                 return final_authordetails;
-    //             }
-    //         };
-    //
-    //         for entry_result in entries {
-    //             let entry = match entry_result {
-    //                 Ok(e) => e,
-    //                 Err(e) => {
-    //                     eprintln!("Failed reading directory entry: {:?}", e);
-    //                     continue;
-    //                 }
-    //             };
-    //
-    //             let entry_path = entry.path();
-    //             let curr_db = self.curr_db.clone();
-    //
-    //             if entry_path.is_dir() {
-    //                 // Handle sub-directory: Recurse with the same server instance
-    //                 let entry_path_clone = entry_path.clone();
-    //                 let state_db_handler_clone = self.state_db_handler.clone();
-    //                 let curr_db_clone = curr_db.clone();
-    //
-    //                 files_set.spawn(async move {
-    //                     let mut server = Server {
-    //                         state: State::Running,
-    //                         curr_db: curr_db_clone,
-    //                         state_db_handler: state_db_handler_clone,
-    //                     };
-    //                     println!("Recursing into: {:?}", entry_path_clone.display());
-    //
-    //                     let result = server
-    //                         ._iterate_through_workspace(entry_path_clone.clone())
-    //                         .await;
-    //
-    //                     println!("Recursing done: {:?}", entry_path_clone.display());
-    //                     result
-    //                 });
-    //             } else {
-    //                 if Server::_is_valid_file(&entry_path) {
-    //                     log!(Level::Info, "File is valid: {}", entry_path.display());
-    //                     files_set
-    //                         .spawn(async move { Server::_index_file(entry_path.clone()).await });
-    //                 }
-    //             }
-    //         }
-    //
-    //         // Collect and process results from spawned tasks
-    //         while let Some(res) = files_set.join_next().await {
-    //             match res {
-    //                 Ok(output_authordetails) => {
-    //                     println!("Length received: {:?}", output_authordetails.len());
-    //
-    //                     if output_authordetails.is_empty() {
-    //                         continue;
-    //                     }
-    //
-    //                     // Check consistency of origin_file_path
-    //                     let expected_path = &output_authordetails.first().unwrap().origin_file_path;
-    //                     let mismatch_count = output_authordetails
-    //                         .iter()
-    //                         .filter(|entry| &entry.origin_file_path != expected_path)
-    //                         .count();
-    //
-    //                     if mismatch_count > 0 {
-    //                         println!(
-    //                             "Inconsistent origin_file_path in results: {}/{} mismatches",
-    //                             mismatch_count,
-    //                             output_authordetails.len()
-    //                         );
-    //                     }
-    //
-    //                     // Update the DB with the collected results
-    //                     if let Some(db) = self.curr_db.clone() {
-    //                         let mut db_locked = db.lock().await;
-    //                         let start_line_number = 0;
-    //                         db_locked.append_to_db(
-    //                             expected_path,
-    //                             start_line_number,
-    //                             output_authordetails.clone(),
-    //                         );
-    //                         db_locked.store();
-    //                     } else {
-    //                         eprintln!("curr_db is None – skipping DB update");
-    //                     }
-    //
-    //                     final_authordetails.extend(output_authordetails);
-    //                 }
-    //                 Err(e) => {
-    //                     eprintln!("Task join error: {:?}", e);
-    //                 }
-    //             }
-    //         }
-    //     } else {
-    //         // Handle the case where path is a file
-    //         if Server::_is_valid_file(path) {
-    //             log!(
-    //                 Level::Warn,
-    //                 "File is valid but not in a sub-directory: {}",
-    //                 path.display()
-    //             );
-    //             let output = Server::_index_file(path.to_path_buf()).await;
-    //             println!("Done for file");
-    //             return output;
-    //         } else {
-    //             log!(Level::Warn, "File is not valid: {}", path.display());
-    //         }
-    //     }
-    //
-    //     final_authordetails
-    // }
-    //
-    // #[async_recursion]
-    // async fn _iterate_through_workspace(&mut self, workspace_path: PathBuf) -> Vec<AuthorDetails> {
-    //     let mut files_set: task::JoinSet<Vec<AuthorDetails>> = task::JoinSet::new();
-    //     // let mut files_set: task::JoinSet<Result<Vec<AuthorDetails>, Box<dyn std::error::Error>>> = task::JoinSet::new();
-    //     let path = Path::new(&workspace_path);
-    //     let mut final_authordetails: Vec<AuthorDetails> = Vec::new();
-    //
-    //     if path.is_dir() {
-    //         // Iterate through the directory and index files
-    //         for entry in path
-    //             .read_dir()
-    //             .unwrap_or_else(|_| panic!("failed reading directory {}", path.display()))
-    //         {
-    //             let curr_db = self.curr_db.clone();
-    //             let entry_path = entry.unwrap().path();
-    //             if entry_path.is_dir() {
-    //                 // Handle sub-directory: Recurse with the same server instance
-    //                 files_set.spawn({
-    //                     let entry_path_clone = entry_path.clone();
-    //                     let state_db_handler_clone = self.state_db_handler.clone();
-    //                     let curr_db_clone = curr_db.clone();
-    //                     async move {
-    //                         let mut server = Server {
-    //                             state: State::Running,
-    //                             curr_db: curr_db_clone,
-    //                             state_db_handler: state_db_handler_clone,
-    //                         };
-    //                         println!("Recursing into: {:?}", entry_path_clone.display());
-    //                         let result = server
-    //                             ._iterate_through_workspace(entry_path_clone.clone())
-    //                             .await;
-    //                         println!("Recursing done: {:?}", entry_path_clone.display());
-    //                         result
-    //                     }
-    //                 });
-    //             } else {
-    //                 // Handle file indexing
-    //                 if Server::_is_valid_file(&entry_path) {
-    //                     log!(Level::Info, "File is valid: {}", entry_path.display());
-    //                     files_set
-    //                         .spawn(async move { Server::_index_file(entry_path.clone()).await });
-    //                 }
-    //             }
-    //         }
-    //
-    //         // Collect and process results from spawned tasks
-    //         while let Some(res) = files_set.join_next().await {
-    //             let output_authordetails = res.unwrap();
-    //             println!("Length received: {:?}", output_authordetails.len());
-    //             // Let's ensure that the result is "correct". Based on the testing, the best way to
-    //             // test is to check if the origin_file_path is the same for all the results.
-    //             let mut count: usize = 0;
-    //             for each_output in output_authordetails.iter() {
-    //                 if each_output.origin_file_path
-    //                     == output_authordetails.first().unwrap().origin_file_path
-    //                 {
-    //                     count += 1;
-    //                 }
-    //             }
-    //
-    //             if count != output_authordetails.len() {
-    //                 println!(
-    //                     "Some results are incorrect: {:?}/{:?}",
-    //                     count,
-    //                     output_authordetails.len()
-    //                 );
-    //             }
-    //
-    //             if output_authordetails.is_empty() {
-    //                 continue;
-    //             }
-    //
-    //             // Update the DB with the collected results
-    //             // let db: Arc<Mutex<DB>> = self.curr_db.clone().unwrap();
-    //             let db = self.curr_db.clone().unwrap();
-    //             let mut db_locked = db.lock().await;
-    //             let start_line_number = 0;
-    //             let origin_file_path = output_authordetails
-    //                 .first()
-    //                 .unwrap()
-    //                 .origin_file_path
-    //                 .clone();
-    //             db_locked.append_to_db(
-    //                 &origin_file_path,
-    //                 start_line_number,
-    //                 output_authordetails.clone(),
-    //             );
-    //             db_locked.store();
-    //             final_authordetails.extend(output_authordetails);
-    //         }
-    //     } else {
-    //         // Handle the case where path is a file
-    //         if Server::_is_valid_file(path) {
-    //             log!(
-    //                 Level::Warn,
-    //                 "File is valid but not in a sub-directory: {}",
-    //                 path.display()
-    //             );
-    //             let output = Server::_index_file(path.to_path_buf()).await;
-    //             println!("Done for file");
-    //             return output;
-    //         } else {
-    //             log!(Level::Warn, "File is not valid: {}", path.display());
-    //         }
-    //     }
-    //
-    //     final_authordetails
-    // }
 
     pub async fn start_file(&mut self, _: &mut DBMetadata, _: Option<String>) {
         return;
@@ -585,7 +314,6 @@ impl Server {
 
         // If this is a call to query and not to index ->
         if request_type.is_some() && request_type.unwrap() == RequestTypeOptions::Query {
-            println!("here");
             let db = DB {
                 folder_path: workspace_path.to_string().clone(),
                 ..Default::default()
