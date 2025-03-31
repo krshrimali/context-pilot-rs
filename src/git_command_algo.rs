@@ -7,32 +7,6 @@ use std::{
 
 use crate::contextgpt_structs::AuthorDetails;
 
-// pub fn parse_str(input_str: &str, file_path: &str, end_line_number: usize) -> Vec<AuthorDetails> {
-//     let mut author_details_vec: Vec<AuthorDetails> = vec![];
-//     for split_line in input_str.split('\n') {
-//         if split_line.len() < 3 {
-//             continue;
-//         }
-//         let split_left_bracket: Vec<&str> = split_line.split('(').collect();
-//         let split_right_bracket: Vec<&str> = split_left_bracket
-//             .get(1)
-//             .expect("Expected a string but got none")
-//             .split(')')
-//             .collect();
-//         let left_split_vec: Vec<&str> = split_left_bracket.first().unwrap().split(' ').collect();
-//         let commit_hash = left_split_vec.first().unwrap();
-//         let author_details = AuthorDetails::serialize_from_str(
-//             split_right_bracket.first().unwrap().to_string(),
-//             commit_hash.to_string(),
-//             file_path,
-//             Vec::new(),
-//             end_line_number,
-//         );
-//         author_details_vec.push(author_details);
-//     }
-//     author_details_vec
-// }
-
 pub fn parse_str(input_str: &str, file_path: &str, end_line_number: usize) -> Vec<AuthorDetails> {
     let mut author_details_vec: Vec<AuthorDetails> = Vec::new();
 
