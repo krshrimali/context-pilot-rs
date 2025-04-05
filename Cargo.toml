@@ -11,3 +11,6 @@ linecount = "0.1.0"
 serde_json = "1.0.99"
 serde = { version = "1.0.164", features = ["derive"] }
 simple-home-dir = "0.1.2"
+tokio = { version = "1.0.1", features = ["full"] }
+env_logger = "*"
+async-recursion = "1.1.1"

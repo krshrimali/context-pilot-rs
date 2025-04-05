@@ -1,5 +1,6 @@
 use std::fs::OpenOptions;
 use std::io::Write;
+use std::path::PathBuf;
 use std::{collections::HashMap, fs::File, path::Path};
 
 // use simple_home_dir::home_dir;
@@ -7,11 +8,12 @@ use std::{collections::HashMap, fs::File, path::Path};
 use crate::config::MAX_ITEMS_IN_EACH_DB_FILE;
 use crate::{config, contextgpt_structs::AuthorDetails};
 
-type DBType = HashMap<String, HashMap<u32, Vec<AuthorDetails>>>;
+// workspace_path: file_path: 1: AuthorDetails
+type DBType = HashMap<String, HashMap<String, HashMap<u32, Vec<AuthorDetails>>>>;
 type MappingDBType = HashMap<String, Vec<u32>>;
 
 // index; folder_path; currLines;
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct DB {
     pub index: u32,                // The line of code that you are at, right now? TODO:
     pub folder_path: String, // Current folder path that this DB is processing, or the binary is running
@@ -22,17 +24,27 @@ pub struct DB {
     pub mapping_file_path: String,
     pub mapping_data: MappingDBType,
     pub curr_file_path: String,
+    pub workspace_path: String,
 }
 
 impl DB {
     pub fn read(&mut self) -> DBType {
         // let db_file_path = format!("{}/{}", self.folder_path, self.index);
         if Path::new(self.db_file_path.as_str()).exists() {
-            let data_buffers =
-                std::fs::read_to_string(&self.db_file_path).expect("Unable to read the file");
-            let data: DBType =
-                serde_json::from_str(data_buffers.as_str()).expect("Unable to deserialize");
-            data
+            let data_buffers = match std::fs::read_to_string(&self.db_file_path) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("Error reading file: {}", e);
+                    return HashMap::new();
+                }
+            };
+            match serde_json::from_str(&data_buffers) {
+                Ok(data) => data,
+                Err(err) => {
+                    eprintln!("Failed to parse JSON: {}", err);
+                    HashMap::new()
+                }
+            }
         } else {
             eprintln!(
                 "The DB file doesn't exist for the given path: {}",
@@ -45,36 +57,51 @@ impl DB {
 
     pub fn read_all(&mut self, valid_indices: Vec<u32>) -> DBType {
         let mut init_data: DBType = HashMap::new();
-        for valid_index in valid_indices.iter() {
-            self.index = *valid_index;
+        // let folder_path = self.folder_path.clone();
+        let workspace_path = self.workspace_path.clone();
+        let curr_file_path = self.curr_file_path.clone();
+
+        for &valid_index in valid_indices.iter() {
+            self.index = valid_index;
+
             self.db_file_path = format!("{}/{}.json", self.folder_path, self.index);
             let db_obj = Path::new(&self.db_file_path);
             if !db_obj.exists() {
                 File::create(db_obj).expect("Couldn't find the DB file");
-                return HashMap::new();
+                continue;
+                // return HashMap::new();
             }
-            let current_data = self.read();
-            let values = current_data.get(&self.curr_file_path);
-            if let Some(valid_values) = values {
-                let mut default: HashMap<u32, Vec<AuthorDetails>> = HashMap::new();
-                let insert_data_here = init_data
-                    .get_mut(&self.curr_file_path)
-                    .unwrap_or(&mut default);
-                insert_data_here.extend(valid_values.clone());
-                let copy_data = insert_data_here.clone();
-                init_data.insert(self.curr_file_path.clone(), copy_data);
+            let mut current_data = self.read();
+            let valid_values = current_data
+                .get(&workspace_path.clone())
+                .and_then(|ws| ws.get(&curr_file_path.clone()))
+                .cloned();
+
+            let workspace_data = current_data
+                .entry(workspace_path.clone())
+                .or_insert_with(HashMap::new);
+
+            let file_data = workspace_data
+                .entry(curr_file_path.clone())
+                .or_insert_with(HashMap::new);
+            //
+            // Extend the file data with valid_values if present.
+            if let Some(valid_values) = valid_values {
+                file_data.extend(valid_values.clone());
             }
+            init_data.insert(workspace_path.clone(), workspace_data.clone());
         }
         init_data
     }
 
     // Initialise the DB if it doesn't exist already
-    pub fn init_db(&mut self, curr_file_path: &str) {
+    pub fn init_db(&mut self, workspace_path: &str, curr_file_path: Option<&str>) {
         // let folder_path = Path::new(simple_home_dir::home_dir().unwrap().to_str().unwrap())
         //     .join(config::DB_FOLDER);
         // let db_folder = config::DB_FOLDER.to_owned() + &self.folder_path;
         let db_folder = format!("{}/{}", config::DB_FOLDER, self.folder_path);
-        self.curr_file_path = String::from(curr_file_path);
+        self.workspace_path = String::from(workspace_path);
+        self.curr_file_path = String::from(curr_file_path.unwrap_or(""));
         // let mut main_folder_path = String::new();
 
         if let Some(home) = simple_home_dir::home_dir() {
@@ -99,13 +126,24 @@ impl DB {
             .unwrap_or_else(|_| panic!("Unable to create folder for: {}", self.folder_path));
 
         // Search for the index
-        let db_file_index = self.find_index(curr_file_path);
+        let mut db_file_index: Option<Vec<u32>> = None;
+        if curr_file_path.is_none() {
+            db_file_index = self.find_index(workspace_path);
+        } else {
+            db_file_index = self.find_index(curr_file_path.unwrap());
+        }
+        // let db_file_index = self.find_index(curr_file_path.unwrap_or(""));
         // Filename will be: <db_file_index>.json
         let valid_indices = db_file_index.unwrap_or(vec![self.index]);
         self.current_data = self.read_all(valid_indices.clone());
     }
 
     fn find_index(&mut self, curr_file_path: &str) -> Option<Vec<u32>> {
+        // In case the input path is empty.
+        // if curr_file_path.is_empty() {
+        //     return None;
+        // }
+
         // In each folder -> we'll have a mapping file which contains which filename corresponds to which index (to be used in the DB file)
         self.mapping_file_name = "mapping.json".to_string();
         self.mapping_file_path = format!("{}/{}", self.folder_path, self.mapping_file_name);
@@ -127,12 +165,13 @@ impl DB {
             self.current_data = HashMap::new();
             return None;
         }
-        let mapping_data = std::fs::read_to_string(&self.mapping_file_path).unwrap_or_else(|_| {
-            panic!(
-                "Unable to read the mapping file into string, file path: {}",
-                self.mapping_file_path
-            )
-        });
+        let mapping_data = match std::fs::read_to_string(&self.mapping_file_path) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("Error reading file: {}: {}", self.mapping_file_path, e);
+                return None;
+            }
+        };
         let mut mapping_json: HashMap<String, Vec<u32>> =
             serde_json::from_str(mapping_data.as_str()).unwrap_or_else(|_| {
                 panic!(
@@ -167,91 +206,140 @@ impl DB {
     }
 
     pub fn get_available_index(&self, mapping_json: &HashMap<String, Vec<u32>>) -> u32 {
-        let default_vec = &[0_u32].to_vec();
-        let last_used_index: &Vec<u32> = mapping_json.get("last_used_index").unwrap_or(default_vec);
-        last_used_index[0]
+        mapping_json
+            .get("last_used_index")
+            .and_then(|v| v.first().copied())
+            .unwrap_or_else(|| {
+                let max_index = mapping_json
+                    .values()
+                    .flat_map(|v| v.iter().copied())
+                    .max()
+                    .unwrap_or(0);
+                max_index + 1
+            })
     }
 
-    pub fn append(
+    pub fn append_to_db(
         &mut self,
         configured_file_path: &String,
         start_line_idx: usize,
-        end_line_idx: usize,
         all_data: Vec<AuthorDetails>,
     ) {
-        for line_idx in start_line_idx..end_line_idx + 1 {
-            let line_idx = line_idx as u32;
-            let mut existing_data = vec![];
-            if self.current_data.contains_key(configured_file_path) {
-                let file_data = self.current_data.get_mut(configured_file_path).unwrap();
-                match file_data.contains_key(&line_idx) {
-                    false => {
-                        file_data.insert(line_idx, all_data.clone());
-                    }
-                    true => {
-                        file_data
-                            .get_mut(&line_idx)
-                            .unwrap()
-                            .append(&mut all_data.clone());
-                    }
+        if all_data.is_empty() {
+            return;
+        }
+
+        // Sharding logic:
+        self.curr_items += all_data.len() as u32;
+        if self._is_limit_crossed() {
+            self.curr_items = 0;
+            self.index += 1;
+            self.db_file_path = format!("{}/{}.json", self.folder_path, self.index);
+
+            // Update mapping
+            self.mapping_data
+                .insert("last_used_index".to_string(), vec![self.index]);
+
+            self.mapping_data
+                .entry(configured_file_path.clone())
+                .or_insert_with(Vec::new)
+                .push(self.index);
+
+            // Persist updated mapping
+            if let Ok(mut file) = File::create(&self.mapping_file_path) {
+                let mapping_string = serde_json::to_string_pretty(&self.mapping_data)
+                    .expect("Unable to serialize mapping");
+                if let Err(e) = write!(file, "{}", mapping_string) {
+                    eprintln!("Failed to write mapping: {}", e);
                 }
-            } else {
-                existing_data.extend(all_data.clone());
-                let mut map = HashMap::new();
-                map.insert(line_idx, existing_data);
-                self.current_data
-                    .insert(configured_file_path.to_string(), map);
             }
+        }
+
+        // Normal DB append
+        let end_line_idx = all_data[0].end_line_number;
+
+        let workspace_entry = self
+            .current_data
+            .entry(self.workspace_path.clone())
+            .or_insert_with(HashMap::new);
+
+        let file_entry = workspace_entry
+            .entry(configured_file_path.clone())
+            .or_insert_with(HashMap::new);
+
+        for line_idx in start_line_idx..=end_line_idx {
+            let line_idx = line_idx as u32;
+
+            file_entry
+                .entry(line_idx)
+                .or_insert_with(Vec::new)
+                .extend(all_data.clone());
         }
     }
 
     pub fn _is_limit_crossed(&self) -> bool {
         self.curr_items >= MAX_ITEMS_IN_EACH_DB_FILE
     }
-
     pub fn store(&mut self) {
-        // We should check if the limit has crossed and then modify self.db_file_path
-        let mut we_crossed_limit: bool = false;
+        if self.current_data.is_empty() {
+            eprintln!("No data to store.");
+            return;
+        }
+
         self.curr_items += 1;
+        let mut we_crossed_limit = false;
+
         if self._is_limit_crossed() {
-            // We'll have to make sure that the new file is created
             self.curr_items = 0;
             self.index += 1;
             self.db_file_path = format!("{}/{}.json", self.folder_path, self.index);
-
-            // Updating mapping content and file as well
-            self.mapping_data
-                .insert(String::from("last_used_index"), [self.index].to_vec());
-
-            let list_indices_before = self.mapping_data.get_mut(&self.curr_file_path);
-            list_indices_before
-                .unwrap_or(&mut vec![])
-                .append(&mut vec![self.index]);
-
-            let mapping_string = serde_json::to_string_pretty(&self.mapping_data)
-                .expect("Unable to deserialize data");
-            // Update the mapping file accordingly
-            let mut file = File::create(&self.mapping_file_path)
-                .expect("Couldn't create the mapping file for some reason.");
-            writeln!(file, "{}", mapping_string).expect("Couldn't write to the mapping file, wow!");
             we_crossed_limit = true;
+
+            // Update mapping index
+            self.mapping_data
+                .insert("last_used_index".to_string(), vec![self.index]);
+
+            // Safely update indices list for current file
+            self.mapping_data
+                .entry(self.curr_file_path.clone())
+                .or_insert_with(Vec::new)
+                .push(self.index);
+
+            // Write updated mapping file
+            if let Ok(mut file) = File::create(&self.mapping_file_path) {
+                let mapping_string = serde_json::to_string_pretty(&self.mapping_data)
+                    .expect("Failed to serialize mapping");
+                if let Err(e) = write!(file, "{}", mapping_string) {
+                    eprintln!("❌ Failed writing mapping: {}", e);
+                }
+            } else {
+                eprintln!(
+                    "❌ Failed to create mapping file: {}",
+                    self.mapping_file_path
+                );
+            }
         }
 
-        let output_string =
-            serde_json::to_string_pretty(&self.current_data).expect("Unable to deserialize data");
+        // Debug: What is being stored?
+        // for (workspace_path, files_map) in &self.current_data {
+        //     println!("🔑 Workspace: {}", workspace_path);
+        //     for file in files_map.keys() {
+        //         println!("  └── File: {}", file);
+        //     }
+        // }
+
+        // Write DB file
+        let output_string = serde_json::to_string_pretty(&self.current_data)
+            .expect("Failed to serialize DB content");
+
+        if let Err(e) = std::fs::write(&self.db_file_path, output_string) {
+            eprintln!("❌ Failed writing DB to {}: {}", self.db_file_path, e);
+        } else {
+            println!("✅ Stored DB to {}", self.db_file_path);
+        }
+
         if we_crossed_limit {
             self.current_data.clear();
-        }
-        if Path::new(&self.db_file_path).exists() {
-            let mut file_obj = File::create(self.db_file_path.as_str())
-                .unwrap_or_else(|_| panic!("Couldn't open the given file: {}", self.db_file_path));
-            write!(file_obj, "{}", output_string)
-                .expect("Couldn't write the data to the DB File Path");
-        } else {
-            let mut file_obj = File::create(self.db_file_path.as_str())
-                .unwrap_or_else(|_| panic!("Couldn't open the given file: {}", self.db_file_path));
-            write!(file_obj, "{}", output_string)
-                .expect("Couldn't write the data to the DB File Path");
         }
     }
 
@@ -260,31 +348,105 @@ impl DB {
         search_field_first: &String,
         start_line_number: &usize,
         end_line_number: &usize,
-    ) -> (Option<Vec<&AuthorDetails>>, Vec<u32>) {
-        let mut already_computed_data: Vec<&AuthorDetails> = vec![];
+    ) -> (Option<Vec<AuthorDetails>>, Vec<u32>) {
+        let mut already_computed_data: Vec<AuthorDetails> = vec![];
         let mut uncovered_indices: Vec<u32> = vec![];
-        if self.current_data.contains_key(search_field_first) {
-            let output = self.current_data.get_mut(search_field_first);
-            if let Some(all_line_data) = output {
-                for each_line_idx in *start_line_number..*end_line_number + 1 {
+
+        // Normalize path to absolute
+        let abs_search_path = PathBuf::from(search_field_first)
+            .canonicalize()
+            .unwrap_or_else(|_| {
+                panic!("Failed to canonicalize search path: {}", search_field_first)
+            })
+            .to_str()
+            .unwrap()
+            .to_string();
+
+        if let Some(workspace_data) = self.current_data.get_mut(&self.workspace_path) {
+            if let Some(file_line_data) = workspace_data.get_mut(&abs_search_path) {
+                for each_line_idx in *start_line_number..=*end_line_number {
                     let each_line_idx = each_line_idx as u32;
-                    if let Some(eligible_data) = all_line_data.get(&each_line_idx) {
-                        already_computed_data.extend(eligible_data);
+                    if let Some(eligible_data) = file_line_data.get_mut(&each_line_idx) {
+                        already_computed_data.append(eligible_data);
                     } else {
                         uncovered_indices.push(each_line_idx);
                     }
                 }
-            }
-            if already_computed_data.is_empty() {
-                (None, uncovered_indices)
             } else {
-                (Some(already_computed_data), uncovered_indices)
+                // File not present under current workspace
+                uncovered_indices
+                    .extend((*start_line_number..=*end_line_number).map(|idx| idx as u32));
             }
         } else {
-            for idx in *start_line_number..*end_line_number + 1 {
-                uncovered_indices.push(idx as u32);
-            }
-            (None, uncovered_indices)
+            // Workspace not found
+            uncovered_indices.extend((*start_line_number..=*end_line_number).map(|idx| idx as u32));
         }
+
+        if already_computed_data.is_empty() {
+            (None, uncovered_indices)
+        } else {
+            (Some(already_computed_data), uncovered_indices)
+        }
+    }
+
+    pub fn query(&mut self, file_path: String, start_number: usize, end_number: usize) {
+        let mut end_line_number = end_number;
+        if end_number == 0 {
+            // Means, cover the whole file.
+            // end_number should be the last line number of the file.
+            end_line_number = std::fs::read_to_string(&file_path)
+                .unwrap_or_else(|_| panic!("Unable to read the file: {}", file_path))
+                .lines()
+                .count();
+        }
+        let (maybe_results, _uncovered_indices) =
+            self.exists_and_return(&file_path, &start_number, &end_line_number);
+
+        match maybe_results {
+            Some(results) => {
+                let mut relevance_counter: HashMap<String, usize> = HashMap::new();
+
+                for author_detail in results {
+                    for path in &author_detail.contextual_file_paths {
+                        *relevance_counter.entry(path.clone()).or_insert(0) += 1;
+                    }
+                }
+
+                let mut contextual_paths: Vec<(&String, &usize)> =
+                    relevance_counter.iter().collect();
+                contextual_paths.sort_by(|a, b| b.1.cmp(a.1)); // Sort by descending relevance
+
+                for (path, count) in contextual_paths {
+                    println!("{} - {} occurrences", path, count);
+                }
+            }
+            None => {
+                println!("⚠️ No matching data found for: {}", file_path);
+            }
+        }
+    }
+}
+
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_loading_mapping_file() {
+        let mapping_path = "/home/krshrimali/.context_pilot_db/mapping.json";
+        let mapping_data = std::fs::read_to_string(mapping_path).unwrap_or_else(|_| {
+            panic!(
+                "Unable to read the mapping file into string, file path: {}",
+                mapping_path
+            )
+        });
+        let mapping_path_obj = Path::new(mapping_path);
+        serde_json::from_str(mapping_data.as_str()).unwrap_or_else(|_| {
+            panic!(
+                "Unable to deserialize the mapping file, path: {}",
+                mapping_path
+            )
+        });
+
+        assert!(mapping_path_obj.exists());
     }
 }
