@@ -64,10 +64,11 @@ pub fn perform_for_whole_file(
     );
 
     if output.is_empty() {
-        eprintln!(
-            "No author details found for '{}'. It may be a binary file, empty, or ignored.",
-            origin_file_path
-        );
+        // Do nothing for now!
+        // eprintln!(
+        //     "No author details found for '{}'. It may be a binary file, empty, or ignored.",
+        //     origin_file_path
+        // );
     }
 
     output
