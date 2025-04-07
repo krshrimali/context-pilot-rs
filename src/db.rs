@@ -225,37 +225,13 @@ impl DB {
         start_line_idx: usize,
         all_data: Vec<AuthorDetails>,
     ) {
+        self.curr_file_path = configured_file_path.clone();
         if all_data.is_empty() {
             return;
         }
 
-        // Sharding logic:
-        self.curr_items += all_data.len() as u32;
-        if self._is_limit_crossed() {
-            self.curr_items = 0;
-            self.index += 1;
-            self.db_file_path = format!("{}/{}.json", self.folder_path, self.index);
+        self.curr_items += all_data.len() as u32; // Just track number of items
 
-            // Update mapping
-            self.mapping_data
-                .insert("last_used_index".to_string(), vec![self.index]);
-
-            self.mapping_data
-                .entry(configured_file_path.clone())
-                .or_insert_with(Vec::new)
-                .push(self.index);
-
-            // Persist updated mapping
-            if let Ok(mut file) = File::create(&self.mapping_file_path) {
-                let mapping_string = serde_json::to_string_pretty(&self.mapping_data)
-                    .expect("Unable to serialize mapping");
-                if let Err(e) = write!(file, "{}", mapping_string) {
-                    eprintln!("Failed to write mapping: {}", e);
-                }
-            }
-        }
-
-        // Normal DB append
         let end_line_idx = all_data[0].end_line_number;
 
         let workspace_entry = self
@@ -280,68 +256,90 @@ impl DB {
     pub fn _is_limit_crossed(&self) -> bool {
         self.curr_items >= MAX_ITEMS_IN_EACH_DB_FILE
     }
+
     pub fn store(&mut self) {
+        let CHUNK_SIZE = 30;
         if self.current_data.is_empty() {
             eprintln!("No data to store.");
             return;
         }
 
-        self.curr_items += 1;
-        let mut we_crossed_limit = false;
+        //println!("📝 Starting to store data...");
 
-        if self._is_limit_crossed() {
-            self.curr_items = 0;
-            self.index += 1;
-            self.db_file_path = format!("{}/{}.json", self.folder_path, self.index);
-            we_crossed_limit = true;
+        // Flatten all data first
+        let mut flat_data: Vec<(String, String, u32, Vec<AuthorDetails>)> = vec![];
+        for (workspace_path, files_map) in &self.current_data {
+            for (file_path, lines_map) in files_map {
+                for (line_number, author_details_list) in lines_map {
+                    flat_data.push((
+                        workspace_path.clone(),
+                        file_path.clone(),
+                        *line_number,
+                        author_details_list.clone(),
+                    ));
+                }
+            }
+        }
 
-            // Update mapping index
-            self.mapping_data
-                .insert("last_used_index".to_string(), vec![self.index]);
+        //println!("🔵 Total entries: {}", flat_data.len());
 
-            // Safely update indices list for current file
+        // Now chunk the flat_data
+        let chunks = flat_data.chunks(CHUNK_SIZE);
+
+        for chunk in chunks {
+            let mut chunk_map: HashMap<String, HashMap<String, HashMap<u32, Vec<AuthorDetails>>>> =
+                HashMap::new();
+
+            for (workspace_path, file_path, line_number, author_details_list) in chunk {
+                chunk_map
+                    .entry(workspace_path.clone())
+                    .or_insert_with(HashMap::new)
+                    .entry(file_path.clone())
+                    .or_insert_with(HashMap::new)
+                    .insert(*line_number, author_details_list.clone());
+            }
+
+            // Write each chunk to a separate file
+            let db_file_path = format!("{}/{}.json", self.folder_path, self.index);
+            //println!("📦 Writing shard: {}", db_file_path);
+
+            let output_string = serde_json::to_string_pretty(&chunk_map)
+                .expect("Failed to serialize chunk");
+
+            if let Err(e) = std::fs::write(&db_file_path, output_string) {
+                eprintln!("❌ Failed writing DB file {}: {}", db_file_path, e);
+            } else {
+                println!("✅ Successfully stored shard: {}", db_file_path);
+            }
+
+            //println!("curr file path: {}", self.curr_file_path);
+
+            // Update mapping
             self.mapping_data
                 .entry(self.curr_file_path.clone())
                 .or_insert_with(Vec::new)
                 .push(self.index);
 
-            // Write updated mapping file
-            if let Ok(mut file) = File::create(&self.mapping_file_path) {
-                let mapping_string = serde_json::to_string_pretty(&self.mapping_data)
-                    .expect("Failed to serialize mapping");
-                if let Err(e) = write!(file, "{}", mapping_string) {
-                    eprintln!("❌ Failed writing mapping: {}", e);
-                }
-            } else {
-                eprintln!(
-                    "❌ Failed to create mapping file: {}",
-                    self.mapping_file_path
-                );
+            self.index += 1; // go to next shard
+        }
+
+        //println!("mapping data: {:?}", self.mapping_data);
+
+        // Update mapping file
+        if let Ok(mut file) = File::create(&self.mapping_file_path) {
+            let mapping_string = serde_json::to_string_pretty(&self.mapping_data)
+                .expect("Failed to serialize mapping");
+            if let Err(e) = write!(file, "{}", mapping_string) {
+                eprintln!("❌ Failed writing mapping: {}", e);
             }
-        }
-
-        // Debug: What is being stored?
-        // for (workspace_path, files_map) in &self.current_data {
-        //     println!("🔑 Workspace: {}", workspace_path);
-        //     for file in files_map.keys() {
-        //         println!("  └── File: {}", file);
-        //     }
-        // }
-
-        // Write DB file
-        let output_string = serde_json::to_string_pretty(&self.current_data)
-            .expect("Failed to serialize DB content");
-
-        if let Err(e) = std::fs::write(&self.db_file_path, output_string) {
-            eprintln!("❌ Failed writing DB to {}: {}", self.db_file_path, e);
         } else {
-            println!("✅ Stored DB to {}", self.db_file_path);
+            eprintln!("❌ Failed to create mapping file: {}", self.mapping_file_path);
         }
 
-        if we_crossed_limit {
-            self.current_data.clear();
-        }
+        self.current_data.clear(); // clear everything after storing
+        self.curr_items = 0; // reset
     }
+
 
     pub fn exists_and_return(
         &mut self,
