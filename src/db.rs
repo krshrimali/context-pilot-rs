@@ -244,12 +244,14 @@ impl DB {
             .or_insert_with(HashMap::new);
 
         for line_idx in start_line_idx..=end_line_idx {
+
             let line_idx = line_idx as u32;
+
+            let line_authordetails = all_data.get(line_idx as usize).unwrap().clone();
 
             file_entry
                 .entry(line_idx)
-                .or_insert_with(Vec::new)
-                .extend(all_data.clone());
+                .or_insert_with(Vec::new).push(line_authordetails);
         }
     }
 
@@ -303,7 +305,7 @@ impl DB {
             let db_file_path = format!("{}/{}.json", self.folder_path, self.index);
             //println!("📦 Writing shard: {}", db_file_path);
 
-            let output_string = serde_json::to_string_pretty(&chunk_map)
+            let output_string = serde_json::to_string(&chunk_map)
                 .expect("Failed to serialize chunk");
 
             if let Err(e) = std::fs::write(&db_file_path, output_string) {
