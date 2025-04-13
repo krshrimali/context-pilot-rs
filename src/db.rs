@@ -222,7 +222,7 @@ impl DB {
     pub fn append_to_db(
         &mut self,
         configured_file_path: &String,
-        start_line_idx: usize,
+        _: usize,
         all_data: Vec<AuthorDetails>,
     ) {
         self.curr_file_path = configured_file_path.clone();
@@ -231,8 +231,6 @@ impl DB {
         }
 
         self.curr_items += all_data.len() as u32; // Just track number of items
-
-        let end_line_idx = all_data[0].end_line_number;
 
         let workspace_entry = self
             .current_data
@@ -243,13 +241,9 @@ impl DB {
             .entry(configured_file_path.clone())
             .or_insert_with(HashMap::new);
 
-        for line_idx in start_line_idx..=end_line_idx {
-            let line_idx = line_idx as u32;
-
-            file_entry
-                .entry(line_idx)
-                .or_insert_with(Vec::new)
-                .extend(all_data.clone());
+        for single_authdetail in all_data {
+            let line_idx = single_authdetail.line_number;
+            file_entry.entry(line_idx as u32).or_insert_with(Vec::new).push(single_authdetail);
         }
     }
 
@@ -303,7 +297,7 @@ impl DB {
             let db_file_path = format!("{}/{}.json", self.folder_path, self.index);
             //println!("📦 Writing shard: {}", db_file_path);
 
-            let output_string = serde_json::to_string_pretty(&chunk_map)
+            let output_string = serde_json::to_string(&chunk_map)
                 .expect("Failed to serialize chunk");
 
             if let Err(e) = std::fs::write(&db_file_path, output_string) {
