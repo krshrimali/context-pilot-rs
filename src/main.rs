@@ -9,9 +9,9 @@ mod git_command_algo;
 use crate::{algo_loc::perform_for_whole_file, db::DB};
 use async_recursion::async_recursion;
 use contextgpt_structs::{AuthorDetails, Cli, RequestTypeOptions};
+use git_command_algo::extract_details_for_file;
 use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
+    path::{Path, PathBuf}, str::FromStr, sync::Arc
 };
 use structopt::StructOpt;
 use tokio::sync::Mutex;
@@ -201,23 +201,18 @@ impl Server {
                         // ✅ Save to DB manually since it's not in a JoinSet
                         if !output.is_empty() {
                             let db = self.curr_db.clone().unwrap();
-                            let mut db_locked = db.lock().await;
+                            // let mut db_locked = db.lock().await;
                             let start_line_number = 0;
                             let origin_file_path = output.first().unwrap().origin_file_path.clone();
-                            db_locked.append_to_db(
-                                &origin_file_path,
-                                start_line_number,
-                                output.clone(),
-                            );
-                            db_locked.store();
-
                             // Offload to blocking thread
-                            // let mut db_locked = db_locked.clone(); // if needed, depending on interior mutability
-                            // tokio::task::spawn_blocking(move || {
-                            //     db_locked.store();
-                            // })
-                            // .await
-                            // .expect("Failed to store DB");
+                            let mut db_locked = db.lock().await.clone(); // if needed, depending on interior mutability
+                            tokio::task::spawn_blocking(move || {
+                                println!("In thread");
+                                db_locked.append_to_db(&origin_file_path, start_line_number, output.clone());
+                                db_locked.store();
+                            })
+                            .await
+                            .expect("Failed to store DB");
                         }
                     }
                 }
@@ -374,53 +369,59 @@ impl Server {
 
 #[tokio::main]
 async fn main() -> CliResult {
-    let args = Cli::from_args();
-
-    env_logger::init();
-    let mut server = Server {
-        state: State::Dead,
-        curr_db: None,
-        state_db_handler: DBHandler {
-            metadata: DBMetadata::default(),
-        },
-    };
-
-    // TODO: Add support for config file.
-    // let config_obj: config_impl::Config = config_impl::read_config(config::CONFIG_FILE_NAME);
-    // let mut file_path: Option<PathBuf> = None;
-    // if args.file.is_some() {
-    //     file_path = PathBuf::from_str(args.file.unwrap().as_str())
-    //         .unwrap()
-    //         .into();
-    // }
-
-    match args.request_type {
-        RequestTypeOptions::File => {
-            server
-                .handle_server(args.folder_path.as_str(), args.file, None, None, None)
-                .await;
-        }
-        RequestTypeOptions::Author => {
-            server
-                .handle_server(args.folder_path.as_str(), args.file, None, None, None)
-                .await;
-        }
-        RequestTypeOptions::Index => {
-            server
-                .handle_server(args.folder_path.as_str(), None, None, None, None)
-                .await;
-        }
-        RequestTypeOptions::Query => {
-            server
-                .handle_server(
-                    args.folder_path.as_str(),
-                    args.file,
-                    args.start_number,
-                    args.end_number,
-                    Some(RequestTypeOptions::Query),
-                )
-                .await;
-        }
-    };
+    let output = extract_details_for_file(/*end_line_number=*/100, String::from_str("src/main.rs").unwrap(), &config_impl::Config::default());
     Ok(())
 }
+
+// #[tokio::main]
+// async fn main() -> CliResult {
+//     let args = Cli::from_args();
+//
+//     env_logger::init();
+//     let mut server = Server {
+//         state: State::Dead,
+//         curr_db: None,
+//         state_db_handler: DBHandler {
+//             metadata: DBMetadata::default(),
+//         },
+//     };
+//
+//     // TODO: Add support for config file.
+//     // let config_obj: config_impl::Config = config_impl::read_config(config::CONFIG_FILE_NAME);
+//     // let mut file_path: Option<PathBuf> = None;
+//     // if args.file.is_some() {
+//     //     file_path = PathBuf::from_str(args.file.unwrap().as_str())
+//     //         .unwrap()
+//     //         .into();
+//     // }
+//
+//     match args.request_type {
+//         RequestTypeOptions::File => {
+//             server
+//                 .handle_server(args.folder_path.as_str(), args.file, None, None, None)
+//                 .await;
+//         }
+//         RequestTypeOptions::Author => {
+//             server
+//                 .handle_server(args.folder_path.as_str(), args.file, None, None, None)
+//                 .await;
+//         }
+//         RequestTypeOptions::Index => {
+//             server
+//                 .handle_server(args.folder_path.as_str(), None, None, None, None)
+//                 .await;
+//         }
+//         RequestTypeOptions::Query => {
+//             server
+//                 .handle_server(
+//                     args.folder_path.as_str(),
+//                     args.file,
+//                     args.start_number,
+//                     args.end_number,
+//                     Some(RequestTypeOptions::Query),
+//                 )
+//                 .await;
+//         }
+//     };
+//     Ok(())
+// }

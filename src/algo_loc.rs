@@ -2,7 +2,7 @@ use linecount::count_lines;
 
 use crate::config_impl;
 use crate::contextgpt_structs::AuthorDetails;
-use crate::git_command_algo::extract_details;
+use crate::git_command_algo::extract_details_for_file;
 use std::collections::HashMap;
 
 pub fn extract_string_from_output(output: Vec<AuthorDetails>, is_author_mode: bool) -> String {
@@ -56,8 +56,7 @@ pub fn perform_for_whole_file(
         }
     };
 
-    let output = extract_details(
-        1,
+    let output = extract_details_for_file(
         end_line_number as usize,
         origin_file_path.clone(),
         config_obj,
