@@ -1,10 +1,13 @@
-use crate::config_impl;
+use crate::{config, config_impl, contextgpt_structs::AuthorDetails};
 
 use std::{
-    collections::HashSet, path::Path, process::{Command, Stdio}
+    collections::HashMap,
+    io::{BufRead, BufReader},
+    path::Path,
+    process::{Command, Stdio},
+    sync::{Arc, Mutex},
+    thread,
 };
-
-use crate::contextgpt_structs::AuthorDetails;
 
 pub fn parse_str(input_str: &str, file_path: &str, end_line_number: usize) -> Vec<AuthorDetails> {
     let mut author_details_vec: Vec<AuthorDetails> = Vec::new();
@@ -45,15 +48,42 @@ pub fn parse_str(input_str: &str, file_path: &str, end_line_number: usize) -> Ve
     author_details_vec
 }
 
+// pub fn parse_str_(
+//     input_str: &str,
+//     file_path: &str,
+//     line_number: usize,
+//     end_line_number: usize,
+// ) -> Vec<AuthorDetails> {
+//     let mut author_details_vec: Vec<AuthorDetails> = Vec::new();
+//
+//     for line in input_str.split('\n') {
+//         // Format: "A:<Author Name> H:<Commit Hash>"
+//         // Example: "A:John Doe H:abc1234"
+//         let parts: Vec<&str> = line.split('|').collect();
+//         if parts.len() < 2 {
+//             continue; // Skip lines that don't have the expected format
+//         }
+//         let author_str = parts[0].trim().replace("A:", "");
+//         let commit_hash = parts[1].trim().replace("H:", "");
+//
+//         let author_details = AuthorDetails::serialize_from_str(
+//             author_str.to_string(),
+//             commit_hash.to_string(),
+//             file_path,
+//             Vec::new(),
+//             line_number,
+//             end_line_number,
+//         );
+//
+//         author_details_vec.push(author_details);
+//     }
+//
+//     author_details_vec
+// }
+
 pub fn get_files_for_commit_hash(commit_hash: &str) -> Vec<String> {
     let diff_command = Command::new("git")
-        .args([
-            "diff-tree",
-            "--no-commit-id",
-            "--name-only",
-            commit_hash,
-            "-r",
-        ])
+        .args(["show", "--name-only", "--pretty=''", commit_hash])
         .stdout(Stdio::piped())
         .output()
         .unwrap();
@@ -87,236 +117,205 @@ pub fn get_data_for_line(
     }
 }
 
-pub fn extract_details_for_selected_code(
-    start_line_number: usize,
-    end_line_number: usize,
-    file_path: String,
-    config_obj: &config_impl::Config,
-) -> Vec<AuthorDetails> {
-    let mut binding = Command::new("git");
-    let command = binding.args([
-        "blame",
-        "-L",
-        &(start_line_number.to_string() + "," + &end_line_number.to_string()),
-        "-w",
-        "-M",
-        "-C",
-        "--",
-        file_path.as_str(),
-    ]);
-    let output = command.stdout(Stdio::piped()).output().unwrap();
-    let stdout_buf = String::from_utf8(output.stdout).unwrap();
-    let parsed_output = parse_str(stdout_buf.as_str(), &file_path, end_line_number);
+pub fn extract_details(file_path: String) -> Vec<AuthorDetails> {
+    // git blame the whole file, group by commits, and then for each commit -> go back
+    // config_impl.threshold commits back,
+    // and get the files changed in that commit -> store them in AuthorDetails.
+    let config_obj: config_impl::Config = config_impl::read_config(config::CONFIG_FILE_NAME);
+    let output = Command::new("git")
+        .args(["blame", "-n", &file_path])
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("Failed to run git blame")
+        .stdout
+        .expect("Failed to capture stdout");
 
-    let vec_author_detail_for_line =
-        get_data_for_line(parsed_output, start_line_number, end_line_number);
+    let reader = BufReader::new(output);
+    let mut blame_map: HashMap<String, Vec<String>> = HashMap::new();
 
-    let mut result_author_details: Vec<AuthorDetails> = Vec::new();
-    if vec_author_detail_for_line.is_none() {
-        return result_author_details;
-    }
-
-    for author_detail_for_line in vec_author_detail_for_line.unwrap() {
-        let val = author_detail_for_line;
-
-        let mut commit_id = val.commit_hash;
-        let out_files_for_commit_hash = get_files_for_commit_hash(&commit_id);
-        let mut all_files_changed_initial_commit: Vec<String> = Vec::new();
-        for each_file in out_files_for_commit_hash {
-            let each_file_path = Path::new(&each_file);
-            if !each_file_path.exists() {
-                // Uhmm, either the file was moved - renamed - or deleted 🤔
-                // NOTE: Deciding not to send this to the plugin, to avoid confusions...
-                continue;
-            }
-            all_files_changed_initial_commit.push(each_file);
-        }
-
-        let mut blame_count: usize = 0;
-        while blame_count != config_obj.commit_hashes_threshold {
-            blame_count += 1;
-            let line_string: String =
-                val.line_number.to_string() + &','.to_string() + &val.line_number.to_string();
-            let commit_url = commit_id.clone();
-            // if !commit_url.ends_with('^') {
-            //     commit_url = commit_id.clone() + "^";
-            // }
-            let cmd_args = vec![
-                "blame",
-                "-L",
-                &line_string,
-                "-w",
-                "-M",
-                &commit_url,
-                "--",
-                (file_path.as_str()),
-            ];
-            let new_blame_command = Command::new("git")
-                .args(cmd_args.clone())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .output()
-                .unwrap();
-            let out_buf = String::from_utf8(new_blame_command.stdout).unwrap();
-            let parsed_buf = parse_str(out_buf.as_str(), &file_path, end_line_number);
-
-            if let Some(valid_val) = get_data_for_line(parsed_buf, val.line_number, val.line_number)
-            {
-                commit_id = valid_val.get(0).unwrap().commit_hash.clone();
-                let mut to_append_struct = valid_val.get(0).unwrap().clone();
-                let out_files_for_commit_hash = get_files_for_commit_hash(&commit_id);
-                let mut all_files_changed = Vec::new();
-                for each_file in out_files_for_commit_hash {
-                    let each_file_path = Path::new(&each_file);
-                    if !each_file_path.exists() {
-                        // NOTE: If file doesn't exist, maybe it was moved/renamed/deleted - so skip it for now
-                        continue;
-                    }
-                    all_files_changed.push(each_file);
-                }
-                for each_initial_commit_file in all_files_changed_initial_commit.clone() {
-                    if all_files_changed.contains(&each_initial_commit_file) {
-                        continue;
-                    }
-                    all_files_changed.push(each_initial_commit_file);
-                }
-                to_append_struct.contextual_file_paths = all_files_changed;
-                result_author_details.push(to_append_struct);
+    for line_result in reader.lines() {
+        if let Ok(line) = line_result {
+            if let Some((hash, content)) = line.split_once(' ') {
+                // Trim content to fetch author name and the line numbers as well.
+                // Format would be like:
+                // 100 (Kushashwa Ravi shrimali ...)
+                // We only need the line number initially and the author name.
+                let line_number = content.split('(').next().unwrap_or("").trim();
+                println!("Line number: {:?}", line_number);
+                let content = content.split('(').nth(1).unwrap_or("").trim();
+                let check = content.split(')').next().unwrap_or("").trim();
+                println!("Author name: {:?}", check);
             }
         }
     }
 
-    println!("Origin file path: {:?}", file_path);
-    println!("Length of data: {:?}", result_author_details.len());
-
-    // println!("Doing this for file path: {:?}", file_path);
-    // for each_result in result_author_details.iter() {
-    //     if each_result.origin_file_path == file_path {
-    //         panic!("Wrong");
-    //     }
+    // for (hash, lines) in &blame_map {
+    //     println!("Commit {}:", hash);
+    //     // Now parse the line
+    //     println!("{:?}", lines);
     // }
-    result_author_details
+
+    Vec::new()
 }
 
-pub fn extract_details_for_file(
-    end_line_number: usize,
-    file_path: String,
-    config_obj: &config_impl::Config,
-) -> Vec<AuthorDetails> {
-    let start_line_number = 1;
-    let mut binding = Command::new("git");
-    let command = binding.args([
-        "blame",
-        "-L",
-        &(start_line_number.to_string() + "," + &end_line_number.to_string()),  // <start_line_number,
-                                                                                // end_line_number>
-                                                                                // (they are same)
-        "-w",
-        "-M",
-        "-C",
-        "--",
-        file_path.as_str(),
-    ]);
-    let output = command.stdout(Stdio::piped()).output().unwrap();
-    let stdout_buf = String::from_utf8(output.stdout).unwrap();
-    let parsed_output = parse_str(stdout_buf.as_str(), &file_path, end_line_number);
-    println!("parsed_output length: {:?}", parsed_output.len());
+// pub fn extract_details(
+//     start_line_number: usize,
+//     end_line_number: usize,
+//     file_path: String,
+// ) -> Vec<AuthorDetails> {
+//     let config_obj: config_impl::Config = config_impl::read_config(config::CONFIG_FILE_NAME);
+//     let mut output_auth_details: Vec<AuthorDetails> = Vec::new();
+//     // use git log -Lstart_line_number,end_line_number:file_path --no-patch
+//     for i in start_line_number..=end_line_number {
+//         let mut command = Command::new("git".to_string());
+//         command.args([
+//             "log",
+//             "-L",
+//             format!("{},{}:{}", i, i, &file_path).as_str(),
+//             "-n",
+//             config_obj.commit_hashes_threshold.to_string().as_str(),
+//             "--no-merges",
+//             "--pretty='A:%an|H:%H'",
+//             "--diff-filter=AM", // Added and Modified
+//             "--no-patch",
+//         ]);
+//         let output = command
+//             .stdout(Stdio::piped())
+//             .stderr(Stdio::piped())
+//             .output()
+//             .unwrap();
+//         let stdout_buf = String::from_utf8(output.stdout).unwrap();
+//         // let stderr_buf = String::from_utf8(output.stderr).unwrap();
+//         let parsed_output = parse_str(&stdout_buf, &file_path, start_line_number, end_line_number);
+//         let append_contextual_paths_to_struct = |mut author_details: AuthorDetails| {
+//             let commit_id = author_details.commit_hash.clone();
+//             let out_files_for_commit_hash = get_files_for_commit_hash(&commit_id);
+//             let all_files_changed: Vec<String> = out_files_for_commit_hash
+//                 .into_iter()
+//                 .filter(|f| Path::new(f).exists())
+//                 .collect();
+//             author_details.contextual_file_paths = all_files_changed;
+//             author_details
+//         };
+//         let parsed_output: Vec<AuthorDetails> = parsed_output
+//             .into_iter()
+//             .map(append_contextual_paths_to_struct)
+//             .collect();
+//         output_auth_details.extend(parsed_output);
+//     }
+//     output_auth_details
+// }
 
-    let vec_author_detail_for_line =
-        get_data_for_line(parsed_output, start_line_number, end_line_number);
-
-    let mut result_author_details: Vec<AuthorDetails> = Vec::new();
-    if vec_author_detail_for_line.is_none() {
-        return result_author_details;
-    }
-
-    let mut commit_hashes: HashSet<String> = HashSet::new();
-
-    for author_detail_for_line in vec_author_detail_for_line.unwrap() {
-        let val = author_detail_for_line;
-
-        let mut commit_id = val.commit_hash;
-        if commit_hashes.contains(&commit_id) {
-            continue;
-        }
-
-        commit_hashes.insert(commit_id.clone());
-        let out_files_for_commit_hash = get_files_for_commit_hash(&commit_id);
-        let mut all_files_changed_initial_commit: Vec<String> = Vec::new();
-        for each_file in out_files_for_commit_hash {
-            let each_file_path = Path::new(&each_file);
-            if !each_file_path.exists() {
-                // Uhmm, either the file was moved - renamed - or deleted 🤔
-                // NOTE: Deciding not to send this to the plugin, to avoid confusions...
-                continue;
-            }
-            all_files_changed_initial_commit.push(each_file);
-        }
-
-        let mut blame_count: usize = 0;
-        while blame_count != config_obj.commit_hashes_threshold {
-            blame_count += 1;
-            let line_string: String =
-                val.line_number.to_string() + &','.to_string() + &val.line_number.to_string();
-            let commit_url = commit_id.clone();
-            // if !commit_url.ends_with('^') {
-            //     commit_url = commit_id.clone() + "^";
-            // }
-            let cmd_args = vec![
-                "blame",
-                "-L",
-                &line_string,
-                "-w",
-                "-M",
-                &commit_url,
-                "--",
-                (file_path.as_str()),
-            ];
-            let new_blame_command = Command::new("git")
-                .args(cmd_args.clone())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .output()
-                .unwrap();
-            println!("Launching command...");
-            let out_buf = String::from_utf8(new_blame_command.stdout).unwrap();
-            println!("new_blame_command: {:?}", out_buf);
-            let parsed_buf = parse_str(out_buf.as_str(), &file_path, end_line_number);
-
-            if let Some(valid_val) = get_data_for_line(parsed_buf, val.line_number, val.line_number)
-            {
-                commit_id = valid_val.get(0).unwrap().commit_hash.clone();
-                let mut to_append_struct = valid_val.get(0).unwrap().clone();
-                let out_files_for_commit_hash = get_files_for_commit_hash(&commit_id);
-                let mut all_files_changed = Vec::new();
-                for each_file in out_files_for_commit_hash {
-                    let each_file_path = Path::new(&each_file);
-                    if !each_file_path.exists() {
-                        // NOTE: If file doesn't exist, maybe it was moved/renamed/deleted - so skip it for now
-                        continue;
-                    }
-                    all_files_changed.push(each_file);
-                }
-                for each_initial_commit_file in all_files_changed_initial_commit.clone() {
-                    if all_files_changed.contains(&each_initial_commit_file) {
-                        continue;
-                    }
-                    all_files_changed.push(each_initial_commit_file);
-                }
-                to_append_struct.contextual_file_paths = all_files_changed;
-                result_author_details.push(to_append_struct);
-            }
-        }
-    }
-
-    println!("Origin file path: {:?}", file_path);
-    println!("Length of data: {:?}", result_author_details.len());
-
-    // println!("Doing this for file path: {:?}", file_path);
-    // for each_result in result_author_details.iter() {
-    //     if each_result.origin_file_path == file_path {
-    //         panic!("Wrong");
-    //     }
-    // }
-    result_author_details
-}
+// pub fn extract_details(
+//     start_line_number: usize,
+//     end_line_number: usize,
+//     file_path: String,
+// ) -> Vec<AuthorDetails> {
+//     // let config_obj = config_impl::Config::default();
+//     let config_obj: config_impl::Config = config_impl::read_config(config::CONFIG_FILE_NAME);
+//     let output = Command::new("git")
+//         .args([
+//             "blame",
+//             "-L",
+//             &(start_line_number.to_string() + "," + &end_line_number.to_string()),
+//             "-w",
+//             "-M",
+//             "-C",
+//             "--",
+//             &file_path,
+//         ])
+//         .stdout(Stdio::piped())
+//         .output()
+//         .unwrap();
+//
+//     let stdout_buf = String::from_utf8(output.stdout).unwrap();
+//     let parsed_output = parse_str(&stdout_buf, &file_path, end_line_number);
+//
+//     let vec_author_detail_for_line =
+//         get_data_for_line(parsed_output, start_line_number, end_line_number);
+//
+//     let result_author_details: Arc<Mutex<Vec<AuthorDetails>>> = Arc::new(Mutex::new(Vec::new()));
+//
+//     if vec_author_detail_for_line.is_none() {
+//         return Vec::new();
+//     }
+//
+//     let mut handles = vec![];
+//
+//     for val in vec_author_detail_for_line.unwrap() {
+//         let file_path = file_path.clone();
+//         let result_author_details = Arc::clone(&result_author_details);
+//
+//         let handle = thread::spawn(move || {
+//             let mut commit_id = val.commit_hash.clone();
+//             let out_files_for_commit_hash = get_files_for_commit_hash(&commit_id);
+//             let all_files_changed_initial_commit: Vec<String> = out_files_for_commit_hash
+//                 .into_iter()
+//                 .filter(|f| Path::new(f).exists())
+//                 .collect();
+//
+//             let mut blame_count = 0;
+//
+//             while blame_count != config_obj.commit_hashes_threshold {
+//                 blame_count += 1;
+//
+//                 let line_string = format!("{},{}", val.line_number, val.line_number);
+//
+//                 let cmd_args = vec![
+//                     "blame",
+//                     "-L",
+//                     &line_string,
+//                     "-w",
+//                     "-M",
+//                     &commit_id,
+//                     "--",
+//                     &file_path,
+//                 ];
+//
+//                 let new_blame_command = Command::new("git")
+//                     .args(&cmd_args)
+//                     .stdout(Stdio::piped())
+//                     .stderr(Stdio::piped())
+//                     .output()
+//                     .unwrap();
+//
+//                 let out_buf = String::from_utf8(new_blame_command.stdout).unwrap();
+//                 let parsed_buf = parse_str(&out_buf, &file_path, val.end_line_number);
+//
+//                 if let Some(valid_val) =
+//                     get_data_for_line(parsed_buf, val.line_number, val.line_number)
+//                 {
+//                     commit_id = valid_val[0].commit_hash.clone();
+//                     let mut to_append_struct = valid_val[0].clone();
+//
+//                     let out_files_for_commit_hash = get_files_for_commit_hash(&commit_id);
+//                     let mut all_files_changed: Vec<String> = out_files_for_commit_hash
+//                         .into_iter()
+//                         .filter(|f| Path::new(f).exists())
+//                         .collect();
+//
+//                     for each_initial_commit_file in &all_files_changed_initial_commit {
+//                         if !all_files_changed.contains(each_initial_commit_file) {
+//                             all_files_changed.push(each_initial_commit_file.clone());
+//                         }
+//                     }
+//
+//                     to_append_struct.contextual_file_paths = all_files_changed;
+//
+//                     result_author_details.lock().unwrap().push(to_append_struct);
+//                 }
+//             }
+//         });
+//
+//         handles.push(handle);
+//     }
+//
+//     for handle in handles {
+//         handle.join().unwrap();
+//     }
+//
+//     Arc::try_unwrap(result_author_details)
+//         .unwrap()
+//         .into_inner()
+//         .unwrap()
+// }

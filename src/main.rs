@@ -9,9 +9,12 @@ mod git_command_algo;
 use crate::{algo_loc::perform_for_whole_file, db::DB};
 use async_recursion::async_recursion;
 use contextgpt_structs::{AuthorDetails, Cli, RequestTypeOptions};
-use git_command_algo::extract_details_for_file;
+use git_command_algo::extract_details;
 use std::{
-    path::{Path, PathBuf}, str::FromStr, sync::Arc
+    path::{Path, PathBuf},
+    str::FromStr,
+    sync::Arc,
+    io::Write,
 };
 use structopt::StructOpt;
 use tokio::sync::Mutex;
@@ -145,10 +148,11 @@ impl Server {
         // println!("Calling file\n");
 
         // Read the config file and pass defaults
-        let config_obj: config_impl::Config = config_impl::read_config(config::CONFIG_FILE_NAME);
+        // let config_obj: config_impl::Config = config_impl::read_config(config::CONFIG_FILE_NAME);
 
         // curr_db.init_db(file_path);
-        let output_author_details = perform_for_whole_file(file_path_str.to_string(), &config_obj);
+        let output_author_details = perform_for_whole_file(file_path_str.to_string());
+        println!("Output length: {}", output_author_details.len());
 
         for each_output in output_author_details.iter() {
             if each_output.origin_file_path != file_path_str {
@@ -197,6 +201,8 @@ impl Server {
                         // files_set
                         //     .spawn(async move { Server::_index_file(entry_path.clone()).await });
                         let output = Server::_index_file(entry_path.clone()).await;
+                        println!("In thread");
+                        println!("Output length: {}", output.len());
 
                         // ✅ Save to DB manually since it's not in a JoinSet
                         if !output.is_empty() {
@@ -208,7 +214,11 @@ impl Server {
                             let mut db_locked = db.lock().await.clone(); // if needed, depending on interior mutability
                             tokio::task::spawn_blocking(move || {
                                 println!("In thread");
-                                db_locked.append_to_db(&origin_file_path, start_line_number, output.clone());
+                                db_locked.append_to_db(
+                                    &origin_file_path,
+                                    start_line_number,
+                                    output.clone(),
+                                );
                                 db_locked.store();
                             })
                             .await
@@ -367,61 +377,75 @@ impl Server {
     }
 }
 
-#[tokio::main]
-async fn main() -> CliResult {
-    let output = extract_details_for_file(/*end_line_number=*/100, String::from_str("src/main.rs").unwrap(), &config_impl::Config::default());
-    Ok(())
-}
-
 // #[tokio::main]
 // async fn main() -> CliResult {
-//     let args = Cli::from_args();
-//
-//     env_logger::init();
-//     let mut server = Server {
-//         state: State::Dead,
-//         curr_db: None,
-//         state_db_handler: DBHandler {
-//             metadata: DBMetadata::default(),
-//         },
-//     };
-//
-//     // TODO: Add support for config file.
-//     // let config_obj: config_impl::Config = config_impl::read_config(config::CONFIG_FILE_NAME);
-//     // let mut file_path: Option<PathBuf> = None;
-//     // if args.file.is_some() {
-//     //     file_path = PathBuf::from_str(args.file.unwrap().as_str())
-//     //         .unwrap()
-//     //         .into();
-//     // }
-//
-//     match args.request_type {
-//         RequestTypeOptions::File => {
-//             server
-//                 .handle_server(args.folder_path.as_str(), args.file, None, None, None)
-//                 .await;
-//         }
-//         RequestTypeOptions::Author => {
-//             server
-//                 .handle_server(args.folder_path.as_str(), args.file, None, None, None)
-//                 .await;
-//         }
-//         RequestTypeOptions::Index => {
-//             server
-//                 .handle_server(args.folder_path.as_str(), None, None, None, None)
-//                 .await;
-//         }
-//         RequestTypeOptions::Query => {
-//             server
-//                 .handle_server(
-//                     args.folder_path.as_str(),
-//                     args.file,
-//                     args.start_number,
-//                     args.end_number,
-//                     Some(RequestTypeOptions::Query),
-//                 )
-//                 .await;
-//         }
-//     };
+//     let output = extract_details(
+//         1 as usize, 100,
+//         String::from_str("/Users/krshrimali/Documents/projects/source_codes/context-pilot-rs/src/main.rs").unwrap(),
+//     );
+//     println!("Length of output: {}", output.len());
+//     // write output to a file
+//     let mut idx = 0;
+//     for each_output in output.iter() {
+//         // Write each_output to a jsonf ile.
+//         let file_path = format!("output_{}.json", idx);
+//         let mut file = std::fs::File::create(file_path).unwrap();
+//         let json_output = serde_json::to_string(each_output).unwrap();
+//         file.write_all(json_output.as_bytes())?;
+//         idx += 1;
+//     }
 //     Ok(())
 // }
+//
+#[tokio::main]
+async fn main() -> CliResult {
+    let args = Cli::from_args();
+
+    env_logger::init();
+    let mut server = Server {
+        state: State::Dead,
+        curr_db: None,
+        state_db_handler: DBHandler {
+            metadata: DBMetadata::default(),
+        },
+    };
+
+    // TODO: Add support for config file.
+    // let config_obj: config_impl::Config = config_impl::read_config(config::CONFIG_FILE_NAME);
+    // let mut file_path: Option<PathBuf> = None;
+    // if args.file.is_some() {
+    //     file_path = PathBuf::from_str(args.file.unwrap().as_str())
+    //         .unwrap()
+    //         .into();
+    // }
+
+    match args.request_type {
+        RequestTypeOptions::File => {
+            server
+                .handle_server(args.folder_path.as_str(), args.file, None, None, None)
+                .await;
+        }
+        RequestTypeOptions::Author => {
+            server
+                .handle_server(args.folder_path.as_str(), args.file, None, None, None)
+                .await;
+        }
+        RequestTypeOptions::Index => {
+            server
+                .handle_server(args.folder_path.as_str(), None, None, None, None)
+                .await;
+        }
+        RequestTypeOptions::Query => {
+            server
+                .handle_server(
+                    args.folder_path.as_str(),
+                    args.file,
+                    args.start_number,
+                    args.end_number,
+                    Some(RequestTypeOptions::Query),
+                )
+                .await;
+        }
+    };
+    Ok(())
+}
