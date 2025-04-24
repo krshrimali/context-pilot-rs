@@ -1,6 +1,6 @@
 use linecount::count_lines;
 
-use crate::contextgpt_structs::AuthorDetails;
+use crate::contextgpt_structs::{AuthorDetails, AuthorDetailsV2};
 use crate::git_command_algo::{extract_details};
 use std::collections::HashMap;
 
@@ -37,7 +37,7 @@ use std::collections::HashMap;
 
 pub fn perform_for_whole_file(
     origin_file_path: String,
-) -> Vec<AuthorDetails> {
+) -> Vec<AuthorDetailsV2> {
     let file = match std::fs::File::open(&origin_file_path) {
         Ok(f) => f,
         Err(e) => {

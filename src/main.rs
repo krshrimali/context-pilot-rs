@@ -8,7 +8,7 @@ mod git_command_algo;
 
 use crate::{algo_loc::perform_for_whole_file, db::DB};
 use async_recursion::async_recursion;
-use contextgpt_structs::{AuthorDetails, Cli, RequestTypeOptions};
+use contextgpt_structs::{AuthorDetails, AuthorDetailsV2, Cli, RequestTypeOptions};
 use git_command_algo::extract_details;
 use std::{
     path::{Path, PathBuf},
@@ -140,7 +140,7 @@ impl Server {
         false
     }
 
-    async fn _index_file(file_path_inp: PathBuf) -> Vec<AuthorDetails> {
+    async fn _index_file(file_path_inp: PathBuf) -> Vec<AuthorDetailsV2> {
         // Don't make it write to the DB, write it atomically later.
         // For now, just store the output somewhere in the DB.
         let file_path = std::fs::canonicalize(file_path_inp).expect("Failed");
@@ -154,11 +154,11 @@ impl Server {
         let output_author_details = perform_for_whole_file(file_path_str.to_string());
         println!("Output length: {}", output_author_details.len());
 
-        for each_output in output_author_details.iter() {
-            if each_output.origin_file_path != file_path_str {
-                panic!("Something went wrong while indexing file and this is not expected.");
-            }
-        }
+        // for each_output in output_author_details.iter() {
+        //     if each_output.origin_file_path != file_path_str {
+        //         panic!("Something went wrong while indexing file and this is not expected.");
+        //     }
+        // }
         // TODO: (@krshrimali) Add this back.
         // Now extract output string from the output_author_details.
         // extract_string_from_output(output_author_details, /*is_author_mode=*/ false)
@@ -166,10 +166,10 @@ impl Server {
     }
 
     #[async_recursion]
-    async fn _iterate_through_workspace(&mut self, workspace_path: PathBuf) -> Vec<AuthorDetails> {
-        let mut files_set: task::JoinSet<Vec<AuthorDetails>> = task::JoinSet::new();
+    async fn _iterate_through_workspace(&mut self, workspace_path: PathBuf) -> Vec<AuthorDetailsV2> {
+        let mut files_set: task::JoinSet<Vec<AuthorDetailsV2>> = task::JoinSet::new();
         let path = Path::new(&workspace_path);
-        let mut final_authordetails: Vec<AuthorDetails> = Vec::new();
+        let mut final_authordetails: Vec<AuthorDetailsV2> = Vec::new();
 
         if path.is_dir() {
             for entry in path
@@ -237,7 +237,7 @@ impl Server {
 
                 // 🛠 Group by file path and update DB
                 use std::collections::HashMap;
-                let mut grouped_by_file: HashMap<String, Vec<AuthorDetails>> = HashMap::new();
+                let mut grouped_by_file: HashMap<String, Vec<AuthorDetailsV2>> = HashMap::new();
 
                 for detail in output_authordetails {
                     grouped_by_file
@@ -378,23 +378,26 @@ impl Server {
 }
 
 // #[tokio::main]
-// async fn main() -> CliResult {
+// async fn main() {
+//     let inp_file_path= String::from_str("/Users/krshrimali/Documents/projects/source_codes/context-pilot-rs/src/main.rs").unwrap();
 //     let output = extract_details(
-//         1 as usize, 100,
-//         String::from_str("/Users/krshrimali/Documents/projects/source_codes/context-pilot-rs/src/main.rs").unwrap(),
+//         inp_file_path,
 //     );
-//     println!("Length of output: {}", output.len());
+//     // for each_output in output.iter() {
+//     //     println!("Output: {:?}", each_output);
+//     // }
+//
 //     // write output to a file
-//     let mut idx = 0;
-//     for each_output in output.iter() {
-//         // Write each_output to a jsonf ile.
-//         let file_path = format!("output_{}.json", idx);
-//         let mut file = std::fs::File::create(file_path).unwrap();
-//         let json_output = serde_json::to_string(each_output).unwrap();
-//         file.write_all(json_output.as_bytes())?;
-//         idx += 1;
-//     }
-//     Ok(())
+//     // let mut idx = 0;
+//     // for each_output in output.iter() {
+//     //     // Write each_output to a jsonf ile.
+//     //     let file_path = format!("output_{}.json", idx);
+//     //     let mut file = std::fs::File::create(file_path).unwrap();
+//     //     let json_output = serde_json::to_string(each_output).unwrap();
+//     //     file.write_all(json_output.as_bytes())?;
+//     //     idx += 1;
+//     // }
+//     // Ok(())
 // }
 //
 #[tokio::main]
