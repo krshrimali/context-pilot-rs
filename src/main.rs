@@ -11,10 +11,10 @@ use async_recursion::async_recursion;
 use contextgpt_structs::{AuthorDetails, AuthorDetailsV2, Cli, RequestTypeOptions};
 use git_command_algo::extract_details;
 use std::{
+    io::Write,
     path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
-    io::Write,
 };
 use structopt::StructOpt;
 use tokio::sync::Mutex;
@@ -166,7 +166,10 @@ impl Server {
     }
 
     #[async_recursion]
-    async fn _iterate_through_workspace(&mut self, workspace_path: PathBuf) -> Vec<AuthorDetailsV2> {
+    async fn _iterate_through_workspace(
+        &mut self,
+        workspace_path: PathBuf,
+    ) -> Vec<AuthorDetailsV2> {
         let mut files_set: task::JoinSet<Vec<AuthorDetailsV2>> = task::JoinSet::new();
         let path = Path::new(&workspace_path);
         let mut final_authordetails: Vec<AuthorDetailsV2> = Vec::new();
