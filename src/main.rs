@@ -8,12 +8,9 @@ mod git_command_algo;
 
 use crate::{algo_loc::perform_for_whole_file, db::DB};
 use async_recursion::async_recursion;
-use contextgpt_structs::{AuthorDetails, AuthorDetailsV2, Cli, RequestTypeOptions};
-use git_command_algo::extract_details;
+use contextgpt_structs::{AuthorDetailsV2, Cli, RequestTypeOptions};
 use std::{
-    io::Write,
     path::{Path, PathBuf},
-    str::FromStr,
     sync::Arc,
 };
 use structopt::StructOpt;
@@ -233,7 +230,6 @@ impl Server {
                     if details_vec.is_empty() {
                         continue;
                     }
-                    println!("Appending for file: {}", origin_file_path);
                     let db = self.curr_db.clone().unwrap();
                     let mut db_locked = db.lock().await;
                     let start_line_number = 0;
