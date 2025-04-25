@@ -2,6 +2,7 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::PathBuf;
 use std::{collections::HashMap, fs::File, path::Path};
+use crate::git_command_algo::get_files_changed;
 use uuid;
 
 // use simple_home_dir::home_dir;
@@ -38,7 +39,7 @@ pub struct DB {
 }
 
 impl DB {
-    pub fn read(&mut self) -> DBType {
+    pub fn read(&mut self) -> DBTypeV2 {
         // let db_file_path = format!("{}/{}", self.folder_path, self.index);
         if Path::new(self.db_file_path.as_str()).exists() {
             let data_buffers = match std::fs::read_to_string(&self.db_file_path) {
@@ -65,12 +66,13 @@ impl DB {
         }
     }
 
-    pub fn read_all(&mut self, valid_indices: Vec<u32>) -> DBType {
-        let mut init_data: DBType = HashMap::new();
+    pub fn read_all(&mut self, valid_indices: Vec<u32>) -> DBTypeV2 {
+        let mut init_data: DBTypeV2 = HashMap::new();
         // let folder_path = self.folder_path.clone();
-        let workspace_path = self.workspace_path.clone();
-        let curr_file_path = self.curr_file_path.clone();
+        // let workspace_path = self.workspace_path.clone();
+        // let curr_file_path = self.curr_file_path.clone();
 
+        // TODO: Clean this up, this is bad! valid_indices later on should just be a single file.
         for &valid_index in valid_indices.iter() {
             self.index = valid_index;
 
@@ -81,25 +83,26 @@ impl DB {
                 continue;
                 // return HashMap::new();
             }
-            let mut current_data = self.read();
-            let valid_values = current_data
-                .get(&workspace_path.clone())
-                .and_then(|ws| ws.get(&curr_file_path.clone()))
-                .cloned();
-
-            let workspace_data = current_data
-                .entry(workspace_path.clone())
-                .or_insert_with(HashMap::new);
-
-            let file_data = workspace_data
-                .entry(curr_file_path.clone())
-                .or_insert_with(HashMap::new);
+            let current_data_v2 = self.read();
+            init_data = current_data_v2.clone();
+            // let valid_values = current_data_v2
+            //     .get(&workspace_path.clone())
+            //     .and_then(|ws| ws.get(&curr_file_path.clone()))
+            //     .cloned();
             //
-            // Extend the file data with valid_values if present.
-            if let Some(valid_values) = valid_values {
-                file_data.extend(valid_values.clone());
-            }
-            init_data.insert(workspace_path.clone(), workspace_data.clone());
+            // let workspace_data = current_data_v2
+            //     .entry(workspace_path.clone())
+            //     .or_insert_with(HashMap::new);
+            //
+            // let file_data = workspace_data
+            //     .entry(curr_file_path.clone())
+            //     .or_insert_with(HashMap::new);
+            // //
+            // // Extend the file data with valid_values if present.
+            // if let Some(valid_values) = valid_values {
+            //     file_data.extend(valid_values.clone());
+            // }
+            // init_data.insert(workspace_path.clone(), workspace_data.clone());
         }
         init_data
     }
@@ -142,7 +145,7 @@ impl DB {
         // let db_file_index = self.find_index(curr_file_path.unwrap_or(""));
         // Filename will be: <db_file_index>.json
         let valid_indices = db_file_index.unwrap_or(vec![self.index]);
-        self.current_data = self.read_all(valid_indices.clone());
+        self.current_data_v2 = self.read_all(valid_indices.clone());
     }
 
     fn find_index(&mut self, curr_file_path: &str) -> Option<Vec<u32>> {
@@ -293,45 +296,87 @@ impl DB {
         search_field_first: &String,
         start_line_number: &usize,
         end_line_number: &usize,
-    ) -> (Option<Vec<AuthorDetails>>, Vec<u32>) {
-        let mut already_computed_data: Vec<AuthorDetails> = vec![];
+    ) -> (HashMap<String, usize>, Vec<u32>) {
+        // let mut already_computed_data: Vec<AuthorDetails> = vec![];
         let mut uncovered_indices: Vec<u32> = vec![];
 
-        // Normalize path to absolute
-        let abs_search_path = PathBuf::from(search_field_first)
-            .canonicalize()
-            .unwrap_or_else(|_| {
-                panic!("Failed to canonicalize search path: {}", search_field_first)
-            })
-            .to_str()
-            .unwrap()
-            .to_string();
+        // // Normalize path to absolute
+        // let abs_search_path = PathBuf::from(search_field_first)
+        //     .canonicalize()
+        //     .unwrap_or_else(|_| {
+        //         panic!("Failed to canonicalize search path: {}", search_field_first)
+        //     })
+        //     .to_str()
+        //     .unwrap()
+        //     .to_string();
 
-        if let Some(workspace_data) = self.current_data.get_mut(&self.workspace_path) {
-            if let Some(file_line_data) = workspace_data.get_mut(&abs_search_path) {
-                for each_line_idx in *start_line_number..=*end_line_number {
-                    let each_line_idx = each_line_idx as u32;
-                    if let Some(eligible_data) = file_line_data.get_mut(&each_line_idx) {
-                        already_computed_data.append(eligible_data);
-                    } else {
-                        uncovered_indices.push(each_line_idx);
+        // Find the "closest" maximum index to the given index.
+        // Let's say if start_line_number is 5, and data is: ['3': [...], '7': [..., ...]]
+        // Output you are looking for is of "7'"
+
+        // Now get all the commit_hashes in the max_index entry.
+        let mut counter_for_paths: HashMap<String, usize> = HashMap::new();
+        for i in *start_line_number..=*end_line_number {
+            let mut max_index: Option<usize> = None;
+            for key in self.current_data_v2.keys() {
+                if *key > i {
+                    max_index = Some(*key);
+                } else {
+                    break;
+                }
+            }
+            match max_index {
+                Some(index) => {
+                    if let Some(commit_hashes) = self.current_data_v2.get(&index) {
+                        // If the index is present, we can get the commit_hashes
+                        // and add them to the counter_for_paths.
+                        for commit_hash in commit_hashes {
+                            // Compute contextual file paths using the commit hash.
+                            // We use git show for this.
+                            let relevant_file_paths = get_files_changed(commit_hash);
+                            // Add each file path and increment count if it already existed.
+                            for rel_path in relevant_file_paths.iter() {
+                                *counter_for_paths
+                                    .entry(rel_path.clone())
+                                    .or_insert(0) += 1;
+                            }
+                        }
                     }
                 }
-            } else {
-                // File not present under current workspace
-                uncovered_indices
-                    .extend((*start_line_number..=*end_line_number).map(|idx| idx as u32));
+                None => {
+                    // No data found for the given index
+                    // uncovered_indices.extend((*start_line_number..=*end_line_number).map(|idx| idx as u32));
+                    uncovered_indices.push(i as u32);
+                }
             }
-        } else {
-            // Workspace not found
-            uncovered_indices.extend((*start_line_number..=*end_line_number).map(|idx| idx as u32));
         }
+        (counter_for_paths, uncovered_indices)
 
-        if already_computed_data.is_empty() {
-            (None, uncovered_indices)
-        } else {
-            (Some(already_computed_data), uncovered_indices)
-        }
+        // if let Some(workspace_data) = self.current_data.get_mut(&self.workspace_path) {
+        //     if let Some(file_line_data) = workspace_data.get_mut(&abs_search_path) {
+        //         for each_line_idx in *start_line_number..=*end_line_number {
+        //             let each_line_idx = each_line_idx as u32;
+        //             if let Some(eligible_data) = file_line_data.get_mut(&each_line_idx) {
+        //                 already_computed_data.append(eligible_data);
+        //             } else {
+        //                 uncovered_indices.push(each_line_idx);
+        //             }
+        //         }
+        //     } else {
+        //         // File not present under current workspace
+        //         uncovered_indices
+        //             .extend((*start_line_number..=*end_line_number).map(|idx| idx as u32));
+        //     }
+        // } else {
+        //     // Workspace not found
+        //     uncovered_indices.extend((*start_line_number..=*end_line_number).map(|idx| idx as u32));
+        // }
+
+        // if already_computed_data.is_empty() {
+        //     (None, uncovered_indices)
+        // } else {
+        //     (Some(already_computed_data), uncovered_indices)
+        // }
     }
 
     pub fn query(&mut self, file_path: String, start_number: usize, end_number: usize) {
@@ -344,31 +389,35 @@ impl DB {
                 .lines()
                 .count();
         }
-        let (maybe_results, _uncovered_indices) =
+        let (relevant_paths_with_counter, _uncovered_indices) =
             self.exists_and_return(&file_path, &start_number, &end_line_number);
 
-        match maybe_results {
-            Some(results) => {
-                let mut relevance_counter: HashMap<String, usize> = HashMap::new();
-
-                for author_detail in results {
-                    for path in &author_detail.contextual_file_paths {
-                        *relevance_counter.entry(path.clone()).or_insert(0) += 1;
-                    }
-                }
-
-                let mut contextual_paths: Vec<(&String, &usize)> =
-                    relevance_counter.iter().collect();
-                contextual_paths.sort_by(|a, b| b.1.cmp(a.1)); // Sort by descending relevance
-
-                for (path, count) in contextual_paths {
-                    println!("{} - {} occurrences", path, count);
-                }
-            }
-            None => {
-                println!("⚠️ No matching data found for: {}", file_path);
-            }
+        for (path, count) in relevant_paths_with_counter.iter() {
+            println!("{} - {} occurrences", path, count);
         }
+
+        // match maybe_results {
+        //     Some(results) => {
+        //         let mut relevance_counter: HashMap<String, usize> = HashMap::new();
+        //
+        //         for author_detail in results {
+        //             for path in &author_detail.contextual_file_paths {
+        //                 *relevance_counter.entry(path.clone()).or_insert(0) += 1;
+        //             }
+        //         }
+        //
+        //         let mut contextual_paths: Vec<(&String, &usize)> =
+        //             relevance_counter.iter().collect();
+        //         contextual_paths.sort_by(|a, b| b.1.cmp(a.1)); // Sort by descending relevance
+        //
+        //         for (path, count) in contextual_paths {
+        //             println!("{} - {} occurrences", path, count);
+        //         }
+        //     }
+        //     None => {
+        //         println!("⚠️ No matching data found for: {}", file_path);
+        //     }
+        // }
     }
 }
 

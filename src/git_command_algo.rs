@@ -6,6 +6,32 @@ use std::{
     process::{Command, Stdio},
 };
 
+
+pub fn get_files_changed(commit_hash: &str) -> Vec<String> {
+    // Use git show (minimal) API to find "all the files" changed in the given commit hash.
+    // git show --pretty="" --name-only <commit_hash>
+    let mut command = Command::new("git");
+    let c_hash = commit_hash.strip_suffix("'").unwrap();
+    command.args([
+        "show",
+        "--pretty=",
+        "--name-only",
+        c_hash,
+    ]);
+    let output = command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .unwrap();
+    let stdout_buf = String::from_utf8(output.stdout).unwrap();
+    let mut files_changed: Vec<String> = Vec::new();
+    for line in stdout_buf.lines() {
+        files_changed.push(line.to_string());
+    }
+    files_changed
+}
+
+
 pub fn parse_git_log_l(input_str: &str) -> AuthorDetailsV2 {
     // Ouptut is similar to:
     //A:Kushashwa Ravi Shrimali|H:84ada44f9980535f719803f009401b68b0b7336d
