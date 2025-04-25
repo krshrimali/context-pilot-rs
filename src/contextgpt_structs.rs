@@ -77,3 +77,11 @@ pub struct AuthorDetails {
     pub line_number: usize,
     pub end_line_number: usize,
 }
+
+#[derive(Default, Debug, Clone, Deserialize, Serialize)]
+pub struct AuthorDetailsV2 {
+    pub line_number: usize,
+    pub origin_file_path: String,
+    pub commit_hashes: Vec<String>,
+    pub author_full_name: Vec<String>,
+}

@@ -2,27 +2,37 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::PathBuf;
 use std::{collections::HashMap, fs::File, path::Path};
+use uuid;
 
 // use simple_home_dir::home_dir;
 
 use crate::config::MAX_ITEMS_IN_EACH_DB_FILE;
+use crate::contextgpt_structs::AuthorDetailsV2;
 use crate::{config, contextgpt_structs::AuthorDetails};
 
 // workspace_path: file_path: 1: AuthorDetails
 type DBType = HashMap<String, HashMap<String, HashMap<u32, Vec<AuthorDetails>>>>;
+
+// type DBTypeV2 = HashMap<String, HashMap<String, HashMap<u32, Vec<AuthorDetailsV2>>>>;
+// {"line_number": [commit_hash_1, ...]}
+type DBTypeV2 = HashMap<usize, Vec<String>>;
+
 type MappingDBType = HashMap<String, Vec<u32>>;
+type MappingDBTypeV2 = HashMap<String, String>;
 
 // index; folder_path; currLines;
 #[derive(Default, Clone)]
 pub struct DB {
-    pub index: u32,                // The line of code that you are at, right now? TODO:
+    pub index: u32, // The line of code that you are at, right now? TODO:
     pub folder_path: String, // Current folder path that this DB is processing, or the binary is running
     pub curr_items: u32,     // TODO:
     pub mapping_file_name: String, // This is for storing which file is in which folder/file? <-- TODO:
     pub current_data: DBType, // The data that we have from the loaded DB into our inhouse member
+    pub current_data_v2: DBTypeV2,
     pub db_file_path: String,
     pub mapping_file_path: String,
     pub mapping_data: MappingDBType,
+    // pub mapping_data_v2: MappingDBTypeV2,
     pub curr_file_path: String,
     pub workspace_path: String,
 }
@@ -96,9 +106,6 @@ impl DB {
 
     // Initialise the DB if it doesn't exist already
     pub fn init_db(&mut self, workspace_path: &str, curr_file_path: Option<&str>) {
-        // let folder_path = Path::new(simple_home_dir::home_dir().unwrap().to_str().unwrap())
-        //     .join(config::DB_FOLDER);
-        // let db_folder = config::DB_FOLDER.to_owned() + &self.folder_path;
         let db_folder = format!("{}/{}", config::DB_FOLDER, self.folder_path);
         self.workspace_path = String::from(workspace_path);
         self.curr_file_path = String::from(curr_file_path.unwrap_or(""));
@@ -222,8 +229,8 @@ impl DB {
     pub fn append_to_db(
         &mut self,
         configured_file_path: &String,
-        start_line_idx: usize,
-        all_data: Vec<AuthorDetails>,
+        _: usize,
+        all_data: Vec<AuthorDetailsV2>,
     ) {
         self.curr_file_path = configured_file_path.clone();
         if all_data.is_empty() {
@@ -231,25 +238,11 @@ impl DB {
         }
 
         self.curr_items += all_data.len() as u32; // Just track number of items
-
-        let end_line_idx = all_data[0].end_line_number;
-
-        let workspace_entry = self
-            .current_data
-            .entry(self.workspace_path.clone())
-            .or_insert_with(HashMap::new);
-
-        let file_entry = workspace_entry
-            .entry(configured_file_path.clone())
-            .or_insert_with(HashMap::new);
-
-        for line_idx in start_line_idx..=end_line_idx {
-            let line_idx = line_idx as u32;
-
-            file_entry
-                .entry(line_idx)
+        for single_detail in all_data {
+            self.current_data_v2
+                .entry(single_detail.line_number)
                 .or_insert_with(Vec::new)
-                .extend(all_data.clone());
+                .extend(single_detail.commit_hashes);
         }
     }
 
@@ -259,71 +252,23 @@ impl DB {
 
     pub fn store(&mut self) {
         let CHUNK_SIZE = 30;
-        if self.current_data.is_empty() {
+        if self.current_data_v2.is_empty() {
             eprintln!("No data to store.");
             return;
         }
 
-        //println!("📝 Starting to store data...");
-
-        // Flatten all data first
-        let mut flat_data: Vec<(String, String, u32, Vec<AuthorDetails>)> = vec![];
-        for (workspace_path, files_map) in &self.current_data {
-            for (file_path, lines_map) in files_map {
-                for (line_number, author_details_list) in lines_map {
-                    flat_data.push((
-                        workspace_path.clone(),
-                        file_path.clone(),
-                        *line_number,
-                        author_details_list.clone(),
-                    ));
-                }
-            }
+        let db_file_path = format!("{}/{}.json", self.folder_path, self.index);
+        self.index += 1; // increment index for the next file.
+        self.mapping_data
+            .entry(self.curr_file_path.clone())
+            .or_insert_with(Vec::new)
+            .push(self.index);
+        let output_string = serde_json::to_string(&self.current_data_v2);
+        if let Err(e) = std::fs::write(&db_file_path, output_string.unwrap()) {
+            eprintln!("❌ Failed writing DB file {}: {}", db_file_path, e);
+        } else {
+            println!("✅ Successfully stored shard: {}", db_file_path);
         }
-
-        //println!("🔵 Total entries: {}", flat_data.len());
-
-        // Now chunk the flat_data
-        let chunks = flat_data.chunks(CHUNK_SIZE);
-
-        for chunk in chunks {
-            let mut chunk_map: HashMap<String, HashMap<String, HashMap<u32, Vec<AuthorDetails>>>> =
-                HashMap::new();
-
-            for (workspace_path, file_path, line_number, author_details_list) in chunk {
-                chunk_map
-                    .entry(workspace_path.clone())
-                    .or_insert_with(HashMap::new)
-                    .entry(file_path.clone())
-                    .or_insert_with(HashMap::new)
-                    .insert(*line_number, author_details_list.clone());
-            }
-
-            // Write each chunk to a separate file
-            let db_file_path = format!("{}/{}.json", self.folder_path, self.index);
-            //println!("📦 Writing shard: {}", db_file_path);
-
-            let output_string = serde_json::to_string_pretty(&chunk_map)
-                .expect("Failed to serialize chunk");
-
-            if let Err(e) = std::fs::write(&db_file_path, output_string) {
-                eprintln!("❌ Failed writing DB file {}: {}", db_file_path, e);
-            } else {
-                println!("✅ Successfully stored shard: {}", db_file_path);
-            }
-
-            //println!("curr file path: {}", self.curr_file_path);
-
-            // Update mapping
-            self.mapping_data
-                .entry(self.curr_file_path.clone())
-                .or_insert_with(Vec::new)
-                .push(self.index);
-
-            self.index += 1; // go to next shard
-        }
-
-        //println!("mapping data: {:?}", self.mapping_data);
 
         // Update mapping file
         if let Ok(mut file) = File::create(&self.mapping_file_path) {
@@ -333,13 +278,15 @@ impl DB {
                 eprintln!("❌ Failed writing mapping: {}", e);
             }
         } else {
-            eprintln!("❌ Failed to create mapping file: {}", self.mapping_file_path);
+            eprintln!(
+                "❌ Failed to create mapping file: {}",
+                self.mapping_file_path
+            );
         }
 
-        self.current_data.clear(); // clear everything after storing
+        self.current_data_v2.clear(); // clear everything after storing
         self.curr_items = 0; // reset
     }
-
 
     pub fn exists_and_return(
         &mut self,
