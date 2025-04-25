@@ -1,15 +1,9 @@
-use crate::{
-    config, config_impl, contextgpt_structs::AuthorDetails, contextgpt_structs::AuthorDetailsV2,
-};
+use crate::contextgpt_structs::AuthorDetailsV2;
 
 use std::{
-    collections::HashMap,
     fs::File,
     io::{BufRead, BufReader},
-    path::Path,
     process::{Command, Stdio},
-    sync::{Arc, Mutex},
-    thread,
 };
 
 pub fn parse_git_log_l(input_str: &str) -> AuthorDetailsV2 {
@@ -47,123 +41,11 @@ pub fn parse_git_log_l(input_str: &str) -> AuthorDetailsV2 {
         hashes.push(commit_hash.to_string());
 
         vec_auth_details.commit_hashes.push(commit_hash.to_string());
-        vec_auth_details.author_full_name.push(author_str.to_string());
-        //
-        // // let author_details = AuthorDetailsV2 {
-        // //     commit_hashes: hashes,
-        // //     author_full_name: author_str.to_string(),
-        // // };
-        // vec_auth_details.push(author_details);
+        vec_auth_details
+            .author_full_name
+            .push(author_str.to_string());
     }
     vec_auth_details
-}
-
-pub fn parse_str(input_str: &str, file_path: &str, end_line_number: usize) -> Vec<AuthorDetails> {
-    let mut author_details_vec: Vec<AuthorDetails> = Vec::new();
-
-    for line in input_str.lines() {
-        if line.trim().len() < 3 {
-            continue;
-        }
-
-        // Split on the first '('
-        let (left_part, right_part) = match line.split_once('(') {
-            Some((left, right)) => (left.trim(), right),
-            None => continue,
-        };
-
-        // Split on the first ')'
-        let author_str = match right_part.split_once(')') {
-            Some((author, _)) => author.trim(),
-            None => continue,
-        };
-
-        let commit_hash = match left_part.split_whitespace().next() {
-            Some(hash) => hash,
-            None => continue,
-        };
-
-        let author_details = AuthorDetails::serialize_from_str(
-            author_str.to_string(),
-            commit_hash.to_string(),
-            file_path,
-            Vec::new(),
-            end_line_number,
-        );
-
-        author_details_vec.push(author_details);
-    }
-
-    author_details_vec
-}
-
-// pub fn parse_str_(
-//     input_str: &str,
-//     file_path: &str,
-//     line_number: usize,
-//     end_line_number: usize,
-// ) -> Vec<AuthorDetails> {
-//     let mut author_details_vec: Vec<AuthorDetails> = Vec::new();
-//
-//     for line in input_str.split('\n') {
-//         // Format: "A:<Author Name> H:<Commit Hash>"
-//         // Example: "A:John Doe H:abc1234"
-//         let parts: Vec<&str> = line.split('|').collect();
-//         if parts.len() < 2 {
-//             continue; // Skip lines that don't have the expected format
-//         }
-//         let author_str = parts[0].trim().replace("A:", "");
-//         let commit_hash = parts[1].trim().replace("H:", "");
-//
-//         let author_details = AuthorDetails::serialize_from_str(
-//             author_str.to_string(),
-//             commit_hash.to_string(),
-//             file_path,
-//             Vec::new(),
-//             line_number,
-//             end_line_number,
-//         );
-//
-//         author_details_vec.push(author_details);
-//     }
-//
-//     author_details_vec
-// }
-
-pub fn get_files_for_commit_hash(commit_hash: &str) -> Vec<String> {
-    let diff_command = Command::new("git")
-        .args(["show", "--name-only", "--pretty=''", commit_hash])
-        .stdout(Stdio::piped())
-        .output()
-        .unwrap();
-    let diff_buf = String::from_utf8(diff_command.stdout).unwrap();
-    let mut out_vec: Vec<String> = vec![];
-    for item in diff_buf.split('\n') {
-        if item.is_empty() {
-            continue;
-        }
-        out_vec.push(item.to_string());
-    }
-    out_vec
-}
-
-pub fn get_data_for_line(
-    parsed_output: Vec<AuthorDetails>,
-    start_line_number: usize,
-    end_line_number: usize,
-) -> Option<Vec<AuthorDetails>> {
-    let mut output_list: Vec<AuthorDetails> = vec![];
-    for output in parsed_output {
-        if output.line_number >= start_line_number && output.line_number <= end_line_number {
-            output_list.push(output);
-        }
-    }
-    // TODO: Address when line number is not valid or found
-    if output_list.is_empty() {
-        None
-    } else {
-        Some(output_list)
-    }
 }
 
 pub fn extract_details(file_path: String) -> Vec<AuthorDetailsV2> {
@@ -200,6 +82,9 @@ pub fn extract_details(file_path: String) -> Vec<AuthorDetailsV2> {
             .unwrap();
         let stdout_buf = String::from_utf8(output.stdout).unwrap();
         let mut parsed_output = parse_git_log_l(&stdout_buf);
+        if parsed_output.commit_hashes.is_empty() {
+            continue;
+        }
         parsed_output.line_number = i;
         parsed_output.origin_file_path = file_path.clone();
         final_output.push(parsed_output);

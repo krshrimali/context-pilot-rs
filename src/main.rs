@@ -201,32 +201,12 @@ impl Server {
                 } else {
                     if Server::_is_valid_file(&entry_path) {
                         log!(Level::Info, "File is valid: {}", entry_path.display());
-                        // files_set
-                        //     .spawn(async move { Server::_index_file(entry_path.clone()).await });
-                        let output = Server::_index_file(entry_path.clone()).await;
-                        println!("In thread");
-                        println!("Output length: {}", output.len());
-
-                        // ✅ Save to DB manually since it's not in a JoinSet
-                        if !output.is_empty() {
-                            let db = self.curr_db.clone().unwrap();
-                            // let mut db_locked = db.lock().await;
-                            let start_line_number = 0;
-                            let origin_file_path = output.first().unwrap().origin_file_path.clone();
-                            // Offload to blocking thread
-                            let mut db_locked = db.lock().await.clone(); // if needed, depending on interior mutability
-                            tokio::task::spawn_blocking(move || {
-                                println!("In thread");
-                                db_locked.append_to_db(
-                                    &origin_file_path,
-                                    start_line_number,
-                                    output.clone(),
-                                );
-                                db_locked.store();
-                            })
-                            .await
-                            .expect("Failed to store DB");
-                        }
+                        files_set.spawn({
+                            async move {
+                                let output = Server::_index_file(entry_path.clone()).await;
+                                output
+                            }
+                        });
                     }
                 }
             }
@@ -250,6 +230,10 @@ impl Server {
                 }
 
                 for (origin_file_path, details_vec) in grouped_by_file {
+                    if details_vec.is_empty() {
+                        continue;
+                    }
+                    println!("Appending for file: {}", origin_file_path);
                     let db = self.curr_db.clone().unwrap();
                     let mut db_locked = db.lock().await;
                     let start_line_number = 0;
