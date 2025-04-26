@@ -98,7 +98,7 @@ pub fn extract_details(file_path: String) -> Vec<AuthorDetailsV2> {
                 "-L",
                 &format!("{},{}:{}", i, i, &*file_path),
                 "--no-merges",
-                "--pretty='A:%an|H:%H'",
+                "--pretty='A:%an|H:%h'",
                 "--diff-filter=AM",
                 "--no-patch",
                 "--reverse",
