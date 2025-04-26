@@ -84,7 +84,7 @@ impl DB {
                 // return HashMap::new();
             }
             let current_data_v2 = self.read();
-            init_data = current_data_v2.clone();
+            init_data.extend(current_data_v2.clone());
             // let valid_values = current_data_v2
             //     .get(&workspace_path.clone())
             //     .and_then(|ws| ws.get(&curr_file_path.clone()))
