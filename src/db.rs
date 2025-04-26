@@ -4,6 +4,9 @@ use std::path::PathBuf;
 use std::{collections::HashMap, fs::File, path::Path};
 use crate::git_command_algo::get_files_changed;
 use uuid;
+use std::process::{Command, Stdio};
+use std::sync::Arc;
+use crossbeam::thread;
 
 // use simple_home_dir::home_dir;
 
@@ -318,10 +321,18 @@ impl DB {
         let mut counter_for_paths: HashMap<String, usize> = HashMap::new();
         for i in *start_line_number..=*end_line_number {
             let mut max_index: Option<usize> = None;
-            for key in self.current_data_v2.keys() {
-                if *key > i {
-                    max_index = Some(*key);
-                } else {
+            // for key in self.current_data_v2.keys() {
+            //     if *key > i {
+            //         max_index = Some(*key);
+            //     }
+            // }
+            // Find index that is "closest" max to the given index.
+            // This is the index that we will use to get the commit_hashes.
+            let mut keys: Vec<_> = self.current_data_v2.keys().collect();
+            keys.sort();
+            for key in keys.iter() {
+                if **key > i {
+                    max_index = Some(**key);
                     break;
                 }
             }

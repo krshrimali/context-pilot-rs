@@ -5,6 +5,9 @@ use std::{
     io::{BufRead, BufReader},
     process::{Command, Stdio},
 };
+use std::sync::Arc;
+use crossbeam::thread;
+use rayon::prelude::*;
 
 
 pub fn get_files_changed(commit_hash: &str) -> Vec<String> {
@@ -75,45 +78,49 @@ pub fn parse_git_log_l(input_str: &str) -> AuthorDetailsV2 {
 }
 
 pub fn extract_details(file_path: String) -> Vec<AuthorDetailsV2> {
-    // Run git log -L start_line_number,end_line_number:file_path --reverse to get the evolution of
-    // the particular lines.
-    // Find start line number and end line number of the file path.
     let start_line_number = 1;
-    // Get the last line number by reading the file path
     let end_line_number = File::open(&file_path)
         .map(|file| {
             let reader = BufReader::new(file);
             reader.lines().count()
         })
         .unwrap_or(0);
-    let mut final_output: Vec<AuthorDetailsV2> = Vec::new();
-    for i in start_line_number..=end_line_number {
-        let mut command = Command::new("git".to_string());
-        command.args([
-            "log",
-            "-L",
-            format!("{},{}:{}", i, i, &file_path).as_str(),
-            // "-n",
-            // "1",
-            "--no-merges",
-            "--pretty='A:%an|H:%h'",
-            "--diff-filter=AM", // Added and Modified
-            "--no-patch",
-            "--reverse",
-        ]);
-        let output = command
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-            .unwrap();
-        let stdout_buf = String::from_utf8(output.stdout).unwrap();
-        let mut parsed_output = parse_git_log_l(&stdout_buf);
-        if parsed_output.commit_hashes.is_empty() {
-            continue;
-        }
-        parsed_output.line_number = i;
-        parsed_output.origin_file_path = file_path.clone();
-        final_output.push(parsed_output);
-    }
-    final_output
+
+    let file_path = Arc::new(file_path);
+
+    (start_line_number..=end_line_number)
+        .into_par_iter() // <--- rayon parallel iterator
+        .filter_map(|i| {
+            let file_path = Arc::clone(&file_path);
+            let mut command = Command::new("git");
+            command.args([
+                "log",
+                "-L",
+                &format!("{},{}:{}", i, i, &*file_path),
+                "--no-merges",
+                "--pretty='A:%an|H:%h'",
+                "--diff-filter=AM",
+                "--no-patch",
+                "--reverse",
+            ]);
+
+            let output = command
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .output()
+                .ok()?;
+
+            let stdout_buf = String::from_utf8(output.stdout).ok()?;
+            let mut parsed_output = parse_git_log_l(&stdout_buf);
+
+            if parsed_output.commit_hashes.is_empty() {
+                return None;
+            }
+
+            parsed_output.line_number = i;
+            parsed_output.origin_file_path = (*file_path).clone();
+
+            Some(parsed_output)
+        })
+        .collect()
 }
