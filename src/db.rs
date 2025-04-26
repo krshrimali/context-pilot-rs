@@ -4,6 +4,9 @@ use std::path::PathBuf;
 use std::{collections::HashMap, fs::File, path::Path};
 use crate::git_command_algo::get_files_changed;
 use uuid;
+use std::process::{Command, Stdio};
+use std::sync::Arc;
+use crossbeam::thread;
 
 // use simple_home_dir::home_dir;
 
