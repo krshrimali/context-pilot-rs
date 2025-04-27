@@ -88,24 +88,6 @@ impl DB {
             }
             let current_data_v2 = self.read();
             init_data.extend(current_data_v2.clone());
-            // let valid_values = current_data_v2
-            //     .get(&workspace_path.clone())
-            //     .and_then(|ws| ws.get(&curr_file_path.clone()))
-            //     .cloned();
-            //
-            // let workspace_data = current_data_v2
-            //     .entry(workspace_path.clone())
-            //     .or_insert_with(HashMap::new);
-            //
-            // let file_data = workspace_data
-            //     .entry(curr_file_path.clone())
-            //     .or_insert_with(HashMap::new);
-            // //
-            // // Extend the file data with valid_values if present.
-            // if let Some(valid_values) = valid_values {
-            //     file_data.extend(valid_values.clone());
-            // }
-            // init_data.insert(workspace_path.clone(), workspace_data.clone());
         }
         init_data
     }
@@ -152,11 +134,6 @@ impl DB {
     }
 
     fn find_index(&mut self, curr_file_path: &str) -> Option<Vec<u32>> {
-        // In case the input path is empty.
-        // if curr_file_path.is_empty() {
-        //     return None;
-        // }
-
         // In each folder -> we'll have a mapping file which contains which filename corresponds to which index (to be used in the DB file)
         self.mapping_file_name = "mapping.json".to_string();
         self.mapping_file_path = format!("{}/{}", self.folder_path, self.mapping_file_name);
@@ -257,7 +234,6 @@ impl DB {
     }
 
     pub fn store(&mut self) {
-        let CHUNK_SIZE = 30;
         if self.current_data_v2.is_empty() {
             eprintln!("No data to store.");
             return;
@@ -296,22 +272,10 @@ impl DB {
 
     pub fn exists_and_return(
         &mut self,
-        search_field_first: &String,
         start_line_number: &usize,
         end_line_number: &usize,
     ) -> (HashMap<String, usize>, Vec<u32>) {
-        // let mut already_computed_data: Vec<AuthorDetails> = vec![];
         let mut uncovered_indices: Vec<u32> = vec![];
-
-        // // Normalize path to absolute
-        // let abs_search_path = PathBuf::from(search_field_first)
-        //     .canonicalize()
-        //     .unwrap_or_else(|_| {
-        //         panic!("Failed to canonicalize search path: {}", search_field_first)
-        //     })
-        //     .to_str()
-        //     .unwrap()
-        //     .to_string();
 
         // Find the "closest" maximum index to the given index.
         // Let's say if start_line_number is 5, and data is: ['3': [...], '7': [..., ...]]
@@ -321,11 +285,6 @@ impl DB {
         let mut counter_for_paths: HashMap<String, usize> = HashMap::new();
         for i in *start_line_number..=*end_line_number {
             let mut max_index: Option<usize> = None;
-            // for key in self.current_data_v2.keys() {
-            //     if *key > i {
-            //         max_index = Some(*key);
-            //     }
-            // }
             // Find index that is "closest" max to the given index.
             // This is the index that we will use to get the commit_hashes.
             let mut keys: Vec<_> = self.current_data_v2.keys().collect();
@@ -356,38 +315,11 @@ impl DB {
                 }
                 None => {
                     // No data found for the given index
-                    // uncovered_indices.extend((*start_line_number..=*end_line_number).map(|idx| idx as u32));
                     uncovered_indices.push(i as u32);
                 }
             }
         }
         (counter_for_paths, uncovered_indices)
-
-        // if let Some(workspace_data) = self.current_data.get_mut(&self.workspace_path) {
-        //     if let Some(file_line_data) = workspace_data.get_mut(&abs_search_path) {
-        //         for each_line_idx in *start_line_number..=*end_line_number {
-        //             let each_line_idx = each_line_idx as u32;
-        //             if let Some(eligible_data) = file_line_data.get_mut(&each_line_idx) {
-        //                 already_computed_data.append(eligible_data);
-        //             } else {
-        //                 uncovered_indices.push(each_line_idx);
-        //             }
-        //         }
-        //     } else {
-        //         // File not present under current workspace
-        //         uncovered_indices
-        //             .extend((*start_line_number..=*end_line_number).map(|idx| idx as u32));
-        //     }
-        // } else {
-        //     // Workspace not found
-        //     uncovered_indices.extend((*start_line_number..=*end_line_number).map(|idx| idx as u32));
-        // }
-
-        // if already_computed_data.is_empty() {
-        //     (None, uncovered_indices)
-        // } else {
-        //     (Some(already_computed_data), uncovered_indices)
-        // }
     }
 
     pub fn query(&mut self, file_path: String, start_number: usize, end_number: usize) {
@@ -401,34 +333,11 @@ impl DB {
                 .count();
         }
         let (relevant_paths_with_counter, _uncovered_indices) =
-            self.exists_and_return(&file_path, &start_number, &end_line_number);
+            self.exists_and_return(&start_number, &end_line_number);
 
         for (path, count) in relevant_paths_with_counter.iter() {
             println!("{} - {} occurrences", path, count);
         }
-
-        // match maybe_results {
-        //     Some(results) => {
-        //         let mut relevance_counter: HashMap<String, usize> = HashMap::new();
-        //
-        //         for author_detail in results {
-        //             for path in &author_detail.contextual_file_paths {
-        //                 *relevance_counter.entry(path.clone()).or_insert(0) += 1;
-        //             }
-        //         }
-        //
-        //         let mut contextual_paths: Vec<(&String, &usize)> =
-        //             relevance_counter.iter().collect();
-        //         contextual_paths.sort_by(|a, b| b.1.cmp(a.1)); // Sort by descending relevance
-        //
-        //         for (path, count) in contextual_paths {
-        //             println!("{} - {} occurrences", path, count);
-        //         }
-        //     }
-        //     None => {
-        //         println!("⚠️ No matching data found for: {}", file_path);
-        //     }
-        // }
     }
 }
 
