@@ -140,17 +140,18 @@ impl DB {
         let mapping_path_obj = Path::new(&self.mapping_file_path);
         if !mapping_path_obj.exists() {
             // mapping file doesn't exist yet... we'll create one with the index as 0 for the given curr_file_path
-            let mut data: MappingDBType = HashMap::new();
-            data.insert(curr_file_path.to_string(), vec![self.index]);
-            self.mapping_data = data.clone();
-            self.mapping_data
-                .insert(String::from("last_used_index"), [self.index].to_vec());
-            let init_mapping_string =
-                serde_json::to_string_pretty(&self.mapping_data).expect("Unable to create data");
-            let mut mapping_path_file: File =
-                File::create(&self.mapping_file_path).expect("Couldn't create this new file...");
-            write!(mapping_path_file, "{}", init_mapping_string)
-                .expect("Couldn't write a very simple data object into a new mapping file...wow!");
+            // let mut data: MappingDBType = HashMap::new();
+            // data.insert(curr_file_path.to_string(), vec![self.index]);
+            // self.mapping_data = data.clone();
+            // self.mapping_data
+            //     .insert(String::from("last_used_index"), [self.index].to_vec());
+            // let init_mapping_string =
+            //     serde_json::to_string_pretty(&self.mapping_data).expect("Unable to create data");
+            // let mut mapping_path_file: File =
+            //     File::create(&self.mapping_file_path).expect("Couldn't create this new file...");
+            // write!(mapping_path_file, "{}", init_mapping_string)
+            //     .expect("Couldn't write a very simple data object into a new mapping file...wow!");
+            self.mapping_data = HashMap::new();
             self.db_file_path = format!("{}/{}.json", self.folder_path, self.index);
             self.current_data = HashMap::new();
             return None;
@@ -240,11 +241,11 @@ impl DB {
         }
 
         let db_file_path = format!("{}/{}.json", self.folder_path, self.index);
-        self.index += 1; // increment index for the next file.
         self.mapping_data
             .entry(self.curr_file_path.clone())
             .or_insert_with(Vec::new)
             .push(self.index);
+        self.index += 1; // increment index for the next file.
         let output_string = serde_json::to_string(&self.current_data_v2);
         if let Err(e) = std::fs::write(&db_file_path, output_string.unwrap()) {
             eprintln!("❌ Failed writing DB file {}: {}", db_file_path, e);
