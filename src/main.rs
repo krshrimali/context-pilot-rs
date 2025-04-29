@@ -148,7 +148,7 @@ impl Server {
         // let config_obj: config_impl::Config = config_impl::read_config(config::CONFIG_FILE_NAME);
 
         // curr_db.init_db(file_path);
-        let output_author_details = perform_for_whole_file(file_path_str.to_string());
+        let output_author_details = perform_for_whole_file(file_path_str.to_string()).await;
         println!("Output length: {}", output_author_details.len());
 
         // for each_output in output_author_details.iter() {

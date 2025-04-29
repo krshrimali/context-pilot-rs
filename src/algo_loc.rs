@@ -1,7 +1,7 @@
 use linecount::count_lines;
 
 use crate::contextgpt_structs::{AuthorDetails, AuthorDetailsV2};
-use crate::git_command_algo::{extract_details};
+use crate::git_command_algo::{extract_details, extract_details_parallel};
 use std::collections::HashMap;
 
 // pub fn extract_string_from_output(output: Vec<AuthorDetails>, is_author_mode: bool) -> String {
@@ -35,7 +35,7 @@ use std::collections::HashMap;
 //     res_string
 // }
 
-pub fn perform_for_whole_file(
+pub async fn perform_for_whole_file(
     origin_file_path: String,
 ) -> Vec<AuthorDetailsV2> {
     let file = match std::fs::File::open(&origin_file_path) {
@@ -54,11 +54,11 @@ pub fn perform_for_whole_file(
         }
     };
 
-    let output = extract_details(
+    let output = extract_details_parallel(
         // 1 as usize,
         // end_line_number as usize,
         origin_file_path.clone(),
-    );
+    ).await;
 
     println!("Extracted details for file: {}", origin_file_path);
 
