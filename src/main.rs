@@ -3,6 +3,7 @@ mod authordetails_impl;
 mod config;
 mod config_impl;
 mod contextgpt_structs;
+mod utils;
 mod db;
 mod diff;
 mod git_command_algo;
@@ -364,13 +365,13 @@ impl Server {
 #[tokio::main]
 async fn main() {
     let inp_file_path = "src/config.rs";
-    let history = diff::track_line_movement(inp_file_path);
-    let mut sorted_lines: Vec<_> = history.into_iter().collect();
-    sorted_lines.sort_by_key(|&(line, _)| line);
-
-    for (line, commits) in sorted_lines {
-        println!("Line {}: {:?}", line, commits);
-    }
+    // let history = diff::extract_details_with_tracking(inp_file_path);
+    // let mut sorted_lines: Vec<_> = history.into_iter().collect();
+    // sorted_lines.sort_by_key(|&(line, _)| line);
+    //
+    // for (line, commits) in sorted_lines {
+    //     println!("Line {}: {:?}", line, commits);
+    // }
 }
 
 // #[tokio::main]

@@ -1,140 +1,146 @@
-use similar::{ChangeTag, TextDiff};
-use std::collections::{HashMap, VecDeque};
-use std::process::Command;
-use strsim::levenshtein;
+use std::collections::HashMap;
+use crate::utils::levenshtein;
 
-#[derive(Debug, Clone)]
-struct LineTracker {
+/// Main function to extract and track per-line commit history from a commit diff.
+pub fn extract_details_with_tracking(
+    commit_hash: &str,
+    diff_lines: Vec<String>,
+    file_path: &str,
+    line_commit_map: &mut HashMap<String, HashMap<u32, (String, Vec<String>)>>,
+) {
+    let mut deleted_lines: Vec<(usize, String)> = Vec::new();
+    let mut added_lines: Vec<(usize, String)> = Vec::new();
+    let mut matched_additions: Vec<bool> = Vec::new();
+    let mut line_num = 0;
+
+    let mut insertion_blocks: Vec<(u32, u32)> = Vec::new();
+
+    let mut i = 0;
+    while i < diff_lines.len() {
+        let line = &diff_lines[i];
+
+        if line.starts_with("@@") {
+            // Before new hunk, finalize unmatched added lines from previous hunk
+            for (j, (add_line_no, add_content)) in added_lines.iter().enumerate() {
+                if !matched_additions.get(j).unwrap_or(&false) {
+                    track_line_commit(file_path, *add_line_no as u32, add_content.clone(), commit_hash.to_string(), line_commit_map);
+                }
+            }
+
+            deleted_lines.clear();
+            added_lines.clear();
+            matched_additions.clear();
+
+            // Parse hunk header
+            if let Some((_, after)) = line.split_once('+') {
+                if let Some((start, count)) = after.split_once(',') {
+                    line_num = start.trim().parse::<usize>().unwrap_or(0);
+
+                    // Track insertion blocks only if this hunk has + but no -
+                    let mut added_count = count.trim().parse::<usize>().unwrap_or(1);
+                    let mut j = i + 1;
+                    let mut pure_addition = true;
+                    while j < diff_lines.len() && !diff_lines[j].starts_with("@@") {
+                        if diff_lines[j].starts_with('-') {
+                            pure_addition = false;
+                        } else if !diff_lines[j].starts_with('+') {
+                            added_count -= 1;
+                        }
+                        j += 1;
+                    }
+
+                    if pure_addition && added_count > 0 {
+                        insertion_blocks.push((line_num as u32, added_count as u32));
+                    }
+                }
+            }
+
+            i += 1;
+            continue;
+        }
+
+        if line.starts_with('-') {
+            deleted_lines.push((line_num, line[1..].to_string()));
+        } else if line.starts_with('+') {
+            added_lines.push((line_num, line[1..].to_string()));
+            matched_additions.push(false);
+            line_num += 1;
+        } else {
+            line_num += 1;
+        }
+
+        i += 1;
+    }
+
+    // After last hunk
+    for (j, (add_line_no, add_content)) in added_lines.iter().enumerate() {
+        if !matched_additions.get(j).unwrap_or(&false) {
+            track_line_commit(file_path, *add_line_no as u32, add_content.clone(), commit_hash.to_string(), line_commit_map);
+        }
+    }
+
+    // Match deleted to added using Levenshtein
+    for (del_line_no, del_content) in &deleted_lines {
+        for (i, (add_line_no, add_content)) in added_lines.iter().enumerate() {
+            if matched_additions[i] {
+                continue;
+            }
+            let distance = levenshtein(&del_content, &add_content);
+            if distance <= 3 {
+                track_line_commit(file_path, *add_line_no as u32, add_content.clone(), commit_hash.to_string(), line_commit_map);
+                matched_additions[i] = true;
+                break;
+            }
+        }
+    }
+
+    // Final shifting for pure insertions
+    for (start_line, count) in insertion_blocks {
+        shift_lines_after_insert(file_path, start_line, count, line_commit_map);
+    }
+}
+
+/// Update the commit map for a given file and line.
+fn track_line_commit(
+    file_path: &str,
+    line_number: u32,
     content: String,
-    history: Vec<String>,
-    origin: Option<usize>,
-}
+    commit_hash: String,
+    map: &mut HashMap<String, HashMap<u32, (String, Vec<String>)>>,
+) {
+    let file_entry = map.entry(file_path.to_string()).or_insert_with(HashMap::new);
+    let entry = file_entry.entry(line_number).or_insert((content.clone(), Vec::new()));
 
-fn normalized_similarity(a: &str, b: &str) -> f64 {
-    let dist = levenshtein(a, b) as f64;
-    let max_len = a.len().max(b.len()) as f64;
-    if max_len == 0.0 {
-        1.0
-    } else {
-        1.0 - dist / max_len
+    if entry.0 != content {
+        entry.0 = content;
+        entry.1.push(commit_hash);
+    } else if entry.1.last().map(|c| c != &commit_hash).unwrap_or(true) {
+        entry.1.push(commit_hash);
     }
 }
 
-fn get_commits(file: &str) -> Vec<String> {
-    let output = Command::new("git")
-        .args(["log", "--reverse", "--format=%H", "--", file])
-        .output()
-        .expect("Failed to run git log");
+/// Shift all tracked lines >= `insertion_start` by `added_count` lines.
+pub fn shift_lines_after_insert(
+    file_path: &str,
+    insertion_start: u32,
+    added_count: u32,
+    map: &mut HashMap<String, HashMap<u32, (String, Vec<String>)>>,
+) {
+    if let Some(file_map) = map.get_mut(file_path) {
+        let mut shifted: HashMap<u32, (String, Vec<String>)> = HashMap::new();
+        let mut keys_to_shift: Vec<u32> = file_map
+            .keys()
+            .cloned()
+            .filter(|&k| k >= insertion_start)
+            .collect();
+        keys_to_shift.sort_unstable_by(|a, b| b.cmp(a)); // Descending
 
-    String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .map(|l| l.trim().to_string())
-        .filter(|l| !l.is_empty())
-        .collect()
-}
-
-fn get_file_at_commit(file: &str, commit: &str) -> Vec<String> {
-    let spec = format!("{}:{}", commit, file);
-    let output = Command::new("git")
-        .args(["show", &spec])
-        .output()
-        .unwrap_or_else(|_| panic!("Failed to git show {}", commit));
-
-    if output.status.success() {
-        String::from_utf8_lossy(&output.stdout)
-            .lines()
-            .map(|s| s.to_string())
-            .collect()
-    } else {
-        vec![]
-    }
-}
-
-pub fn track_line_movement(file: &str) -> HashMap<usize, Vec<String>> {
-    let commits = get_commits(file);
-    println!("Total commits to process: {}", commits.len());
-    let mut prev_content: Vec<String> = Vec::new();
-    let mut prev_lines: Vec<LineTracker> = Vec::new();
-
-    for (i, commit) in commits.iter().enumerate() {
-        println!(
-            "Processing commit {} / {}: {}",
-            i + 1,
-            commits.len(),
-            commit
-        );
-        let new_content = get_file_at_commit(file, commit);
-        let old: Vec<&str> = prev_content.iter().map(AsRef::as_ref).collect();
-        let new: Vec<&str> = new_content.iter().map(AsRef::as_ref).collect();
-        let diff = TextDiff::from_slices(&old, &new);
-
-        let mut new_lines: Vec<LineTracker> = Vec::new();
-        let mut old_index = 0;
-        let mut delete_buffer: VecDeque<(usize, String, LineTracker)> = VecDeque::new();
-
-        for change in diff.iter_all_changes() {
-            println!("Change: {:?}", change.clone());
-            match change.tag() {
-                ChangeTag::Delete => {
-                    if let Some(old_line) = prev_lines.get(old_index) {
-                        delete_buffer.push_back((old_index, change.to_string(), old_line.clone()));
-                    }
-                    old_index += 1;
-                }
-                ChangeTag::Insert => {
-                    let inserted = change.to_string();
-                    let mut matched = false;
-                    for (idx, (old_idx, deleted, tracker)) in delete_buffer.iter().enumerate() {
-                        println!("Similarity b/w {} and {}: {}", deleted, inserted, normalized_similarity(deleted, &inserted));
-                        if normalized_similarity(&deleted, &inserted) >= 0.7 {
-                            let mut updated = tracker.clone();
-                            updated.content = inserted.clone();
-                            if !updated.history.contains(commit) {
-                                updated.history.push(commit.clone());
-                            }
-                            new_lines.push(updated);
-                            delete_buffer.remove(idx);
-                            matched = true;
-                            break;
-                        }
-                    }
-                    if !matched {
-                        new_lines.push(LineTracker {
-                            content: inserted.clone(),
-                            history: vec![commit.clone()],
-                            origin: None,
-                        });
-                    }
-                }
-                ChangeTag::Equal => {
-                    if let Some(old_line) = prev_lines.get(old_index) {
-                        let mut updated = old_line.clone();
-                        if !updated.history.contains(commit) {
-                            updated.history.push(commit.clone());
-                        }
-                        new_lines.push(updated);
-                    } else {
-                        new_lines.push(LineTracker {
-                            content: change.to_string(),
-                            history: vec![commit.clone()],
-                            origin: Some(old_index + 1),
-                        });
-                    }
-                    old_index += 1;
-                }
+        for key in keys_to_shift {
+            if let Some((content, history)) = file_map.remove(&key) {
+                shifted.insert(key + added_count, (content, history));
             }
         }
 
-        prev_content = new_content;
-        prev_lines = new_lines;
+        file_map.extend(shifted);
     }
-
-    let mut result: HashMap<usize, Vec<String>> = HashMap::new();
-    for (i, line) in prev_lines.iter().enumerate() {
-        let mut commits = line.history.clone();
-        commits.sort();
-        commits.dedup();
-        result.insert(i + 1, commits);
-    }
-    result
 }

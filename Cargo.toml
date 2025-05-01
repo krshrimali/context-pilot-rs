@@ -1,5 +1,5 @@
 [package]
-name = "context-pilot"
+name = "context_pilot"
 version = "0.0.2"
 edition = "2021"
 
