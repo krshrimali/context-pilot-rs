@@ -54,19 +54,32 @@ fn categorize_diff(line: &str) -> Option<DiffCases> {
     }
 }
 
-fn reorder_map(category: Option<DiffCases>, map: &mut HashMap<u32, Vec<LineDetail>>) {
+fn reorder_map(
+    category: Option<DiffCases>,
+    map: &mut HashMap<u32, Vec<LineDetail>>,
+    line_change_before: LineChange,
+    line_change_after: LineChange,
+) {
     match category {
         Some(DiffCases::FewLinesReplacedWithSingleLine) => {
             // That means, anything after the current index, should be subtracted accordingly.
             // Modify the line numbers in the map.
-            map.iter_mut().for_each(|(line_num, details)| {
-                for detail in details {
-                    // Adjust the line number based on the category
-                    // For example, if a few lines were replaced with a single line,
-                    // you might want to adjust the line numbers accordingly.
-                    // This is just a placeholder logic.
+            // Check if the lines replaced - if any of those were closely related to the single
+            // line, if yes, then we store the commit hash into that hashmap for that line number,
+            // otherwise we delete the content from the hashmap and stop tracking that.
+            
+            // For now, just assume that they aren't similar at all. And just delete the entries
+            // from the HashMap and revise entries post it.
+            let s_line_no = line_change_before.start_line_number;
+            let e_line_no = line_change_before.start_line_number + line_change_before.change_count;
+
+            for l_no in s_line_no..= e_line_no {
+                if let Some(line_details) = map.get_mut(&l_no) {
+                    for line_detail in line_details.iter_mut() {
+                        line_detail.commit_hashes.push("commit_hash".to_string());
+                    }
                 }
-            });
+            }
         }
         Some(DiffCases::FewLinesReplacedWithFewLines) => {
             // Handle this case
@@ -152,9 +165,10 @@ fn parse_diff(commit_diff: String, map: &mut HashMap<u32, Vec<LineDetail>>) -> R
             let mut line = line.to_string();
             line = line.split_once("@@").unwrap().1.to_string();
             line = line.split_once("@@").unwrap().0.trim().to_string();
-            let (line_before, line_after) = fetch_line_numbers(line.clone());
+            let (line_before, line_after): (LineChange, LineChange) =
+                fetch_line_numbers(line.clone());
             let category = categorize_diff(line.as_str());
-            reorder_map(category, map);
+            reorder_map(category, map, line_before, line_after);
         }
     }
     Ok(())
@@ -377,5 +391,27 @@ mod tests_diff_v2 {
                 change_type: ChangeType::Added
             }
         );
+    }
+
+    #[test]
+    #[should_panic(expected = "Invalid line format: bad input")]
+    fn test_fetch_line_numbers_invalid_format() {
+        let line = "bad input"; // Invalid format.
+        fetch_line_numbers(line.to_string());
+    }
+
+    #[test]
+    fn test_reorder_map() {
+        let mut map: HashMap<u32, Vec<LineDetail>> = HashMap::new();
+        map.insert(
+            1,
+            vec![LineDetail {
+                content: "line1".to_string(),
+                commit_hashes: vec!["hash1".to_string()],
+            }],
+        );
+
+        reorder_map(Some(DiffCases::FewLinesReplacedWithSingleLine), &mut map);
+        // Add assertions based on expected behavior.
     }
 }
