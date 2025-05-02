@@ -248,7 +248,7 @@ mod tests_diff_v2 {
     }
 
     #[test]
-    fn test_fetch_line_numbers() {
+    fn test_fetch_line_numbers_replace_few_lines_with_single_line() {
         let line = "-2,5 +2";
         let (line_before, line_after) = fetch_line_numbers(line.to_string());
         assert_eq!(
@@ -264,6 +264,116 @@ mod tests_diff_v2 {
             LineChange {
                 start_line_number: 2,
                 change_count: 1,
+                change_type: ChangeType::Added
+            }
+        );
+    }
+
+    #[test]
+    fn test_fetch_line_numbers_replace_few_lines_with_few_lines() {
+        let line = "-2,5 +2,3";
+        let (line_before, line_after) = fetch_line_numbers(line.to_string());
+        assert_eq!(
+            line_before,
+            LineChange {
+                start_line_number: 2,
+                change_count: 5,
+                change_type: ChangeType::Deleted
+            }
+        );
+        assert_eq!(
+            line_after,
+            LineChange {
+                start_line_number: 2,
+                change_count: 3,
+                change_type: ChangeType::Added
+            }
+        );
+    }
+
+    #[test]
+    fn test_fetch_line_numbers_single_line_deleted() {
+        let line = "-45 +44,0";
+        let (line_before, line_after) = fetch_line_numbers(line.to_string());
+        assert_eq!(
+            line_before,
+            LineChange {
+                start_line_number: 45,
+                change_count: 1,
+                change_type: ChangeType::Deleted
+            }
+        );
+        assert_eq!(
+            line_after,
+            LineChange {
+                start_line_number: 44,
+                change_count: 0,
+                change_type: ChangeType::Added
+            }
+        );
+    }
+
+    #[test]
+    fn test_fetch_line_numbers_few_lines_deleted() {
+        let line = "-50,3 +48,0";
+        let (line_before, line_after) = fetch_line_numbers(line.to_string());
+        assert_eq!(
+            line_before,
+            LineChange {
+                start_line_number: 50,
+                change_count: 3,
+                change_type: ChangeType::Deleted
+            }
+        );
+        assert_eq!(
+            line_after,
+            LineChange {
+                start_line_number: 48,
+                change_count: 0,
+                change_type: ChangeType::Added
+            }
+        );
+    }
+
+    #[test]
+    fn test_fetch_line_numbers_single_line_replaced_with_another_single_line() {
+        let line = "-159 +96";
+        let (line_before, line_after) = fetch_line_numbers(line.to_string());
+        assert_eq!(
+            line_before,
+            LineChange {
+                start_line_number: 159,
+                change_count: 1,
+                change_type: ChangeType::Deleted
+            }
+        );
+        assert_eq!(
+            line_after,
+            LineChange {
+                start_line_number: 96,
+                change_count: 1,
+                change_type: ChangeType::Added
+            }
+        );
+    }
+
+    #[test]
+    fn test_fetch_line_numbers_new_lines_added() {
+        let line = "-169,0 +104,3";
+        let (line_before, line_after) = fetch_line_numbers(line.to_string());
+        assert_eq!(
+            line_before,
+            LineChange {
+                start_line_number: 169,
+                change_count: 0,
+                change_type: ChangeType::Deleted
+            }
+        );
+        assert_eq!(
+            line_after,
+            LineChange {
+                start_line_number: 104,
+                change_count: 3,
                 change_type: ChangeType::Added
             }
         );
