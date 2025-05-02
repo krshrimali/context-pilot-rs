@@ -709,5 +709,22 @@ mod tests_diff_v2 {
         );
         // Added one line, deleted one line.
         assert_eq!(map.len(), 19);
+
+        // Now check for the case with "few lines deleted".
+        reorder_map(
+            "commit4".to_string(),
+            Some(DiffCases::FewLinesDeleted),
+            &mut map,
+            LineChange {
+                start_line_number: 20,
+                change_count: 3,
+                change_type: ChangeType::Deleted,
+            },
+            LineChange {
+                start_line_number: 19,
+                change_count: 0,
+                change_type: ChangeType::Added,
+            },
+        );
     }
 }
