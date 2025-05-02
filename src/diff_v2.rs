@@ -15,6 +15,7 @@ enum ChangeType {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct LineChange {
     start_line_number: u32,
+    // changed_content: String,
     change_count: u32,
     change_type: ChangeType,
 }
@@ -55,6 +56,7 @@ fn categorize_diff(line: &str) -> Option<DiffCases> {
 }
 
 fn reorder_map(
+    commit_hash: String,
     category: Option<DiffCases>,
     map: &mut HashMap<u32, Vec<LineDetail>>,
     line_change_before: LineChange,
@@ -67,22 +69,113 @@ fn reorder_map(
             // Check if the lines replaced - if any of those were closely related to the single
             // line, if yes, then we store the commit hash into that hashmap for that line number,
             // otherwise we delete the content from the hashmap and stop tracking that.
-            
+
             // For now, just assume that they aren't similar at all. And just delete the entries
             // from the HashMap and revise entries post it.
             let s_line_no = line_change_before.start_line_number;
             let e_line_no = line_change_before.start_line_number + line_change_before.change_count;
 
-            for l_no in s_line_no..= e_line_no {
-                if let Some(line_details) = map.get_mut(&l_no) {
-                    for line_detail in line_details.iter_mut() {
-                        line_detail.commit_hashes.push("commit_hash".to_string());
+            // We only change from s_line_no+1 till the end_line_no, since s_line_no is essentially
+            // replaced, so we need to start tracking for it again.
+            for l_no in (s_line_no + 1)..=e_line_no {
+                map.remove(&l_no);
+            }
+
+            // Now update all the lines in the hash map and shift them:
+            for l_no in map.keys().cloned().collect::<Vec<u32>>() {
+                if l_no > e_line_no {
+                    let new_idx = l_no - (line_change_before.change_count - 1);
+                    let to_remove = map.remove(&new_idx);
+                    map.insert(new_idx, to_remove.unwrap());
+                }
+            }
+            // For the first line that just got replaced, create a new entry.
+            map.insert(
+                s_line_no,
+                vec![LineDetail {
+                    content: "New Content".to_string(), // FIXME: We don't have content yet. This is bad?
+                    commit_hashes: vec![commit_hash],
+                }],
+            );
+        }
+        Some(DiffCases::FewLinesReplacedWithFewLines) => {
+            let s_line_no = line_change_before.start_line_number;
+            let e_line_no = line_change_before.start_line_number + line_change_before.change_count;
+
+            let diff =
+                line_change_after.change_count as i32 - line_change_before.change_count as i32;
+            if (diff > 0) {
+                // We need to add lines.
+                for l_no in s_line_no..=e_line_no {
+                    map.remove(&l_no);
+                    // Insert new entries again for these lines.
+                    map.insert(
+                        l_no,
+                        vec![LineDetail {
+                            content: "New Content".to_string(), // FIXME: We don't have content yet. This is bad?
+                            commit_hashes: vec![commit_hash.clone()],
+                        }],
+                    );
+                }
+
+                // Now, for e_line_no:e_line_no+diff, we need to move them first so that we don't
+                // lose content.
+                for l_no in (e_line_no + 1)..=(e_line_no + diff as u32) {
+                    let new_idx = l_no + diff as u32;
+                    let to_remove = map.remove(&new_idx);
+                    map.insert(new_idx, to_remove.unwrap());
+
+                    // Once this moving is done, we need to add lines for l_no:
+                    map.insert(
+                        l_no,
+                        vec![LineDetail {
+                            content: "New Content".to_string(), // FIXME: We don't have content yet. This is bad?
+                            commit_hashes: vec![commit_hash.clone()],
+                        }],
+                    );
+                }
+
+                // We have handled e_line_no:e_line_no+diff; but anything after that, also needs to
+                // be shifted.
+                for l_no in map.keys().cloned().collect::<Vec<u32>>() {
+                    if l_no > e_line_no + diff as u32 {
+                        let new_idx = l_no + (diff as u32);
+                        let to_remove = map.remove(&new_idx);
+                        map.insert(new_idx, to_remove.unwrap());
+                    }
+                }
+            } else {
+                // Lines deleted > Lines added.
+                for l_no in s_line_no..=e_line_no {
+                    map.remove(&l_no);
+                }
+
+                // Add content for the new lines.
+                for l_no in s_line_no
+                    ..=(line_change_after.start_line_number + line_change_after.change_count)
+                {
+                    map.insert(
+                        l_no,
+                        vec![LineDetail {
+                            content: "New Content".to_string(), // FIXME: We don't have content yet. This is bad?
+                            commit_hashes: vec![commit_hash.clone()],
+                        }],
+                    );
+                }
+
+                // Now for all the lines in the map that are > line_change_after.start_line_number
+                // + line_change_after.change_count, move them by -diff.
+                for l_no in map.keys().cloned().collect::<Vec<u32>>() {
+                    if l_no > line_change_after.start_line_number + line_change_after.change_count {
+                        let new_idx: i32 = l_no as i32 + diff; // diff is negative here.
+                        let to_remove = map.remove(&(new_idx as u32));
+                        if to_remove.is_none() {
+                            panic!("Line number {} not found in map", new_idx);
+                        }
+                        map.insert(new_idx as u32, to_remove.unwrap());
                     }
                 }
             }
-        }
-        Some(DiffCases::FewLinesReplacedWithFewLines) => {
-            // Handle this case
         }
         Some(DiffCases::SingleLineDeleted) => {
             // Handle this case
@@ -135,11 +228,13 @@ fn fetch_line_numbers(line: String) -> (LineChange, LineChange) {
                 start_line_number: line_before,
                 change_type: ChangeType::Deleted,
                 change_count: line_before_count,
+                // changed_content: line.clone(),
             },
             LineChange {
                 start_line_number: line_after,
                 change_type: ChangeType::Added,
                 change_count: line_after_count,
+                // changed_content: line.clone(),
             },
         )
     } else {
@@ -147,7 +242,11 @@ fn fetch_line_numbers(line: String) -> (LineChange, LineChange) {
     }
 }
 
-fn parse_diff(commit_diff: String, map: &mut HashMap<u32, Vec<LineDetail>>) -> Result<(), String> {
+fn parse_diff(
+    commit_hash: String,
+    commit_diff: String,
+    map: &mut HashMap<u32, Vec<LineDetail>>,
+) -> Result<(), String> {
     // Cases possible:
     //
     // -2,5 +2 -> few lines were replaced with a single line.
@@ -168,7 +267,7 @@ fn parse_diff(commit_diff: String, map: &mut HashMap<u32, Vec<LineDetail>>) -> R
             let (line_before, line_after): (LineChange, LineChange) =
                 fetch_line_numbers(line.clone());
             let category = categorize_diff(line.as_str());
-            reorder_map(category, map, line_before, line_after);
+            reorder_map(commit_hash.clone(), category, map, line_before, line_after);
         }
     }
     Ok(())
@@ -255,8 +354,10 @@ mod tests_diff_v2 {
             -line12
         "#;
 
+        let commit_hash = "";
+
         let mut map: HashMap<u32, Vec<LineDetail>> = HashMap::new();
-        parse_diff(commit_diff.to_string(), &mut map).unwrap();
+        parse_diff(commit_hash.to_string(), commit_diff.to_string(), &mut map).unwrap();
 
         assert_eq!(map.len(), 0); // Adjust based on your expectations
     }
@@ -402,16 +503,110 @@ mod tests_diff_v2 {
 
     #[test]
     fn test_reorder_map() {
+        // Test that the map is correctly reordered for the case below:
+        // -2,5 +2,7
+        // Make sure that 6th line in the map is now 8th line, because we have "added" 7 lines
+        // above.
         let mut map: HashMap<u32, Vec<LineDetail>> = HashMap::new();
         map.insert(
             1,
             vec![LineDetail {
                 content: "line1".to_string(),
-                commit_hashes: vec!["hash1".to_string()],
+                commit_hashes: vec!["commit1".to_string()],
             }],
         );
+        map.insert(
+            2,
+            vec![LineDetail {
+                content: "line2".to_string(),
+                commit_hashes: vec!["commit1".to_string()],
+            }],
+        );
+        map.insert(
+            3,
+            vec![LineDetail {
+                content: "line3".to_string(),
+                commit_hashes: vec!["commit1".to_string()],
+            }],
+        );
+        map.insert(
+            4,
+            vec![LineDetail {
+                content: "line4".to_string(),
+                commit_hashes: vec!["commit1".to_string()],
+            }],
+        );
+        map.insert(
+            5,
+            vec![LineDetail {
+                content: "line5".to_string(),
+                commit_hashes: vec!["commit1".to_string()],
+            }],
+        );
+        map.insert(
+            6,
+            vec![LineDetail {
+                content: "line6".to_string(),
+                commit_hashes: vec!["commit1".to_string()],
+            }],
+        );
+        map.insert(
+            7,
+            vec![LineDetail {
+                content: "line7".to_string(),
+                commit_hashes: vec!["commit1".to_string()],
+            }],
+        );
+        map.insert(
+            8,
+            vec![LineDetail {
+                content: "line8".to_string(),
+                commit_hashes: vec!["commit1".to_string()],
+            }],
+        );
+        reorder_map(
+            "commit2".to_string(),
+            Some(DiffCases::FewLinesReplacedWithFewLines),
+            &mut map,
+            LineChange {
+                start_line_number: 2,
+                change_count: 5,
+                change_type: ChangeType::Deleted,
+            },
+            LineChange {
+                start_line_number: 2,
+                change_count: 7,
+                change_type: ChangeType::Added,
+            },
+        );
 
-        reorder_map(Some(DiffCases::FewLinesReplacedWithSingleLine), &mut map);
-        // Add assertions based on expected behavior.
+        // Make sure that map keys are correct.
+        assert_eq!(map.len(), 10);
+        // Make sure that for 1st line number, the content is unchanged.
+        assert_eq!(
+            map.get(&1).unwrap()[0].content,
+            "line1".to_string()
+        );
+
+        // Make sure that from 2 to 8 (inclusive), the content's commit hash is now commit2:
+        for i in 2..=8 {
+            assert_eq!(
+                map.get(&i).unwrap()[0].commit_hashes[0],
+                "commit2".to_string()
+            );
+        }
+
+        // From 9 to 10 (inclusive), the content is the same as previous map, that is commit hashes
+        // are commit1.
+        for i in 9..=10 {
+            assert_eq!(
+                map.get(&i).unwrap()[0].content,
+                "line".to_string() + &i.to_string()
+            );
+            assert_eq!(
+                map.get(&i).unwrap()[0].commit_hashes[0],
+                "commit1".to_string()
+            );
+        }
     }
 }
