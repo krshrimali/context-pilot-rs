@@ -228,13 +228,78 @@ fn reorder_map(
             map.remove(&(map_len as u32));
         }
         Some(DiffCases::FewLinesDeleted) => {
-            // Handle this case
+            let s_line_no = line_change_after.start_line_number;
+            let e_line_no = line_change_after.start_line_number + line_change_before.change_count;
+
+            // Remove all lines b/w s_line_no and e_line_no (exclusive).
+            for l_no in s_line_no..e_line_no {
+                map.remove(&l_no);
+            }
+            // For any line after e_line_no, shift them by line_change_before.change_count.
+            let mut to_remove_map: HashMap<u32, Vec<LineDetail>> = HashMap::new();
+            for l_no in map.keys().cloned().collect::<Vec<u32>>() {
+                if l_no >= e_line_no {
+                    let new_idx = l_no - line_change_before.change_count;
+                    let to_remove = map.remove(&l_no);
+                    if to_remove.is_none() {
+                        // Post this, there's nothing to find.
+                        panic!("Line number {} not found in map", l_no);
+                    }
+                    println!("Removing line number {} from map to {}", l_no, new_idx);
+                    to_remove_map.insert(new_idx, to_remove.unwrap());
+                }
+            }
+            // Now insert the new entries.
+            for (l_no, line_detail) in to_remove_map {
+                map.insert(l_no, line_detail);
+            }
         }
         Some(DiffCases::SingleLineReplacedWithAnotherSingleLine) => {
-            // Handle this case
+            let s_line_no = line_change_after.start_line_number;
+            // Replace the line with the new line.
+            let to_remove = map.get_mut(&s_line_no);
+            if to_remove.is_none() {
+                // Post this, there's nothing to find.
+                panic!("Line number {} not found in map", s_line_no);
+            }
+            let line_detail = to_remove.unwrap();
+            line_detail[0].content = "New Content".to_string(); // FIXME: We don't have content
+            line_detail[0].commit_hashes = vec![commit_hash];
         }
         Some(DiffCases::NewLinesAdded) => {
             // Handle this case
+            let s_line_no = line_change_after.start_line_number;
+            let e_line_no = line_change_after.start_line_number + line_change_after.change_count;
+
+            // Anything after e_line_no, should be moved by line_change_before.change_count;
+            let mut to_remove_map: HashMap<u32, Vec<LineDetail>> = HashMap::new();
+            for l_no in map.keys().cloned().collect::<Vec<u32>>() {
+                if l_no >= e_line_no {
+                    let new_idx = l_no + line_change_before.change_count;
+                    let to_remove = map.remove(&l_no);
+                    if to_remove.is_none() {
+                        // Post this, there's nothing to find.
+                        panic!("Line number {} not found in map", l_no);
+                    }
+                    to_remove_map.insert(new_idx, to_remove.unwrap());
+                }
+            }
+
+            // Now insert the new entries.
+            for (l_no, line_detail) in to_remove_map {
+                map.insert(l_no, line_detail);
+            }
+            // Now add the new lines.
+            for l_no in s_line_no..=e_line_no {
+                map.remove(&l_no);
+                map.insert(
+                    l_no,
+                    vec![LineDetail {
+                        content: "New Content".to_string(), // FIXME: We don't have content yet. This is bad?
+                        commit_hashes: vec![commit_hash.clone()],
+                    }],
+                );
+            }
         }
         Some(DiffCases::NoneFound) => {
             // Handle this case
@@ -710,21 +775,43 @@ mod tests_diff_v2 {
         // Added one line, deleted one line.
         assert_eq!(map.len(), 19);
 
+        // Now try for -23,2 +18,7
+        reorder_map(
+            "commit4".to_string(),
+            Some(DiffCases::FewLinesReplacedWithFewLines),
+            &mut map,
+            LineChange {
+                start_line_number: 23,
+                change_count: 2,
+                change_type: ChangeType::Deleted,
+            },
+            LineChange {
+                start_line_number: 18,
+                change_count: 7,
+                change_type: ChangeType::Added,
+            },
+        );
+
         // Now check for the case with "few lines deleted".
+        // Trying for -26,3 +25,0
         reorder_map(
             "commit4".to_string(),
             Some(DiffCases::FewLinesDeleted),
             &mut map,
             LineChange {
-                start_line_number: 20,
+                start_line_number: 26,
                 change_count: 3,
                 change_type: ChangeType::Deleted,
             },
             LineChange {
-                start_line_number: 19,
+                start_line_number: 25,
                 change_count: 0,
                 change_type: ChangeType::Added,
             },
         );
+        assert_eq!(map.len(), 21);
+        println!("Map keys: {:?}", map.keys());
+        // Make sure that data for any line after the deleted lines is retained.
+        assert_eq!(map.get(&16).unwrap()[0].content, "line19".to_string());
     }
 }
