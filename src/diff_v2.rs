@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, str};
 
 #[derive(Debug, Clone)]
 struct LineDetail {
@@ -19,6 +19,40 @@ struct LineChange {
     // changed_content: String,
     change_count: u32,
     change_type: ChangeType,
+    changed_content: Vec<String>,
+}
+
+impl Default for LineChange {
+    fn default() -> Self {
+        // Self { start_line_number: Default::default(), change_count: Default::default(), change_type: Default::default(), changed_content: Default::default() }
+        Self {
+            start_line_number: 0,
+            change_count: 0,
+            change_type: ChangeType::Added,
+            changed_content: vec![],
+        }
+    }
+}
+
+fn is_similar(line_content: &str, added_line_content: &str) -> bool {
+    // Check if the line content is similar to the added line content.
+    // For now, just check if they are equal.
+    line_content == added_line_content
+}
+
+fn find_replacements(deleted_content: Vec<String>, added_content: Vec<String>) -> Vec<u32> {
+    // Find the replacements in the deleted content and added content.
+    // For now, just return the added content.
+    let mut replaced_content_line_numbers = vec![];
+    let deleted_content_iter = deleted_content.iter().enumerate();
+    for (_, line_content) in deleted_content_iter {
+        for (idx_add, line_add_content) in added_content.iter().enumerate() {
+            if is_similar(line_content, line_add_content) {
+                replaced_content_line_numbers.push(idx_add as u32);
+            }
+        }
+    }
+    replaced_content_line_numbers
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -30,6 +64,41 @@ enum DiffCases {
     SingleLineReplacedWithAnotherSingleLine,
     NewLinesAdded,
     NoneFound,
+}
+
+fn read_content(
+    all_lines: &mut str::Lines,
+    deleted_line_count: u32,
+    added_line_count: u32,
+    map_to_fill: &mut HashMap<u32, Vec<LineDetail>>,
+    start_line_number_if_to_add: Option<u32>,
+) -> (Vec<String>, Vec<String>) {
+    let mut deleted_content = vec![];
+    // While iterating - also make sure that you're filling up map_to_fill: with a LineDetail
+    // entry.
+    for _ in 0..deleted_line_count {
+        if let Some(line) = all_lines.next() {
+            deleted_content.push(line.to_string());
+        }
+    }
+    let mut added_content = vec![];
+    for _ in 0..added_line_count {
+        if let Some(line) = all_lines.next() {
+            added_content.push(line.to_string());
+            if let Some(start_line_number) = start_line_number_if_to_add {
+                // If we have a start line number, then we need to add the content to the map.
+                // This is only for cases when NEW lines are added.
+                map_to_fill.insert(
+                    start_line_number,
+                    vec![LineDetail {
+                        content: line.to_string(),
+                        commit_hashes: vec![],
+                    }],
+                );
+            }
+        }
+    }
+    (deleted_content, added_content)
 }
 
 fn categorize_diff(line: &str) -> Option<DiffCases> {
@@ -62,6 +131,7 @@ fn reorder_map(
     map: &mut HashMap<u32, Vec<LineDetail>>,
     line_change_before: LineChange,
     line_change_after: LineChange,
+    replaced_content_line_numbers: Vec<u32>,
 ) {
     match category {
         Some(DiffCases::FewLinesReplacedWithSingleLine) => {
@@ -157,7 +227,8 @@ fn reorder_map(
                 }
 
                 // We need to add lines.
-                let e_line_no = line_change_after.start_line_number + line_change_after.change_count;
+                let e_line_no =
+                    line_change_after.start_line_number + line_change_after.change_count;
                 for l_no in s_line_no..e_line_no {
                     map.remove(&l_no);
                     // Insert new entries again for these lines.
@@ -341,13 +412,13 @@ fn fetch_line_numbers(line: String) -> (LineChange, LineChange) {
                 start_line_number: line_before,
                 change_type: ChangeType::Deleted,
                 change_count: line_before_count,
-                // changed_content: line.clone(),
+                changed_content: vec![],
             },
             LineChange {
                 start_line_number: line_after,
                 change_type: ChangeType::Added,
                 change_count: line_after_count,
-                // changed_content: line.clone(),
+                changed_content: vec![],
             },
         )
     } else {
@@ -370,21 +441,144 @@ fn parse_diff(
     // -50,3 +48,0 -> a few lines were deleted.
     // -159 +96 -> a single line was replaced with another single line.
     // -169,0 +104,3 -> new lines were added.
-    for line in commit_diff.lines() {
+    let mut all_lines = commit_diff.lines();
+    while true {
+        let line = all_lines.next();
+        if line.is_none() {
+            break;
+        }
+        let line = line.unwrap();
         let line = line.trim();
+        let line_before: Option<LineChange> = None;
+        let line_after: Option<LineChange> = None;
+        let category: Option<DiffCases> = None;
         if line.starts_with("@@") {
             // Only process till the last '@@'
+            // TODO: Do this using a regex instead.
             let mut line = line.to_string();
             line = line.split_once("@@").unwrap().1.to_string();
             line = line.split_once("@@").unwrap().0.trim().to_string();
-            let (line_before, line_after): (LineChange, LineChange) =
-                fetch_line_numbers(line.clone());
-            let category = categorize_diff(line.as_str());
-            reorder_map(commit_hash.clone(), category, map, line_before, line_after);
+            let line_changes = fetch_line_numbers(line.clone());
+            let line_before = Some(line_changes.0);
+            let line_after = Some(line_changes.1);
+            let category = Some(categorize_diff(line.as_str()));
+            // After this, we have to go on until line_changes.change_count -> those are deleted
+            // lines if change_type == ChangeType::Deleted, otherwise they are the newly added
+            // lines if change_type == ChangeType::Addded.
+            // reorder_map(commit_hash.clone(), category, map, line_before, line_after);
         }
+        if line_before.is_some() && line_after.is_some() {
+            if map.is_empty() {
+                let l_after = line_after.unwrap();
+                let content = read_content(
+                    &mut all_lines,
+                    line_before.unwrap().change_count,
+                    l_after.change_count,
+                    map,
+                    Some(l_after.start_line_number),
+                );
+            } else {
+                let content = read_content(
+                    &mut all_lines,
+                    line_before.clone().unwrap().change_count,
+                    line_after.clone().unwrap().change_count,
+                    map,
+                    None,
+                );
+                let deleted_content = content.0;
+                let added_content = content.1;
+                let mut replaced_content_line_numbers =
+                    find_replacements(deleted_content, added_content);
+                // Now for each of these replaced_content_line_numbers - add start_line_number from
+                // line_after, as they were just indices before.
+                let l_before_start_line_no = line_before.clone().unwrap().start_line_number;
+                replaced_content_line_numbers.iter_mut().for_each(|x| {
+                    *x = l_before_start_line_no + *x;
+                });
+                reorder_map(
+                    commit_hash.clone(),
+                    category,
+                    map,
+                    line_before.unwrap(),
+                    line_after.unwrap(),
+                    replaced_content_line_numbers,
+                );
+            }
+        }
+        // After this, next line_before.change_count lines are the ones that are related to the
+        // change before.
+        // And after it, next line_after.change_count lines are the ones that are related to the
+        // change after.
+        // Parse the next line_before.change_count lines.
+        //     let mut before_content: Vec<String> = vec![];
+        //     let mut after_content: Vec<String> = vec![];
+        //     while let Some(line) = commit_diff.lines().next() {
+        //         let line = line.trim();
+        //         if line.starts_with("@@") {
+        //             break;
+        //         }
+        //         if line.starts_with('-') {
+        //             // Deleted lines.
+        //             let line_no = line[1..].parse::<u32>().unwrap();
+        //             let content = line[1..].to_string();
+        //             map.insert(
+        //                 line_no,
+        //                 vec![LineDetail {
+        //                     content: content.clone(),
+        //                     commit_hashes: vec![commit_hash.clone()],
+        //                 }],
+        //             );
+        //             before_content.push(content);
+        //         } else if line.starts_with('+') {
+        //             // Added lines.
+        //             let line_no = line[1..].parse::<u32>().unwrap();
+        //             let content = line[1..].to_string();
+        //             map.insert(
+        //                 line_no,
+        //                 vec![LineDetail {
+        //                     content: content.clone(),
+        //                     commit_hashes: vec![commit_hash.clone()],
+        //                 }],
+        //             );
+        //             after_content.push(content);
+        //         }
+        //     }
+        //     if line_before.is_none() || line_after.is_none() {
+        //         // None found, just keep going.
+        //         continue;
+        //     }
+        //     // line_before.unwrap().changed_content = before_content;
+        //     // line_after.unwrap().changed_content = after_content;
+        //     // Change line_before's changed_content to before_content:
+        //
+        //     let modified_line_before = LineChange {
+        //         line_before.unwrap().start_line_number,
+        //     }
+        //     reorder_map(
+        //         commit_hash.clone(),
+        //         category,
+        //         map,
+        //         l_before.unwrap(),
+        //         line_after.unwrap()
+        //     );
     }
     Ok(())
 }
+
+// fn extract_commit_hashes(commit_hash) {
+//     // Call git show --unified=0 for the commit_hash and extract line->[commit_hash...] list.
+//     let output = std::process::Command::new("git")
+//         .arg("show")
+//         .arg("--unified=0")
+//         .arg(commit_hash)
+//         .output()
+//         .expect("Failed to execute command");
+//     if output.status.success() {
+//         let stdout = String::from_utf8_lossy(&output.stdout);
+//     } else {
+//         eprintln!("Error: {}", String::from_utf8_lossy(&output.stderr));
+//     }
+// }
 
 #[cfg(test)]
 mod tests_diff_v2 {
