@@ -287,29 +287,58 @@ fn reorder_map(
                 }
             } else {
                 // Lines deleted > Lines added.
-                for l_no in s_line_no..=(e_line_no + 1) {
-                    map.remove(&l_no);
+                for l_no in s_line_no..=e_line_no {
+                    if replaced_content_line_numbers.contains(&l_no) {
+                        println!("For l_no: {}", l_no);
+                        println!("{:?}", map.get(&l_no).unwrap()[0].commit_hashes);
+                        let new_content = line_change_after
+                            .changed_content
+                            .get((l_no - s_line_no) as usize)
+                            .unwrap()
+                            .to_string();
+                        map.get_mut(&l_no).map(|line_details| {
+                            line_details[0].commit_hashes.push(commit_hash.clone());
+                            line_details[0].content = new_content.clone();
+                        });
+                        println!("{:?}", map.get(&l_no).unwrap()[0].commit_hashes);
+                    }
+                }
+
+                for l_no in s_line_no..e_line_no {
+                    if !replaced_content_line_numbers.contains(&l_no) {
+                        println!("Removing line: {:?}", l_no);
+                        map.remove(&l_no);
+                    }
                 }
 
                 // Add content for the new lines.
                 for l_no in s_line_no
-                    ..=(line_change_after.start_line_number + line_change_after.change_count + 1)
+                    ..(line_change_after.start_line_number + line_change_after.change_count)
                 {
-                    map.insert(
-                        l_no,
-                        vec![LineDetail {
-                            content: "New Content".to_string(), // FIXME: We don't have content yet. This is bad?
-                            commit_hashes: vec![commit_hash.clone()],
-                        }],
-                    );
+                    if !replaced_content_line_numbers.contains(&l_no) {
+                        let new_content = line_change_after
+                            .changed_content
+                            .get((l_no - s_line_no) as usize)
+                            .unwrap()
+                            .to_string();
+                        map.insert(
+                            l_no,
+                            vec![LineDetail {
+                                content: new_content.clone(),
+                                commit_hashes: vec![commit_hash.clone()],
+                            }],
+                        );
+                    }
                 }
 
                 // Now for all the lines in the map that are > line_change_after.start_line_number
                 // + line_change_after.change_count, move them by -diff.
                 for l_no in map.keys().cloned().collect::<Vec<u32>>() {
-                    if l_no > line_change_after.start_line_number + line_change_after.change_count {
+                    if l_no >= line_change_after.start_line_number + line_change_after.change_count
+                    {
                         let new_idx: i32 = l_no as i32 + diff; // diff is negative here.
-                        let to_remove = map.remove(&(new_idx as u32));
+                        println!("l_no: {} -> new_idx: {}", l_no, new_idx);
+                        let to_remove = map.remove(&(l_no as u32));
                         if to_remove.is_none() {
                             panic!("Line number {} not found in map", new_idx);
                         }
@@ -986,7 +1015,334 @@ mod tests_diff_v2 {
     }
 
     #[test]
-    fn test_reorder_map_few_lines_replaced_with_multiple_lines() {
+    fn test_reorder_map_few_lines_replaced_with_more_lines() {
+        // Test that the map is correctly reordered for the case below:
+        // -2,5 +2
+        // Make sure that 6th line in the map is now 8th line, because we have "added" 7 lines
+        // above.
+        let mut map: HashMap<u32, Vec<LineDetail>> = HashMap::new();
+        map.insert(
+            1,
+            vec![LineDetail {
+                content: "line1".to_string(),
+                commit_hashes: vec!["commit1".to_string()],
+            }],
+        );
+        map.insert(
+            2,
+            vec![LineDetail {
+                content: "line2".to_string(),
+                commit_hashes: vec!["commit1".to_string()],
+            }],
+        );
+        map.insert(
+            3,
+            vec![LineDetail {
+                content: "line3".to_string(),
+                commit_hashes: vec!["commit1".to_string()],
+            }],
+        );
+        map.insert(
+            4,
+            vec![LineDetail {
+                content: "line4".to_string(),
+                commit_hashes: vec!["commit1".to_string()],
+            }],
+        );
+        map.insert(
+            5,
+            vec![LineDetail {
+                content: "line5".to_string(),
+                commit_hashes: vec!["commit1".to_string()],
+            }],
+        );
+        map.insert(
+            6,
+            vec![LineDetail {
+                content: "line6".to_string(),
+                commit_hashes: vec!["commit1".to_string()],
+            }],
+        );
+        map.insert(
+            7,
+            vec![LineDetail {
+                content: "line7".to_string(),
+                commit_hashes: vec!["commit1".to_string()],
+            }],
+        );
+        map.insert(
+            8,
+            vec![LineDetail {
+                content: "line8".to_string(),
+                commit_hashes: vec!["commit1".to_string()],
+            }],
+        );
+        map.insert(
+            9,
+            vec![LineDetail {
+                content: "line9".to_string(),
+                commit_hashes: vec!["commit1".to_string()],
+            }],
+        );
+        reorder_map(
+            "commit2".to_string(),
+            Some(DiffCases::FewLinesReplacedWithSingleLine),
+            &mut map,
+            LineChange {
+                start_line_number: 2,
+                change_count: 5,
+                change_type: ChangeType::Deleted,
+                changed_content: vec![
+                    "line2".to_string(),
+                    "line3".to_string(),
+                    "line4".to_string(),
+                    "line5".to_string(),
+                    "line5".to_string(),
+                ],
+            },
+            LineChange {
+                start_line_number: 2,
+                change_count: 1,
+                change_type: ChangeType::Added,
+                changed_content: vec!["line23".to_string()],
+            },
+            vec![2],
+        );
+
+        // Make sure that map keys are correct.
+        assert_eq!(map.len(), 5);
+        // Make sure that for line number (2), the content is unchanged.
+        assert_eq!(map.get(&2).unwrap()[0].content, "line23".to_string());
+
+        // For 2nd line number, we should have commit1 and commit2.
+        assert_eq!(
+            map.get(&2).unwrap()[0].commit_hashes,
+            vec!["commit1".to_string(), "commit2".to_string()]
+        );
+        // Make sure that from 3 to 5 (inclusive), the content's commit hash is still commit1:
+        for i in 3..=5 {
+            assert_eq!(
+                map.get(&i).unwrap()[0].commit_hashes[0],
+                "commit1".to_string()
+            );
+        }
+        assert_eq!(map.get(&2).unwrap()[0].content, "line23".to_string()); // New content.
+        assert_eq!(map.get(&3).unwrap()[0].content, "line7".to_string());
+        assert_eq!(map.get(&4).unwrap()[0].content, "line8".to_string());
+        assert_eq!(map.get(&5).unwrap()[0].content, "line9".to_string());
+        reorder_map(
+            "commit3".to_string(),
+            Some(DiffCases::FewLinesReplacedWithFewLines),
+            &mut map,
+            LineChange {
+                start_line_number: 7,
+                change_count: 2,
+                change_type: ChangeType::Deleted,
+                changed_content: vec!["line7".to_string(), "line7".to_string()],
+            },
+            LineChange {
+                start_line_number: 3,
+                change_count: 4,
+                change_type: ChangeType::Added,
+                changed_content: vec![
+                    "line7".to_string(), // Same! - replaced
+                    "line8".to_string(), // Same! - replaced
+                    "new_content".to_string(),
+                    "new_content".to_string(),
+                ],
+            },
+            vec![3, 4],
+        );
+        assert_eq!(map.len(), 7);
+        // Two lines were same, 3rd and 4th (after commit).
+        assert_eq!(map.get(&3).unwrap()[0].content, "line7".to_string());
+        assert_eq!(
+            map.get(&3).unwrap()[0].commit_hashes,
+            ["commit1".to_string(), "commit3".to_string()]
+        );
+        assert_eq!(map.get(&4).unwrap()[0].content, "line8".to_string());
+        assert_eq!(
+            map.get(&4).unwrap()[0].commit_hashes,
+            ["commit1".to_string(), "commit3".to_string()]
+        );
+        // 5th and 6th lines are totally new, so commit hash should just be commit3.
+        assert_eq!(map.get(&5).unwrap()[0].content, "new_content".to_string());
+        assert_eq!(
+            map.get(&5).unwrap()[0].commit_hashes,
+            ["commit3".to_string()]
+        );
+        assert_eq!(map.get(&6).unwrap()[0].content, "new_content".to_string());
+        assert_eq!(
+            map.get(&6).unwrap()[0].commit_hashes,
+            ["commit3".to_string()]
+        );
+        // Nothing happened to this line, so just make sure 7th here matches the 9th line
+        // before this change.
+        assert_eq!(map.get(&7).unwrap()[0].content, "line9".to_string());
+        assert_eq!(
+            map.get(&7).unwrap()[0].commit_hashes,
+            ["commit1".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_reorder_map_few_lines_replaced_with_less_lines() {
+        // Test that the map is correctly reordered for the case below:
+        // -2,5 +2
+        // Make sure that 6th line in the map is now 8th line, because we have "added" 7 lines
+        // above.
+        let mut map: HashMap<u32, Vec<LineDetail>> = HashMap::new();
+        map.insert(
+            1,
+            vec![LineDetail {
+                content: "line1".to_string(),
+                commit_hashes: vec!["commit1".to_string()],
+            }],
+        );
+        map.insert(
+            2,
+            vec![LineDetail {
+                content: "line2".to_string(),
+                commit_hashes: vec!["commit1".to_string()],
+            }],
+        );
+        map.insert(
+            3,
+            vec![LineDetail {
+                content: "line3".to_string(),
+                commit_hashes: vec!["commit1".to_string()],
+            }],
+        );
+        map.insert(
+            4,
+            vec![LineDetail {
+                content: "line4".to_string(),
+                commit_hashes: vec!["commit1".to_string()],
+            }],
+        );
+        map.insert(
+            5,
+            vec![LineDetail {
+                content: "line5".to_string(),
+                commit_hashes: vec!["commit1".to_string()],
+            }],
+        );
+        map.insert(
+            6,
+            vec![LineDetail {
+                content: "line6".to_string(),
+                commit_hashes: vec!["commit1".to_string()],
+            }],
+        );
+        map.insert(
+            7,
+            vec![LineDetail {
+                content: "line7".to_string(),
+                commit_hashes: vec!["commit1".to_string()],
+            }],
+        );
+        map.insert(
+            8,
+            vec![LineDetail {
+                content: "line8".to_string(),
+                commit_hashes: vec!["commit1".to_string()],
+            }],
+        );
+        map.insert(
+            9,
+            vec![LineDetail {
+                content: "line9".to_string(),
+                commit_hashes: vec!["commit1".to_string()],
+            }],
+        );
+        reorder_map(
+            "commit2".to_string(),
+            Some(DiffCases::FewLinesReplacedWithSingleLine),
+            &mut map,
+            LineChange {
+                start_line_number: 2,
+                change_count: 5,
+                change_type: ChangeType::Deleted,
+                changed_content: vec![
+                    "line2".to_string(),
+                    "line3".to_string(),
+                    "line4".to_string(),
+                    "line5".to_string(),
+                    "line5".to_string(),
+                ],
+            },
+            LineChange {
+                start_line_number: 2,
+                change_count: 1,
+                change_type: ChangeType::Added,
+                changed_content: vec!["line23".to_string()],
+            },
+            vec![2],
+        );
+
+        // Make sure that map keys are correct.
+        assert_eq!(map.len(), 5);
+        // Make sure that for line number (2), the content is unchanged.
+        assert_eq!(map.get(&2).unwrap()[0].content, "line23".to_string());
+
+        // For 2nd line number, we should have commit1 and commit2.
+        assert_eq!(
+            map.get(&2).unwrap()[0].commit_hashes,
+            vec!["commit1".to_string(), "commit2".to_string()]
+        );
+        // Make sure that from 3 to 5 (inclusive), the content's commit hash is still commit1:
+        for i in 3..=5 {
+            assert_eq!(
+                map.get(&i).unwrap()[0].commit_hashes[0],
+                "commit1".to_string()
+            );
+        }
+        assert_eq!(map.get(&2).unwrap()[0].content, "line23".to_string()); // New content.
+        assert_eq!(map.get(&3).unwrap()[0].content, "line7".to_string());
+        assert_eq!(map.get(&4).unwrap()[0].content, "line8".to_string());
+        assert_eq!(map.get(&5).unwrap()[0].content, "line9".to_string());
+        reorder_map(
+            "commit3".to_string(),
+            Some(DiffCases::FewLinesReplacedWithFewLines),
+            &mut map,
+            LineChange {
+                start_line_number: 7,
+                change_count: 2,
+                change_type: ChangeType::Deleted,
+                changed_content: vec!["line7".to_string(), "line7".to_string()],
+            },
+            LineChange {
+                start_line_number: 3,
+                change_count: 1,
+                change_type: ChangeType::Added,
+                changed_content: vec![
+                    "line7".to_string(), // Same! - replaced
+                ],
+            },
+            vec![3],
+        );
+        assert_eq!(map.len(), 4);
+        // 3rd line should be the same.
+        assert_eq!(map.get(&3).unwrap()[0].content, "line7".to_string());
+        assert_eq!(
+            map.get(&3).unwrap()[0].commit_hashes,
+            ["commit1".to_string(), "commit3".to_string()]
+        );
+        assert_eq!(map.get(&4).unwrap()[0].content, "line9".to_string());
+        assert_eq!(
+            map.get(&4).unwrap()[0].commit_hashes,
+            ["commit1".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_reorder_map_new_lines_added_empty_map() {
+        // The first commit will mostly always be "new lines added"
+        // category.
+    }
+
+    #[test]
+    fn test_reorder_map_new_lines_added_nonempty_map() {
         // Test that the map is correctly reordered for the case below:
         // -2,5 +2
         // Make sure that 6th line in the map is now 8th line, because we have "added" 7 lines
