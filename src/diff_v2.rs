@@ -1339,6 +1339,36 @@ mod tests_diff_v2 {
     fn test_reorder_map_new_lines_added_empty_map() {
         // The first commit will mostly always be "new lines added"
         // category.
+        let mut map: HashMap<u32, Vec<LineDetail>> = HashMap::new();
+        reorder_map(
+            "commit1".to_string(),
+            Some(DiffCases::NewLinesAdded),
+            &mut map,
+            LineChange {
+                start_line_number: 1,
+                change_count: 0,
+                change_type: ChangeType::Deleted,
+                changed_content: vec![],
+            },
+            LineChange {
+                start_line_number: 1,
+                change_count: 2,
+                change_type: ChangeType::Added,
+                changed_content: vec!["line1".to_string(), "line2".to_string()],
+            },
+            vec![],
+        );
+        assert_eq!(map.len(), 2);
+        assert_eq!(map.get(&1).unwrap()[0].content, "line1".to_string());
+        assert_eq!(
+            map.get(&1).unwrap()[0].commit_hashes,
+            vec!["commit1".to_string()]
+        );
+        assert_eq!(map.get(&2).unwrap()[0].content, "line2".to_string());
+        assert_eq!(
+            map.get(&2).unwrap()[0].commit_hashes,
+            vec!["commit1".to_string()]
+        );
     }
 
     #[test]
