@@ -10,11 +10,11 @@ mod git_command_algo;
 use crate::{algo_loc::perform_for_whole_file, db::DB};
 use async_recursion::async_recursion;
 use contextgpt_structs::{AuthorDetailsV2, Cli, RequestTypeOptions};
+use std::collections::HashMap;
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
-use std::collections::HashMap;
 use structopt::StructOpt;
 use tokio::sync::Mutex;
 
@@ -365,15 +365,19 @@ impl Server {
 #[tokio::main]
 async fn main() {
     let commit_hashes = [
-        "2e76e1e",
-        "4face15",
-        "6d9e881",
-        "42baffc",
-        "8b6e985",
+        "2e76e1e", "4face15", "6d9e881", "42baffc", "8b6e985", "eed8bd9", "49dad60", "e14b51d",
+        "c79810d", "72e52c1", "e6c4521", "0ab4f85", "c50c6d7", "1d6961a", "67c7369", "e41324a",
+        "7393de7",
     ];
     let mut map: HashMap<u32, Vec<diff_v2::LineDetail>> = HashMap::new();
+    let file_name = "diff_v2.rs";
     for commit_hash in commit_hashes.iter() {
-        diff_v2::extract_commit_hashes(commit_hash, &mut map);
+        diff_v2::extract_commit_hashes(commit_hash, &mut map, file_name);
+        for key in map.keys() {
+            if map.get(&key).unwrap().len() == 1 {
+                println!("Value: {:?}", map.get(&key).unwrap()[0].commit_hashes);
+            }
+        }
     }
 }
 
