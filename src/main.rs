@@ -370,14 +370,18 @@ async fn main() {
         "7393de7",
     ];
     let mut map: HashMap<u32, Vec<diff_v2::LineDetail>> = HashMap::new();
-    let file_name = "diff_v2.rs";
+    let file_name = "src/diff_v2.rs";
     for commit_hash in commit_hashes.iter() {
         diff_v2::extract_commit_hashes(commit_hash, &mut map, file_name);
-        for key in map.keys() {
-            if map.get(&key).unwrap().len() == 1 {
-                println!("Value: {:?}", map.get(&key).unwrap()[0].commit_hashes);
-            }
-        }
+        // for key in map.keys() {
+        //     if map.get(&key).unwrap().len() == 1 {
+        //         if map.get(&key).unwrap()[0].commit_hashes.len() > 1  {
+        //             println!("Key: {:?}", key);
+        //             println!("Value: {:?}", map.get(&key).unwrap()[0].commit_hashes);
+        //
+        //         }
+        //     }
+        // }
     }
 }
 

@@ -36,7 +36,11 @@ impl Default for LineChange {
 fn is_similar(line_content: &str, added_line_content: &str) -> bool {
     // Check if the line content is similar to the added line content.
     // For now, just check if they are equal.
-    line_content == added_line_content
+    if strsim::levenshtein(line_content, added_line_content) > 5 {
+        return false;
+    } else {
+        return true;
+    }
 }
 
 fn find_replacements(deleted_content: Vec<String>, added_content: Vec<String>) -> Vec<u32> {
@@ -243,17 +247,17 @@ pub fn reorder_map(
                 for l_no in map.keys().cloned().collect::<Vec<u32>>() {
                     if l_no >= e_line_no {
                         let new_idx = l_no + (diff as u32);
-                        let to_remove = map.remove(&l_no);
+                        let to_remove = map.get(&l_no);
                         if to_remove.is_none() {
                             // Post this, there's nothing to find.
                             panic!("Line number {} not found in map", l_no);
                         }
-                        to_remove_map.insert(new_idx, to_remove.unwrap());
+                        to_remove_map.insert(new_idx, to_remove.unwrap().to_vec());
                     }
                 }
 
-                // Now insert the new entries.
                 for (l_no, line_detail) in to_remove_map {
+                    map.remove(&l_no);
                     map.insert(l_no, line_detail);
                 }
 
@@ -289,7 +293,7 @@ pub fn reorder_map(
                 }
             } else {
                 // Lines deleted > Lines added.
-                for l_no in s_line_no..=e_line_no {
+                for l_no in s_line_no..e_line_no {
                     if replaced_content_line_numbers.contains(&l_no) {
                         let new_content = line_change_after
                             .changed_content
@@ -338,7 +342,7 @@ pub fn reorder_map(
                         let new_idx: i32 = l_no as i32 + diff; // diff is negative here.
                         let to_remove = map.remove(&(l_no as u32));
                         if to_remove.is_none() {
-                            panic!("Line number {} not found in map", new_idx);
+                            panic!("Line number {} not found in map", l_no);
                         }
                         to_remove_map.insert(new_idx as u32, to_remove.unwrap());
                     }
@@ -405,7 +409,11 @@ pub fn reorder_map(
             let to_remove = map.get_mut(&s_line_no);
             if to_remove.is_none() {
                 // Post this, there's nothing to find.
-                panic!("Line number {} not found in map", s_line_no);
+                panic!(
+                    "Line number {} not found in map, with map length: {}",
+                    s_line_no,
+                    map.len()
+                );
             }
             let line_detail = to_remove.unwrap();
             if replaced_content_line_numbers.contains(&s_line_no) {
@@ -540,15 +548,15 @@ fn parse_diff(
         let mut line_before: Option<LineChange> = None;
         let mut line_after: Option<LineChange> = None;
         let mut category: Option<DiffCases> = None;
-        if line.starts_with("diff --git ") {
-            // Make sure the file in question is only considered, for all other files
-            // I've not handled yet :(
-            // Format is generally: diff --git a/src/diff_v2.rs b/src/diff_v2.rs
-            // So, we need to check if the file_name is in the line.
-            if !line.contains(file_name) {
-                break;
-            }
-        }
+        // if line.starts_with("diff --git ") {
+        //     // Make sure the file in question is only considered, for all other files
+        //     // I've not handled yet :(
+        //     // Format is generally: diff --git a/src/diff_v2.rs b/src/diff_v2.rs
+        //     // So, we need to check if the file_name is in the line.
+        //     if !line.contains(file_name) {
+        //         break;
+        //     }
+        // }
         if line.starts_with("@@") {
             // Only process till the last '@@'
             // TODO: Do this using a regex instead.
@@ -592,13 +600,13 @@ fn parse_diff(
                 });
                 let mut replaced_content_line_numbers =
                     find_replacements(deleted_content, added_content);
-                assert_eq!(replaced_content_line_numbers.len(), 0);
                 // Now for each of these replaced_content_line_numbers - add start_line_number from
                 // line_after, as they were just indices before.
                 let l_before_start_line_no = line_before.clone().unwrap().start_line_number;
                 replaced_content_line_numbers.iter_mut().for_each(|x| {
                     *x = l_before_start_line_no + *x;
                 });
+
                 reorder_map(
                     commit_hash.clone(),
                     category,
@@ -607,18 +615,35 @@ fn parse_diff(
                     line_after.unwrap(),
                     replaced_content_line_numbers,
                 );
+                if map.len() > 1000 {
+                    for i in 1..1000 {
+                        if map.get(&(i as u32)).is_none() {
+                            panic!("Line number {} not found in map", i);
+                        }
+                    }
+                    // Print unique keys
+                    let mut unique_keys = map.keys().cloned().collect::<Vec<u32>>();
+                    unique_keys.sort();
+                    unique_keys.dedup();
+                }
             }
         }
     }
     Ok(())
 }
 
-pub fn extract_commit_hashes(commit_hash: &str, map: &mut HashMap<u32, Vec<LineDetail>>, file_name: &str) {
+pub fn extract_commit_hashes(
+    commit_hash: &str,
+    map: &mut HashMap<u32, Vec<LineDetail>>,
+    file_name: &str,
+) {
     // Call git show --unified=0 for the commit_hash and extract line->[commit_hash...] list.
     let output = std::process::Command::new("git")
         .arg("show")
         .arg("--unified=0")
         .arg(commit_hash)
+        .arg("--")
+        .arg(file_name)
         .output()
         .expect("Failed to execute command");
     if output.status.success() {
