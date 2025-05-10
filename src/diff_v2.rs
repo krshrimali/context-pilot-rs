@@ -353,7 +353,6 @@ pub fn reorder_map(
             let s_line_no = line_change_after.start_line_number;
             map.remove(&s_line_no);
             // Now move everything that is >= s_line_no, shift left.
-            // Iterate in the sorted order.
             let mut to_remove_map: HashMap<u32, Vec<LineDetail>> = HashMap::new();
             for l_no in map.keys().cloned().collect::<Vec<u32>>() {
                 if l_no > s_line_no {
@@ -370,9 +369,6 @@ pub fn reorder_map(
             for (l_no, line_detail) in to_remove_map {
                 map.insert(l_no, line_detail);
             }
-            // Now just remove the last line.
-            let map_len = map.len();
-            map.remove(&(map_len as u32));
         }
         Some(DiffCases::FewLinesDeleted) => {
             let s_line_no = line_change_after.start_line_number;
@@ -409,28 +405,24 @@ pub fn reorder_map(
                 panic!("Line number {} not found in map", s_line_no);
             }
             let line_detail = to_remove.unwrap();
-            line_detail[0].content = "New Content".to_string(); // FIXME: We don't have content
-            line_detail[0].commit_hashes = vec![commit_hash];
+            if replaced_content_line_numbers.contains(&s_line_no) {
+                // This line was replaced and not deleted -> and then added.
+                line_detail[0].commit_hashes.push(commit_hash.clone());
+            } else {
+                line_detail[0].commit_hashes = vec![commit_hash];
+            }
+            let new_content = line_change_after
+                .changed_content
+                .get((s_line_no - line_change_after.start_line_number) as usize)
+                .unwrap()
+                .to_string();
+            line_detail[0].content = new_content;
         }
         Some(DiffCases::NewLinesAdded) => {
             // Handle this case
             let s_line_no = line_change_after.start_line_number;
             let e_line_no = line_change_after.start_line_number + line_change_after.change_count;
 
-            // Anything after e_line_no, should be moved by line_change_before.change_count;
-            // let mut to_remove_map: HashMap<u32, Vec<LineDetail>> = HashMap::new();
-            // for l_no in map.keys().cloned().collect::<Vec<u32>>() {
-            //     if l_no > e_line_no {
-            //         let new_idx = l_no + line_change_after.change_count;
-            //         let to_remove = map.remove(&l_no);
-            //         if to_remove.is_none() {
-            //             // Post this, there's nothing to find.
-            //             panic!("Line number {} not found in map", l_no);
-            //         }
-            //         println!("Moving line: {} to new line: {}", l_no, new_idx);
-            //         to_remove_map.insert(new_idx, to_remove.unwrap());
-            //     }
-            // }
             // Anything from s_line_no until the end should be right moved by the diff
             // diff is line_change_after.change_count.
             let mut to_remove_map: HashMap<u32, Vec<LineDetail>> = HashMap::new();
@@ -604,62 +596,6 @@ fn parse_diff(
                 );
             }
         }
-        // After this, next line_before.change_count lines are the ones that are related to the
-        // change before.
-        // And after it, next line_after.change_count lines are the ones that are related to the
-        // change after.
-        // Parse the next line_before.change_count lines.
-        //     let mut before_content: Vec<String> = vec![];
-        //     let mut after_content: Vec<String> = vec![];
-        //     while let Some(line) = commit_diff.lines().next() {
-        //         let line = line.trim();
-        //         if line.starts_with("@@") {
-        //             break;
-        //         }
-        //         if line.starts_with('-') {
-        //             // Deleted lines.
-        //             let line_no = line[1..].parse::<u32>().unwrap();
-        //             let content = line[1..].to_string();
-        //             map.insert(
-        //                 line_no,
-        //                 vec![LineDetail {
-        //                     content: content.clone(),
-        //                     commit_hashes: vec![commit_hash.clone()],
-        //                 }],
-        //             );
-        //             before_content.push(content);
-        //         } else if line.starts_with('+') {
-        //             // Added lines.
-        //             let line_no = line[1..].parse::<u32>().unwrap();
-        //             let content = line[1..].to_string();
-        //             map.insert(
-        //                 line_no,
-        //                 vec![LineDetail {
-        //                     content: content.clone(),
-        //                     commit_hashes: vec![commit_hash.clone()],
-        //                 }],
-        //             );
-        //             after_content.push(content);
-        //         }
-        //     }
-        //     if line_before.is_none() || line_after.is_none() {
-        //         // None found, just keep going.
-        //         continue;
-        //     }
-        //     // line_before.unwrap().changed_content = before_content;
-        //     // line_after.unwrap().changed_content = after_content;
-        //     // Change line_before's changed_content to before_content:
-        //
-        //     let modified_line_before = LineChange {
-        //         line_before.unwrap().start_line_number,
-        //     }
-        //     reorder_map(
-        //         commit_hash.clone(),
-        //         category,
-        //         map,
-        //         l_before.unwrap(),
-        //         line_after.unwrap()
-        //     );
     }
     Ok(())
 }
