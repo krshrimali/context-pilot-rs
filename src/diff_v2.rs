@@ -122,10 +122,7 @@ pub fn categorize_diff(line: &str) -> Option<DiffCases> {
         (m, 0) if m > 1 => Some(DiffCases::FewLinesDeleted),
         (1, 1) => Some(DiffCases::SingleLineReplacedWithAnotherSingleLine),
         (0, p) if p > 0 => Some(DiffCases::NewLinesAdded),
-        _ => {
-            // Handle the case where no lines were found.
-            Some(DiffCases::NoneFound)
-        },
+        _ => Some(DiffCases::NoneFound),
     }
 }
 
@@ -360,7 +357,6 @@ pub fn reorder_map(
                     let to_remove = map.remove(&l_no);
                     if to_remove.is_none() {
                         // Post this, there's nothing to find.
-                        println!("Map length: {}", map.len());
                         panic!("Line number {} not found in map", l_no);
                     }
                     to_remove_map.insert(new_idx, to_remove.unwrap());

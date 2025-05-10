@@ -1,5 +1,5 @@
 [package]
-name = "context-pilot"
+name = "context_pilot"
 version = "0.0.2"
 edition = "2021"
 
@@ -22,3 +22,5 @@ sha2 = "0.10"
 hex = "0.4"
 colored = "2.0"
 futures = "*"
+similar = "2.7.0"
+strsim = "0.11.1"
