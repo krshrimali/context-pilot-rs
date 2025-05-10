@@ -4,6 +4,7 @@ mod config;
 mod config_impl;
 mod contextgpt_structs;
 mod db;
+mod diff_v2;
 mod git_command_algo;
 
 use crate::{algo_loc::perform_for_whole_file, db::DB};
@@ -13,6 +14,7 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
+use std::collections::HashMap;
 use structopt::StructOpt;
 use tokio::sync::Mutex;
 
@@ -360,6 +362,29 @@ impl Server {
     }
 }
 
+#[tokio::main]
+async fn main() {
+    // let inp_file_path = "src/config.rs";
+    // let history = diff::extract_details_with_tracking(inp_file_path);
+    // let mut sorted_lines: Vec<_> = history.into_iter().collect();
+    // sorted_lines.sort_by_key(|&(line, _)| line);
+    //
+    // for (line, commits) in sorted_lines {
+    //     println!("Line {}: {:?}", line, commits);
+    // }
+    let commit_hashes = [
+        "2e76e1e",
+        "4face15",
+        "6d9e881",
+        "42baffc",
+        "8b6e985",
+    ];
+    let mut map: HashMap<u32, Vec<diff_v2::LineDetail>> = HashMap::new();
+    for commit_hash in commit_hashes.iter() {
+        diff_v2::extract_commit_hashes(commit_hash, &mut map);
+    }
+}
+
 // #[tokio::main]
 // async fn main() {
 //     let inp_file_path= String::from_str("/Users/krshrimali/Documents/projects/source_codes/context-pilot-rs/src/main.rs").unwrap();
@@ -383,55 +408,55 @@ impl Server {
 //     // Ok(())
 // }
 //
-#[tokio::main]
-async fn main() -> CliResult {
-    let args = Cli::from_args();
-
-    env_logger::init();
-    let mut server = Server {
-        state: State::Dead,
-        curr_db: None,
-        state_db_handler: DBHandler {
-            metadata: DBMetadata::default(),
-        },
-    };
-
-    // TODO: Add support for config file.
-    // let config_obj: config_impl::Config = config_impl::read_config(config::CONFIG_FILE_NAME);
-    // let mut file_path: Option<PathBuf> = None;
-    // if args.file.is_some() {
-    //     file_path = PathBuf::from_str(args.file.unwrap().as_str())
-    //         .unwrap()
-    //         .into();
-    // }
-
-    match args.request_type {
-        RequestTypeOptions::File => {
-            server
-                .handle_server(args.folder_path.as_str(), args.file, None, None, None)
-                .await;
-        }
-        RequestTypeOptions::Author => {
-            server
-                .handle_server(args.folder_path.as_str(), args.file, None, None, None)
-                .await;
-        }
-        RequestTypeOptions::Index => {
-            server
-                .handle_server(args.folder_path.as_str(), None, None, None, None)
-                .await;
-        }
-        RequestTypeOptions::Query => {
-            server
-                .handle_server(
-                    args.folder_path.as_str(),
-                    args.file,
-                    args.start_number,
-                    args.end_number,
-                    Some(RequestTypeOptions::Query),
-                )
-                .await;
-        }
-    };
-    Ok(())
-}
+// #[tokio::main]
+// async fn main() -> CliResult {
+//     let args = Cli::from_args();
+//
+//     env_logger::init();
+//     let mut server = Server {
+//         state: State::Dead,
+//         curr_db: None,
+//         state_db_handler: DBHandler {
+//             metadata: DBMetadata::default(),
+//         },
+//     };
+//
+//     // TODO: Add support for config file.
+//     // let config_obj: config_impl::Config = config_impl::read_config(config::CONFIG_FILE_NAME);
+//     // let mut file_path: Option<PathBuf> = None;
+//     // if args.file.is_some() {
+//     //     file_path = PathBuf::from_str(args.file.unwrap().as_str())
+//     //         .unwrap()
+//     //         .into();
+//     // }
+//
+//     match args.request_type {
+//         RequestTypeOptions::File => {
+//             server
+//                 .handle_server(args.folder_path.as_str(), args.file, None, None, None)
+//                 .await;
+//         }
+//         RequestTypeOptions::Author => {
+//             server
+//                 .handle_server(args.folder_path.as_str(), args.file, None, None, None)
+//                 .await;
+//         }
+//         RequestTypeOptions::Index => {
+//             server
+//                 .handle_server(args.folder_path.as_str(), None, None, None, None)
+//                 .await;
+//         }
+//         RequestTypeOptions::Query => {
+//             server
+//                 .handle_server(
+//                     args.folder_path.as_str(),
+//                     args.file,
+//                     args.start_number,
+//                     args.end_number,
+//                     Some(RequestTypeOptions::Query),
+//                 )
+//                 .await;
+//         }
+//     };
+//     Ok(())
+// }
