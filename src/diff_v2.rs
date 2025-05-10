@@ -600,17 +600,21 @@ fn parse_diff(
     Ok(())
 }
 
-// fn extract_commit_hashes(commit_hash) {
-//     // Call git show --unified=0 for the commit_hash and extract line->[commit_hash...] list.
-//     let output = std::process::Command::new("git")
-//         .arg("show")
-//         .arg("--unified=0")
-//         .arg(commit_hash)
-//         .output()
-//         .expect("Failed to execute command");
-//     if output.status.success() {
-//         let stdout = String::from_utf8_lossy(&output.stdout);
-//     } else {
-//         eprintln!("Error: {}", String::from_utf8_lossy(&output.stderr));
-//     }
-// }
+fn extract_commit_hashes(commit_hash: &str) {
+    // Call git show --unified=0 for the commit_hash and extract line->[commit_hash...] list.
+    let output = std::process::Command::new("git")
+        .arg("show")
+        .arg("--unified=0")
+        .arg(commit_hash)
+        .output()
+        .expect("Failed to execute command");
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        // Pass the commit diff into
+        let mut map: HashMap<u32, Vec<LineDetail>> = HashMap::new();
+        let _ = parse_diff(commit_hash.to_string(), stdout, &mut map);
+        println!("map length: {}", map.len());
+    } else {
+        eprintln!("Error: {}", String::from_utf8_lossy(&output.stderr));
+    }
+}
