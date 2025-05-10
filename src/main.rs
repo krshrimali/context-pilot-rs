@@ -3,13 +3,8 @@ mod authordetails_impl;
 mod config;
 mod config_impl;
 mod contextgpt_structs;
-mod utils;
 mod db;
-<<<<<<< HEAD
 mod diff_v2;
-=======
-mod diff;
->>>>>>> abb832129f68ad67477bbae3415eac82e491793c
 mod git_command_algo;
 
 use crate::{algo_loc::perform_for_whole_file, db::DB};
