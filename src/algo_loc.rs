@@ -60,14 +60,14 @@ pub async fn perform_for_whole_file(
         origin_file_path.clone(),
     ).await;
 
-    println!("Extracted details for file: {}", origin_file_path);
 
-    if output.is_empty() {
+    if !output.is_empty() {
+        println!("Extracted details for file: {}", origin_file_path);
         // Do nothing for now!
-        eprintln!(
-            "No author details found for '{}'. It may be a binary file, empty, or ignored.",
-            origin_file_path
-        );
+        // eprintln!(
+        //     "No author details found for '{}'. It may be a binary file, empty, or ignored.",
+        //     origin_file_path
+        // );
     }
 
     output

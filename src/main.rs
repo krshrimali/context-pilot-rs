@@ -151,7 +151,6 @@ impl Server {
 
         // curr_db.init_db(file_path);
         let output_author_details = perform_for_whole_file(file_path_str.to_string()).await;
-        println!("Output length: {}", output_author_details.len());
 
         // for each_output in output_author_details.iter() {
         //     if each_output.origin_file_path != file_path_str {
@@ -362,101 +361,79 @@ impl Server {
     }
 }
 
-#[tokio::main]
-async fn main() {
-    let commit_hashes = [
-        "2e76e1e", "4face15", "6d9e881", "42baffc", "8b6e985", "eed8bd9", "49dad60", "e14b51d",
-        "c79810d", "72e52c1", "e6c4521", "0ab4f85", "c50c6d7", "1d6961a", "67c7369", "e41324a",
-        "7393de7",
-    ];
-    let mut map: HashMap<u32, Vec<diff_v2::LineDetail>> = HashMap::new();
-    let file_name = "src/diff_v2.rs";
-    for commit_hash in commit_hashes.iter() {
-        diff_v2::extract_commit_hashes(commit_hash, &mut map, file_name);
-        // for key in map.keys() {
-        //     if map.get(&key).unwrap().len() == 1 {
-        //         if map.get(&key).unwrap()[0].commit_hashes.len() > 1  {
-        //             println!("Key: {:?}", key);
-        //             println!("Value: {:?}", map.get(&key).unwrap()[0].commit_hashes);
-        //
-        //         }
-        //     }
-        // }
-    }
-}
-
+// NOTE: @krshrimali - use this for testing. Output should always be 616 lines.
 // #[tokio::main]
 // async fn main() {
-//     let inp_file_path= String::from_str("/Users/krshrimali/Documents/projects/source_codes/context-pilot-rs/src/main.rs").unwrap();
-//     let output = extract_details(
-//         inp_file_path,
-//     );
-//     // for each_output in output.iter() {
-//     //     println!("Output: {:?}", each_output);
-//     // }
-//
-//     // write output to a file
-//     // let mut idx = 0;
-//     // for each_output in output.iter() {
-//     //     // Write each_output to a jsonf ile.
-//     //     let file_path = format!("output_{}.json", idx);
-//     //     let mut file = std::fs::File::create(file_path).unwrap();
-//     //     let json_output = serde_json::to_string(each_output).unwrap();
-//     //     file.write_all(json_output.as_bytes())?;
-//     //     idx += 1;
-//     // }
-//     // Ok(())
+//     let commit_hashes = [
+//         "2e76e1e", "4face15", "6d9e881", "42baffc", "8b6e985", "eed8bd9", "49dad60", "e14b51d",
+//         "c79810d", "72e52c1", "e6c4521", "0ab4f85", "c50c6d7", "1d6961a", "67c7369", "e41324a",
+//         "7393de7",
+//     ];
+//     let mut map: HashMap<u32, Vec<diff_v2::LineDetail>> = HashMap::new();
+//     let file_name = "src/diff_v2.rs";
+//     for commit_hash in commit_hashes.iter() {
+//         diff_v2::extract_commit_hashes(commit_hash, &mut map, file_name);
+//         // for key in map.keys() {
+//         //     if map.get(&key).unwrap().len() == 1 {
+//         //         if map.get(&key).unwrap()[0].commit_hashes.len() > 1  {
+//         //             println!("Key: {:?}", key);
+//         //             println!("Value: {:?}", map.get(&key).unwrap()[0].commit_hashes);
+//         //
+//         //         }
+//         //     }
+//         // }
+//     }
 // }
-//
-// #[tokio::main]
-// async fn main() -> CliResult {
-//     let args = Cli::from_args();
-//
-//     env_logger::init();
-//     let mut server = Server {
-//         state: State::Dead,
-//         curr_db: None,
-//         state_db_handler: DBHandler {
-//             metadata: DBMetadata::default(),
-//         },
-//     };
-//
-//     // TODO: Add support for config file.
-//     // let config_obj: config_impl::Config = config_impl::read_config(config::CONFIG_FILE_NAME);
-//     // let mut file_path: Option<PathBuf> = None;
-//     // if args.file.is_some() {
-//     //     file_path = PathBuf::from_str(args.file.unwrap().as_str())
-//     //         .unwrap()
-//     //         .into();
-//     // }
-//
-//     match args.request_type {
-//         RequestTypeOptions::File => {
-//             server
-//                 .handle_server(args.folder_path.as_str(), args.file, None, None, None)
-//                 .await;
-//         }
-//         RequestTypeOptions::Author => {
-//             server
-//                 .handle_server(args.folder_path.as_str(), args.file, None, None, None)
-//                 .await;
-//         }
-//         RequestTypeOptions::Index => {
-//             server
-//                 .handle_server(args.folder_path.as_str(), None, None, None, None)
-//                 .await;
-//         }
-//         RequestTypeOptions::Query => {
-//             server
-//                 .handle_server(
-//                     args.folder_path.as_str(),
-//                     args.file,
-//                     args.start_number,
-//                     args.end_number,
-//                     Some(RequestTypeOptions::Query),
-//                 )
-//                 .await;
-//         }
-//     };
-//     Ok(())
-// }
+
+#[tokio::main]
+async fn main() -> CliResult {
+    let args = Cli::from_args();
+
+    env_logger::init();
+    let mut server = Server {
+        state: State::Dead,
+        curr_db: None,
+        state_db_handler: DBHandler {
+            metadata: DBMetadata::default(),
+        },
+    };
+
+    // TODO: Add support for config file.
+    // let config_obj: config_impl::Config = config_impl::read_config(config::CONFIG_FILE_NAME);
+    // let mut file_path: Option<PathBuf> = None;
+    // if args.file.is_some() {
+    //     file_path = PathBuf::from_str(args.file.unwrap().as_str())
+    //         .unwrap()
+    //         .into();
+    // }
+
+    match args.request_type {
+        RequestTypeOptions::File => {
+            server
+                .handle_server(args.folder_path.as_str(), args.file, None, None, None)
+                .await;
+        }
+        RequestTypeOptions::Author => {
+            server
+                .handle_server(args.folder_path.as_str(), args.file, None, None, None)
+                .await;
+        }
+        RequestTypeOptions::Index => {
+            server
+                .handle_server(args.folder_path.as_str(), None, None, None, None)
+                .await;
+        }
+        RequestTypeOptions::Query => {
+            server
+                .handle_server(
+                    args.folder_path.as_str(),
+                    args.file,
+                    args.start_number,
+                    args.end_number,
+                    Some(RequestTypeOptions::Query),
+                )
+                .await;
+        }
+    };
+    Ok(())
+}

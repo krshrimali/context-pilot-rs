@@ -1,29 +1,24 @@
-use crate::contextgpt_structs::AuthorDetailsV2;
+use crate::{contextgpt_structs::AuthorDetailsV2, diff_v2};
 
+use crate::git_command_algo;
+use futures::stream::{FuturesUnordered, StreamExt};
+use rayon::prelude::*;
+use regex::Regex;
+use std::collections::HashMap;
+use std::sync::Arc;
 use std::{
     fs::File,
     io::{BufRead, BufReader},
     process::{Command, Stdio},
 };
-use std::sync::Arc;
-use rayon::prelude::*;
-use regex::Regex;
-use std::collections::HashMap;
-use futures::stream::{FuturesUnordered, StreamExt};
 use tokio::sync::Semaphore;
-
 
 pub fn get_files_changed(commit_hash: &str) -> Vec<String> {
     // Use git show (minimal) API to find "all the files" changed in the given commit hash.
     // git show --pretty="" --name-only <commit_hash>
     let mut command = Command::new("git");
     let c_hash = commit_hash;
-    command.args([
-        "show",
-        "--pretty=",
-        "--name-only",
-        c_hash,
-    ]);
+    command.args(["show", "--pretty=", "--name-only", c_hash]);
     let output = command
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -36,7 +31,6 @@ pub fn get_files_changed(commit_hash: &str) -> Vec<String> {
     }
     files_changed
 }
-
 
 pub fn parse_git_log_l(input_str: &str) -> AuthorDetailsV2 {
     // Ouptut is similar to:
@@ -99,49 +93,73 @@ fn analyze_file_history_safe(filename: &str) -> Result<HashMap<usize, Vec<Commit
 }
 
 pub async fn extract_details_parallel(file_path: String) -> Vec<AuthorDetailsV2> {
-    let semaphore = Arc::new(Semaphore::new(8)); // limit to 8 concurrent file processes
-    let mut tasks = FuturesUnordered::new();
-
-    let permit = semaphore.clone().acquire_owned().await.unwrap();
-    let file_path_clone = file_path.clone();
-    
-    tasks.push(tokio::spawn(async move {
-        let _permit = permit; // keep permit alive
-        match analyze_file_history_safe(file_path_clone.as_str()) {
-            Ok(output) => {
-                let mut author_details_vec = Vec::new();
-                for (line_number, commit_info) in output.iter() {
-                    if commit_info.is_empty() {
-                        continue;
-                    }
-                    let mut author_details = AuthorDetailsV2 {
-                        origin_file_path: file_path.clone(),
-                        line_number: *line_number,
-                        commit_hashes: Vec::new(),
-                        author_full_name: Vec::new(),
-                    };
-                    for commit in commit_info {
-                        author_details.commit_hashes.push(commit.hash.clone());
-                        author_details.author_full_name.push(commit.message.clone());
-                    }
-                    author_details_vec.push(author_details);
-                }
-                author_details_vec
-            }
-            Err(_) => Vec::new(), // If analyze fails, return empty
-        }
-    }));
-
-    let mut results = Vec::new();
-    while let Some(task_result) = tasks.next().await {
-        match task_result {
-            Ok(author_details) => results.extend(author_details),
-            Err(e) => eprintln!("Task failed: {:?}", e),
-        }
+    // For now - this is not parallelized, TODO: @krshrimali.
+    // First get all the commit hashes that ever touched the given file path.
+    let commit_hashes = git_command_algo::get_all_commits_for_file(file_path.clone());
+    let mut map: HashMap<u32, Vec<diff_v2::LineDetail>> = HashMap::new();
+    for commit_hash in commit_hashes.iter() {
+        diff_v2::extract_commit_hashes(commit_hash, &mut map, file_path.as_str());
     }
-
-    results
+    // Map has populated "relevant commit hashes" for each line.
+    // Now use those commit hashes to find the most relevant files for each line.
+    let mut author_details_vec: Vec<AuthorDetailsV2> = Vec::new();
+    for (line_number, line_detail) in map.iter() {
+        // author_full_name is a TODO.
+        let author_details = AuthorDetailsV2 {
+            origin_file_path: file_path.clone(),
+            line_number: *line_number as usize,
+            commit_hashes: line_detail[0].commit_hashes.clone(),
+            author_full_name: Vec::new(),
+        };
+        author_details_vec.push(author_details);
+    }
+    author_details_vec
 }
+
+// pub async fn extract_details_parallel(file_path: String) -> Vec<AuthorDetailsV2> {
+//     let semaphore = Arc::new(Semaphore::new(8)); // limit to 8 concurrent file processes
+//     let mut tasks = FuturesUnordered::new();
+//
+//     let permit = semaphore.clone().acquire_owned().await.unwrap();
+//     let file_path_clone = file_path.clone();
+//
+//     tasks.push(tokio::spawn(async move {
+//         let _permit = permit; // keep permit alive
+//         match analyze_file_history_safe(file_path_clone.as_str()) {
+//             Ok(output) => {
+//                 let mut author_details_vec = Vec::new();
+//                 for (line_number, commit_info) in output.iter() {
+//                     if commit_info.is_empty() {
+//                         continue;
+//                     }
+//                     let mut author_details = AuthorDetailsV2 {
+//                         origin_file_path: file_path.clone(),
+//                         line_number: *line_number,
+//                         commit_hashes: Vec::new(),
+//                         author_full_name: Vec::new(),
+//                     };
+//                     for commit in commit_info {
+//                         author_details.commit_hashes.push(commit.hash.clone());
+//                         author_details.author_full_name.push(commit.message.clone());
+//                     }
+//                     author_details_vec.push(author_details);
+//                 }
+//                 author_details_vec
+//             }
+//             Err(_) => Vec::new(), // If analyze fails, return empty
+//         }
+//     }));
+//
+//     let mut results = Vec::new();
+//     while let Some(task_result) = tasks.next().await {
+//         match task_result {
+//             Ok(author_details) => results.extend(author_details),
+//             Err(e) => eprintln!("Task failed: {:?}", e),
+//         }
+//     }
+//
+//     results
+// }
 
 pub fn extract_details(file_path: String) -> Vec<AuthorDetailsV2> {
     let output = analyze_file_history(file_path.as_str());
@@ -158,9 +176,7 @@ pub fn extract_details(file_path: String) -> Vec<AuthorDetailsV2> {
         };
         for commit in commit_info {
             author_details.commit_hashes.push(commit.hash.clone());
-            author_details
-                .author_full_name
-                .push(commit.message.clone());
+            author_details.author_full_name.push(commit.message.clone());
         }
         author_details_vec.push(author_details);
     }
@@ -187,11 +203,13 @@ fn read_current_file(filename: &str) -> Vec<LineTrack> {
     reader
         .lines()
         .enumerate()
-        .filter_map(|(idx, line)| line.ok().map(|_| LineTrack {
-            current_line_number: idx + 1,
-            active: true,
-            commits: Vec::new(),
-        }))
+        .filter_map(|(idx, line)| {
+            line.ok().map(|_| LineTrack {
+                current_line_number: idx + 1,
+                active: true,
+                commits: Vec::new(),
+            })
+        })
         .collect()
 }
 
@@ -338,9 +356,9 @@ fn update_tracks(tracks: &mut [LineTrack], commits: Vec<(CommitInfo, Vec<String>
 }
 
 fn fetch_blame(filename: &str) -> HashMap<usize, CommitInfo> {
-    use std::process::Command;
     use regex::Regex;
     use std::collections::HashMap;
+    use std::process::Command;
 
     let output = Command::new("git")
         .args(["blame", "--line-porcelain", filename])
@@ -389,4 +407,27 @@ fn fill_missing_with_blame(tracks: &mut [LineTrack], blame_map: HashMap<usize, C
             }
         }
     }
+}
+
+pub fn get_all_commits_for_file(file_path: String) -> Vec<String> {
+    // git log --pretty=format:"%h" --reverse -- file_path
+    let mut command = Command::new("git");
+    command.args([
+        "log",
+        "--pretty=format:%h",
+        "--reverse",
+        "--",
+        file_path.as_str(),
+    ]);
+    let output = command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .unwrap();
+    let stdout_buf = String::from_utf8(output.stdout).unwrap();
+    let mut commits: Vec<String> = Vec::new();
+    for line in stdout_buf.lines() {
+        commits.push(line.to_string());
+    }
+    commits
 }
