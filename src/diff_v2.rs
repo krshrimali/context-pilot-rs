@@ -48,10 +48,12 @@ fn find_replacements(deleted_content: Vec<String>, added_content: Vec<String>) -
     // For now, just return the added content.
     let mut replaced_content_line_numbers = vec![];
     let deleted_content_iter = deleted_content.iter().enumerate();
-    for (_, line_content) in deleted_content_iter {
+    let mut used_indices = std::collections::HashSet::new();
+    for deleted_line in &deleted_content {
         for (idx_add, line_add_content) in added_content.iter().enumerate() {
-            if is_similar(line_content, line_add_content) {
+            if !used_indices.contains(&idx_add) && is_similar(deleted_line, line_add_content) {
                 replaced_content_line_numbers.push(idx_add as u32);
+                used_indices.insert(idx_add);
             }
         }
     }
@@ -205,6 +207,37 @@ pub fn reorder_map(
                     //     println!("Map length: {}", map.len());
                     //     panic!("Line number {} not found in map", new_idx);
                     // }
+                    if map.get(&new_idx).is_none() {
+                        println!("replaced_content_line_numbers: {:?}", replaced_content_line_numbers);
+                        println!("commit_hash: {}", commit_hash);
+                        println!("category: {:?}", category);
+                        println!("Line change: {:?}", line_change_before.change_type);
+                        println!("Line change after: {:?}", line_change_after.change_type);
+                        println!(
+                            "Line change before s: {:?}",
+                            line_change_before.start_line_number
+                        );
+                        println!(
+                            "Line change before c: {:?}",
+                            line_change_before.change_count
+                        );
+                        println!(
+                            "Line change after: {:?}",
+                            line_change_after.start_line_number
+                        );
+                        println!("Line change after c: {:?}", line_change_after.change_count);
+                        panic!(
+                            "Line number {} not found in map; map length: {}",
+                            l_no,
+                            map.len()
+                        );
+                        println!(
+                            "l_no {} -> new_idx {}, map len: {}",
+                            l_no,
+                            new_idx,
+                            map.len()
+                        );
+                    }
                     to_remove_map.insert(new_idx, map.get(&new_idx).unwrap().to_vec());
                 }
             }
@@ -295,11 +328,34 @@ pub fn reorder_map(
                 // Lines deleted > Lines added.
                 for l_no in s_line_no..e_line_no {
                     if replaced_content_line_numbers.contains(&l_no) {
-                        let new_content = line_change_after
+                        let new_content_unwrapped = line_change_after
                             .changed_content
-                            .get((l_no - s_line_no) as usize)
-                            .unwrap()
-                            .to_string();
+                            .get((l_no - s_line_no) as usize);
+                        if new_content_unwrapped.is_none() {
+                            println!("commit_hash: {}", commit_hash);
+                            println!("category: {:?}", category);
+                            println!("Line change: {:?}", line_change_before.change_type);
+                            println!("Line change after: {:?}", line_change_after.change_type);
+                            println!(
+                                "Line change before s: {:?}",
+                                line_change_before.start_line_number
+                            );
+                            println!(
+                                "Line change before c: {:?}",
+                                line_change_before.change_count
+                            );
+                            println!(
+                                "Line change after: {:?}",
+                                line_change_after.start_line_number
+                            );
+                            println!("Line change after c: {:?}", line_change_after.change_count);
+                            panic!(
+                                "Line number {} not found in map; map length: {}",
+                                l_no,
+                                map.len()
+                            );
+                        }
+                        let new_content = new_content_unwrapped.unwrap().to_string();
                         map.get_mut(&l_no).map(|line_details| {
                             line_details[0].commit_hashes.push(commit_hash.clone());
                             line_details[0].content = new_content.clone();
@@ -475,7 +531,7 @@ pub fn reorder_map(
     }
 }
 
-pub fn fetch_line_numbers(line: String) -> (LineChange, LineChange) {
+pub fn fetch_line_numbers(line: String) -> Option<(LineChange, LineChange)> {
     // Extract the line numbers from the diff line.
     // The line format is expected to be like:
     // -2,5 +2
@@ -502,7 +558,7 @@ pub fn fetch_line_numbers(line: String) -> (LineChange, LineChange) {
             1
         };
 
-        (
+        Some((
             LineChange {
                 start_line_number: line_before,
                 change_type: ChangeType::Deleted,
@@ -515,9 +571,9 @@ pub fn fetch_line_numbers(line: String) -> (LineChange, LineChange) {
                 change_count: line_after_count,
                 changed_content: vec![],
             },
-        )
+        ))
     } else {
-        panic!("Invalid line format: {}", line);
+        None
     }
 }
 
@@ -564,8 +620,16 @@ fn parse_diff(
             line = line.split_once("@@").unwrap().1.to_string();
             line = line.split_once("@@").unwrap().0.trim().to_string();
             let line_changes = fetch_line_numbers(line.clone());
-            line_before = Some(line_changes.0);
-            line_after = Some(line_changes.1);
+            if line_changes.is_none() {
+                panic!(
+                    "Line changes are none, this is not expected. Line: {}, commit_hash: {}",
+                    line,
+                    commit_hash.clone()
+                );
+            }
+            let l_changes = line_changes.unwrap();
+            line_before = Some(l_changes.0);
+            line_after = Some(l_changes.1);
             category = categorize_diff(line.as_str());
             // After this, we have to go on until line_changes.change_count -> those are deleted
             // lines if change_type == ChangeType::Deleted, otherwise they are the newly added
@@ -602,9 +666,9 @@ fn parse_diff(
                     find_replacements(deleted_content, added_content);
                 // Now for each of these replaced_content_line_numbers - add start_line_number from
                 // line_after, as they were just indices before.
-                let l_before_start_line_no = line_before.clone().unwrap().start_line_number;
+                let l_after_start_line_no = line_after.clone().unwrap().start_line_number;
                 replaced_content_line_numbers.iter_mut().for_each(|x| {
-                    *x = l_before_start_line_no + *x;
+                    *x = l_after_start_line_no + *x;
                 });
 
                 reorder_map(
@@ -650,7 +714,6 @@ pub fn extract_commit_hashes(
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         // Pass the commit diff into
         let _ = parse_diff(commit_hash.to_string(), stdout, map, file_name);
-        println!("map length: {}", map.len());
     } else {
         eprintln!("Error: {}", String::from_utf8_lossy(&output.stderr));
     }
