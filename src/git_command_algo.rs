@@ -414,7 +414,7 @@ pub fn get_all_commits_for_file(file_path: String) -> Vec<String> {
     let mut command = Command::new("git");
     command.args([
         "log",
-        "--no-merges",
+        // "--no-merges",
         "--pretty=format:%h",
         "--reverse",
         "--",

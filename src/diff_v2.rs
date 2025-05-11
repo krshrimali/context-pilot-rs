@@ -47,7 +47,6 @@ fn find_replacements(deleted_content: Vec<String>, added_content: Vec<String>) -
     // Find the replacements in the deleted content and added content.
     // For now, just return the added content.
     let mut replaced_content_line_numbers = vec![];
-    let deleted_content_iter = deleted_content.iter().enumerate();
     let mut used_indices = std::collections::HashSet::new();
     for deleted_line in &deleted_content {
         for (idx_add, line_add_content) in added_content.iter().enumerate() {
@@ -77,6 +76,7 @@ pub fn read_content(
     added_line_count: u32,
     map_to_fill: &mut HashMap<u32, Vec<LineDetail>>,
     start_line_number_if_to_add: Option<u32>,
+    commit_hash: String,
 ) -> (Vec<String>, Vec<String>) {
     let mut deleted_content = vec![];
     // While iterating - also make sure that you're filling up map_to_fill: with a LineDetail
@@ -99,7 +99,7 @@ pub fn read_content(
                     idx + start_line_number,
                     vec![LineDetail {
                         content: line.to_string(),
-                        commit_hashes: vec![],
+                        commit_hashes: vec![commit_hash.clone()],
                     }],
                 );
             }
@@ -154,23 +154,35 @@ pub fn reorder_map(
             let e_line_no = line_change_after.start_line_number + line_change_before.change_count;
             let map_len = map.len();
 
-            for l_no in (s_line_no)..e_line_no {
+            for l_no in s_line_no..e_line_no {
                 // Replaced line content numbers means that this line was "replaced" and not
                 // removed. So, in this case - do not remove content from the map.
                 // Later on, we'll append the commit hash.
                 if !replaced_content_line_numbers.contains(&l_no) {
                     map.remove(&l_no);
                 } else {
-                    map.get_mut(&l_no).map(|line_details| {
-                        line_details[0].commit_hashes.push(commit_hash.clone());
-                        // The content to replace with would be (l_no - s_line_no)th index in
-                        // line_change_after.changed_content.
-                        line_details[0].content = line_change_after
-                            .changed_content
-                            .get((l_no - s_line_no) as usize)
-                            .unwrap()
-                            .to_string();
-                    });
+                    let new_content = line_change_after
+                        .changed_content
+                        .get((l_no - s_line_no) as usize)
+                        .unwrap()
+                        .to_string();
+                    if map.get(&l_no).is_none() {
+                        // Insert an entry.
+                        map.insert(
+                            l_no,
+                            vec![LineDetail {
+                                content: new_content.clone(),
+                                commit_hashes: vec![commit_hash.clone()],
+                            }],
+                        );
+                    } else {
+                        map.get_mut(&l_no).map(|line_details| {
+                            line_details[0].commit_hashes.push(commit_hash.clone());
+                            // The content to replace with would be (l_no - s_line_no)th index in
+                            // line_change_after.changed_content.
+                            line_details[0].content = new_content;
+                        });
+                    }
                 }
             }
 
@@ -207,44 +219,12 @@ pub fn reorder_map(
                     //     println!("Map length: {}", map.len());
                     //     panic!("Line number {} not found in map", new_idx);
                     // }
-                    if map.get(&new_idx).is_none() {
-                        println!("replaced_content_line_numbers: {:?}", replaced_content_line_numbers);
-                        println!("commit_hash: {}", commit_hash);
-                        println!("category: {:?}", category);
-                        println!("Line change: {:?}", line_change_before.change_type);
-                        println!("Line change after: {:?}", line_change_after.change_type);
-                        println!(
-                            "Line change before s: {:?}",
-                            line_change_before.start_line_number
-                        );
-                        println!(
-                            "Line change before c: {:?}",
-                            line_change_before.change_count
-                        );
-                        println!(
-                            "Line change after: {:?}",
-                            line_change_after.start_line_number
-                        );
-                        println!("Line change after c: {:?}", line_change_after.change_count);
-                        panic!(
-                            "Line number {} not found in map; map length: {}",
-                            l_no,
-                            map.len()
-                        );
-                        println!(
-                            "l_no {} -> new_idx {}, map len: {}",
-                            l_no,
-                            new_idx,
-                            map.len()
-                        );
-                    }
                     to_remove_map.insert(new_idx, map.get(&new_idx).unwrap().to_vec());
                 }
             }
 
             // Now insert the new entries.
             for (l_no, line_detail) in to_remove_map.iter() {
-                map.remove(l_no);
                 map.insert(*l_no, line_detail.to_vec());
             }
 
@@ -305,12 +285,25 @@ pub fn reorder_map(
                         .to_string();
                     if replaced_content_line_numbers.contains(&l_no) {
                         // This line was replaced and not deleted -> and then added.
-                        map.get_mut(&l_no).map(|line_details| {
-                            line_details[0].commit_hashes.push(commit_hash.clone());
-                            // Line content to replace with would be (l_no-s_line_no)th index
-                            // in line_change_after.changed_content.
-                            line_details[0].content = new_content.clone();
-                        });
+                        if map.get(&l_no).is_none() {
+                            // This line was not present in the map, so add it.
+                            map.insert(
+                                l_no,
+                                vec![LineDetail {
+                                    content: new_content.clone(),
+                                    commit_hashes: vec![commit_hash.clone()],
+                                }],
+                            );
+                        } else {
+                            map.get_mut(&l_no).map(|line_details| {
+                                line_details[0].commit_hashes.push(commit_hash.clone());
+                                // Line content to replace with would be (l_no-s_line_no)th index
+                                // in line_change_after.changed_content.
+                                line_details[0].content = new_content.clone();
+                            });
+                        }
+                        // Assert that the content is not mistakenly deleted.
+                        assert_eq!(map.get(&l_no).is_some(), true);
                     } else {
                         // Added new line:
                         map.remove(&l_no);
@@ -331,35 +324,23 @@ pub fn reorder_map(
                         let new_content_unwrapped = line_change_after
                             .changed_content
                             .get((l_no - s_line_no) as usize);
-                        if new_content_unwrapped.is_none() {
-                            println!("commit_hash: {}", commit_hash);
-                            println!("category: {:?}", category);
-                            println!("Line change: {:?}", line_change_before.change_type);
-                            println!("Line change after: {:?}", line_change_after.change_type);
-                            println!(
-                                "Line change before s: {:?}",
-                                line_change_before.start_line_number
-                            );
-                            println!(
-                                "Line change before c: {:?}",
-                                line_change_before.change_count
-                            );
-                            println!(
-                                "Line change after: {:?}",
-                                line_change_after.start_line_number
-                            );
-                            println!("Line change after c: {:?}", line_change_after.change_count);
-                            panic!(
-                                "Line number {} not found in map; map length: {}",
-                                l_no,
-                                map.len()
-                            );
-                        }
                         let new_content = new_content_unwrapped.unwrap().to_string();
-                        map.get_mut(&l_no).map(|line_details| {
-                            line_details[0].commit_hashes.push(commit_hash.clone());
-                            line_details[0].content = new_content.clone();
-                        });
+                        if map.get(&l_no).is_none() {
+                            // This line was not present in the map, so add it.
+                            map.insert(
+                                l_no,
+                                vec![LineDetail {
+                                    content: new_content.clone(),
+                                    commit_hashes: vec![commit_hash.clone()],
+                                }],
+                            );
+                        } else {
+                            // This line was present in the map, so update it.
+                            map.get_mut(&l_no).map(|line_details| {
+                                line_details[0].commit_hashes.push(commit_hash.clone());
+                                line_details[0].content = new_content.clone();
+                            });
+                        }
                     }
                 }
 
@@ -460,6 +441,22 @@ pub fn reorder_map(
             }
         }
         Some(DiffCases::SingleLineReplacedWithAnotherSingleLine) => {
+            for i in 1..map.len() {
+                if map.get(&(i as u32)).is_none() {
+                    panic!(
+                        "Line number {} not found in map with map len: {}",
+                        i,
+                        map.len()
+                    );
+                }
+                if map.get(&(i as u32)).unwrap()[0].commit_hashes.len() == 0 {
+                    panic!(
+                        "Line number {} not found in map with map len: {}",
+                        i,
+                        map.len()
+                    );
+                }
+            }
             let s_line_no = line_change_after.start_line_number;
             // Replace the line with the new line.
             let to_remove = map.get_mut(&s_line_no);
@@ -471,6 +468,7 @@ pub fn reorder_map(
                     map.len()
                 );
             }
+
             let line_detail = to_remove.unwrap();
             if replaced_content_line_numbers.contains(&s_line_no) {
                 // This line was replaced and not deleted -> and then added.
@@ -484,6 +482,22 @@ pub fn reorder_map(
                 .unwrap()
                 .to_string();
             line_detail[0].content = new_content;
+            for i in 1..map.len() {
+                if map.get(&(i as u32)).is_none() {
+                    panic!(
+                        "Line number {} not found in map with map len: {}",
+                        i,
+                        map.len()
+                    );
+                }
+                if map.get(&(i as u32)).unwrap()[0].commit_hashes.len() == 0 {
+                    panic!(
+                        "Line number {} not found in map with map len: {}",
+                        i,
+                        map.len()
+                    );
+                }
+            }
         }
         Some(DiffCases::NewLinesAdded) => {
             // Handle this case
@@ -613,6 +627,10 @@ fn parse_diff(
         //         break;
         //     }
         // }
+        if line.starts_with("@@@") {
+            // merge commit - skip!
+            break;
+        }
         if line.starts_with("@@") {
             // Only process till the last '@@'
             // TODO: Do this using a regex instead.
@@ -645,15 +663,65 @@ fn parse_diff(
                     l_after.change_count,
                     map,
                     Some(l_after.start_line_number),
+                    commit_hash.clone(),
                 );
+                for i in 1..map.len() {
+                    if map.get(&(i as u32)).is_none() {
+                        panic!(
+                            "Line number {} not found in map with map len: {}",
+                            i,
+                            map.len()
+                        );
+                    }
+                    if map.get(&(i as u32)).unwrap()[0].commit_hashes.len() == 0 {
+                        panic!(
+                            "Line number {} not found in map with map len: {}",
+                            i,
+                            map.len()
+                        );
+                    }
+                }
             } else {
+                for i in 1..map.len() {
+                    if map.get(&(i as u32)).is_none() {
+                        panic!(
+                            "Line number {} not found in map with map len: {}",
+                            i,
+                            map.len()
+                        );
+                    }
+                    if map.get(&(i as u32)).unwrap()[0].commit_hashes.len() == 0 {
+                        panic!(
+                            "Line number {} not found in map with map len: {}",
+                            i,
+                            map.len()
+                        );
+                    }
+                }
                 let content = read_content(
                     &mut all_lines,
                     line_before.clone().unwrap().change_count,
                     line_after.clone().unwrap().change_count,
                     map,
                     None,
+                    commit_hash.clone()
                 );
+                for i in 1..map.len() {
+                    if map.get(&(i as u32)).is_none() {
+                        panic!(
+                            "Line number {} not found in map with map len: {}",
+                            i,
+                            map.len()
+                        );
+                    }
+                    if map.get(&(i as u32)).unwrap()[0].commit_hashes.len() == 0 {
+                        panic!(
+                            "Line number {} not found in map with map len: {}",
+                            i,
+                            map.len()
+                        );
+                    }
+                };
                 let deleted_content = content.0;
                 let added_content = content.1;
                 // In any case -> line_after should have the content of the new lines.
@@ -675,20 +743,43 @@ fn parse_diff(
                     commit_hash.clone(),
                     category,
                     map,
-                    line_before.unwrap(),
-                    line_after.unwrap(),
-                    replaced_content_line_numbers,
+                    line_before.clone().unwrap(),
+                    line_after.clone().unwrap(),
+                    replaced_content_line_numbers.clone(),
                 );
-                if map.len() > 1000 {
-                    for i in 1..1000 {
-                        if map.get(&(i as u32)).is_none() {
-                            panic!("Line number {} not found in map", i);
-                        }
+                for i in 1..map.len() {
+                    if map.get(&(i as u32)).is_none() {
+                        panic!(
+                            "Line number {} not found in map with map len: {}",
+                            i,
+                            map.len()
+                        );
                     }
-                    // Print unique keys
-                    let mut unique_keys = map.keys().cloned().collect::<Vec<u32>>();
-                    unique_keys.sort();
-                    unique_keys.dedup();
+                }
+                // Print unique keys
+                let mut unique_keys = map.keys().cloned().collect::<Vec<u32>>();
+                unique_keys.sort();
+                unique_keys.dedup();
+                for i in 1..unique_keys.len() {
+                    if map.get(&(i as u32)).is_none() {
+                        panic!(
+                            "Line number {} not found in map with map len: {}",
+                            i,
+                            map.len()
+                        );
+                    }
+                    if map.get(&(i as u32)).unwrap()[0].commit_hashes.len() == 0 {
+                        panic!(
+                            "Line number {} not found in map with map len: {}",
+                            i,
+                            map.len()
+                        );
+                    }
+                    // Make sure each entry in the key has a commit_hash attached to it.
+                    // assert_eq!(
+                    //     map.get(&(i as u32)).unwrap()[0].commit_hashes.len() > 0,
+                    //     true
+                    // );
                 }
             }
         }
