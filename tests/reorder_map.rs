@@ -93,7 +93,8 @@ mod tests_diff_v2 {
     #[test]
     fn test_fetch_line_numbers_replace_few_lines_with_single_line() {
         let line = "-2,5 +2";
-        let (line_before, line_after) = fetch_line_numbers(line.to_string());
+        let line_number_categories = fetch_line_numbers(line.to_string());
+        let (line_before, line_after) = line_number_categories.unwrap();
         assert_eq!(
             line_before,
             LineChange {
@@ -117,7 +118,8 @@ mod tests_diff_v2 {
     #[test]
     fn test_fetch_line_numbers_replace_few_lines_with_few_lines() {
         let line = "-2,5 +2,3";
-        let (line_before, line_after) = fetch_line_numbers(line.to_string());
+        let line_number_categories = fetch_line_numbers(line.to_string());
+        let (line_before, line_after) = line_number_categories.unwrap();
         assert_eq!(
             line_before,
             LineChange {
@@ -141,7 +143,8 @@ mod tests_diff_v2 {
     #[test]
     fn test_fetch_line_numbers_single_line_deleted() {
         let line = "-45 +44,0";
-        let (line_before, line_after) = fetch_line_numbers(line.to_string());
+        let line_number_categories = fetch_line_numbers(line.to_string());
+        let (line_before, line_after) = line_number_categories.unwrap();
         assert_eq!(
             line_before,
             LineChange {
@@ -165,7 +168,8 @@ mod tests_diff_v2 {
     #[test]
     fn test_fetch_line_numbers_few_lines_deleted() {
         let line = "-50,3 +48,0";
-        let (line_before, line_after) = fetch_line_numbers(line.to_string());
+        let line_number_categories = fetch_line_numbers(line.to_string());
+        let (line_before, line_after) = line_number_categories.unwrap();
         assert_eq!(
             line_before,
             LineChange {
@@ -189,7 +193,8 @@ mod tests_diff_v2 {
     #[test]
     fn test_fetch_line_numbers_single_line_replaced_with_another_single_line() {
         let line = "-159 +96";
-        let (line_before, line_after) = fetch_line_numbers(line.to_string());
+        let line_number_categories = fetch_line_numbers(line.to_string());
+        let (line_before, line_after) = line_number_categories.unwrap();
         assert_eq!(
             line_before,
             LineChange {
@@ -213,7 +218,8 @@ mod tests_diff_v2 {
     #[test]
     fn test_fetch_line_numbers_new_lines_added() {
         let line = "-169,0 +104,3";
-        let (line_before, line_after) = fetch_line_numbers(line.to_string());
+        let line_number_categories = fetch_line_numbers(line.to_string());
+        let (line_before, line_after) = line_number_categories.unwrap();
         assert_eq!(
             line_before,
             LineChange {
