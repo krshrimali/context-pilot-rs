@@ -1,12 +1,12 @@
+use crate::git_command_algo::get_files_changed;
+use crossbeam::thread;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::PathBuf;
-use std::{collections::HashMap, fs::File, path::Path};
-use crate::git_command_algo::get_files_changed;
-use uuid;
 use std::process::{Command, Stdio};
 use std::sync::Arc;
-use crossbeam::thread;
+use std::{collections::HashMap, fs::File, path::Path};
+use uuid;
 
 // use simple_home_dir::home_dir;
 
@@ -27,7 +27,7 @@ type MappingDBTypeV2 = HashMap<String, String>;
 // index; folder_path; currLines;
 #[derive(Default, Clone)]
 pub struct DB {
-    pub index: u32, // The line of code that you are at, right now? TODO:
+    pub index: u32,                // The line of code that you are at, right now? TODO:
     pub folder_path: String, // Current folder path that this DB is processing, or the binary is running
     pub curr_items: u32,     // TODO:
     pub mapping_file_name: String, // This is for storing which file is in which folder/file? <-- TODO:
@@ -93,7 +93,7 @@ impl DB {
     }
 
     // Initialise the DB if it doesn't exist already
-    pub fn init_db(&mut self, workspace_path: &str, curr_file_path: Option<&str>) {
+    pub fn init_db(&mut self, workspace_path: &str, curr_file_path: Option<&str>, cleanup: bool) {
         let db_folder = format!("{}/{}", config::DB_FOLDER, self.folder_path);
         self.workspace_path = String::from(workspace_path);
         self.curr_file_path = String::from(curr_file_path.unwrap_or(""));
@@ -114,7 +114,15 @@ impl DB {
         }
         self.index = 0;
         self.curr_items = 0;
-
+        // Check if self.folder_path exists, cleanup if cleanup is required.
+        if cleanup {
+            if Path::new(&self.folder_path).exists() {
+                // Remove the folder and all its contents
+                std::fs::remove_dir_all(&self.folder_path).unwrap_or_else(|_| {
+                    panic!("Unable to remove the folder: {}", self.folder_path)
+                });
+            }
+        }
         // Now initialise all relevant folders/files
         // When the child folders are also not present - we just want to iteratively create all folders
         std::fs::create_dir_all(&self.folder_path)
@@ -312,9 +320,7 @@ impl DB {
                             let relevant_file_paths = get_files_changed(commit_hash);
                             // Add each file path and increment count if it already existed.
                             for rel_path in relevant_file_paths.iter() {
-                                *counter_for_paths
-                                    .entry(rel_path.clone())
-                                    .or_insert(0) += 1;
+                                *counter_for_paths.entry(rel_path.clone()).or_insert(0) += 1;
                             }
                         }
                     }

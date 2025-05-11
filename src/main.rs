@@ -274,13 +274,17 @@ impl Server {
         // and files that are not in the ignore list if provided in the config
 
         let workspace_path_buf = PathBuf::from(workspace_path);
-
+        // First check if indexing is already done - if yes, just cleanup and restart.
+        // Check if mapping.json exists.
         let db = DB {
             folder_path: workspace_path.clone(),
             ..Default::default()
         };
         let curr_db: Arc<Mutex<DB>> = Arc::new(db.into());
-        curr_db.lock().await.init_db(workspace_path.as_str(), None);
+        curr_db
+            .lock()
+            .await
+            .init_db(workspace_path.as_str(), None, /*cleanup=*/ true);
         let mut server = Server::new(State::Dead, DBHandler::new(metadata.clone()));
         server.init_server(curr_db);
         let _ = server
@@ -307,10 +311,11 @@ impl Server {
                 ..Default::default()
             };
             let curr_db: Arc<Mutex<DB>> = Arc::new(db.into());
-            curr_db
-                .lock()
-                .await
-                .init_db(workspace_path, file_path.clone().as_deref());
+            curr_db.lock().await.init_db(
+                workspace_path,
+                file_path.clone().as_deref(),
+                /*cleanp=*/ false,
+            );
             // let mut server = Server::new(State::Dead, DBHandler::new(metadata.clone()));
             self.init_server(curr_db);
             // Then you query
