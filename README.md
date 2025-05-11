@@ -74,7 +74,7 @@ cp target/release/context-pilot /usr/local/bin/context-pilot
 ### Index your workspace
 
 ```bash
-context-pilot /path/to/workspace -t index
+context_pilot /path/to/workspace -t index
 ```
 
 This will **index** your project and store smartly sharded JSON database files at:
@@ -88,7 +88,7 @@ This will **index** your project and store smartly sharded JSON database files a
 ### Query for Top Context Files
 
 ```bash
-context-pilot /path/to/workspace -t query path/to/file.rs -s <start-line> -e <end-line>
+context_pilot /path/to/workspace -t query path/to/file.rs -s <start-line> -e <end-line>
 ```
 
 Fetch **top related files** for the selected line range.
@@ -98,7 +98,7 @@ Fetch **top related files** for the selected line range.
 ### Query for Top Authors
 
 ```bash
-context-pilot /path/to/workspace -t author path/to/file.rs -s <start-line> -e <end-line>
+context_pilot /path/to/workspace -t author path/to/file.rs -s <start-line> -e <end-line>
 ```
 
 Fetch **top authors** who contributed to the selected lines.
