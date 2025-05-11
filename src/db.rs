@@ -125,7 +125,12 @@ impl DB {
         if curr_file_path.is_none() {
             db_file_index = self.find_index(workspace_path);
         } else {
-            db_file_index = self.find_index(curr_file_path.unwrap());
+            // convert curr_file_path to an absolute path:
+            let curr_file_path = PathBuf::from(curr_file_path.unwrap());
+            let curr_file_path = curr_file_path
+                .canonicalize()
+                .unwrap_or_else(|_| panic!("Unable to convert the path to absolute path"));
+            db_file_index = self.find_index(curr_file_path.as_path().to_str().unwrap());
         }
         // let db_file_index = self.find_index(curr_file_path.unwrap_or(""));
         // Filename will be: <db_file_index>.json
