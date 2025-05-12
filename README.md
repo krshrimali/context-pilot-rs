@@ -12,6 +12,32 @@ Whether you want to find:
 
 Context Pilot gives you **fast**, **powerful**, and **local-first** code intelligence.
 
+## Installation
+
+Context Pilot is available via [homebrew](https://github.com/krshrimali/homebrew-context-pilot):
+
+```shell
+brew install krshrimali/context-pilot/context-pilot
+```
+
+If you're not using homebrew, please build this project from source for now (we are working on adding this to other package managers):
+
+```bash
+git clone https://github.com/krshrimali/context-pilot-rs.git
+cd context-pilot-rs
+cargo build --release
+```
+
+This will generate the binary at `./target/release/context_pilot`.
+
+Move it to a path that's in your `$PATH` to run it globally:
+
+```bash
+cp ./target/release/context_pilot /usr/local/bin/context_pilot
+```
+
+Once done, you should be able to do: `context_pilot --help`
+
 ---
 
 ## ✨ Features
@@ -48,24 +74,6 @@ Context Pilot gives you **fast**, **powerful**, and **local-first** code intelli
 6. **Editor Integrations:**  
    - 🧙‍♂️ Neovim plugin shows results via Telescope picker.
    - 🧙‍♂️ VSCode extension shows results via QuickPick menu.
-
----
-
-## 📦 Installation
-
-```bash
-git clone https://github.com/your-username/context-pilot.git
-cd context-pilot
-cargo build --release
-```
-
-This will generate the binary at `target/release/context-pilot`.
-
-Move it to a path that's in your `$PATH` to run it globally:
-
-```bash
-cp target/release/context-pilot /usr/local/bin/context-pilot
-```
 
 ---
 
