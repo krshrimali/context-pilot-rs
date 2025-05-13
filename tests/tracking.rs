@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use context_pilot::diff::{extract_details_with_tracking}; // Adjust module path as needed
-use context_pilot::utils::levenshtein;
+use contextpilot::diff::{extract_details_with_tracking}; // Adjust module path as needed
+use contextpilot::utils::levenshtein;
 
 #[test]
 fn test_levenshtein_basic_edit() {

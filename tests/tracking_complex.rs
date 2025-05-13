@@ -1,4 +1,4 @@
-use context_pilot::diff::{extract_details_with_tracking, shift_lines_after_insert};
+use contextpilot::diff::{extract_details_with_tracking, shift_lines_after_insert};
 use std::collections::HashMap; // Adjust path if needed
 
 #[test]

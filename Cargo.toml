@@ -1,7 +1,7 @@
 [package]
-name = "context_pilot"
-version = "0.0.2"
-edition = "2021"
+name = "contextpilot"
+version = "0.0.3"
+edition = "2024"
 
 [dependencies]
 btree-map = "0.1.0"
