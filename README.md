@@ -88,7 +88,7 @@ contextpilot /path/to/workspace -t index
 This will **index** your project and store smartly sharded JSON database files at:
 
 ```bash
-~/.contextpilot_db/<workspace>/
+~/.context_pilot_db/<workspace>/
 ```
 
 ---
