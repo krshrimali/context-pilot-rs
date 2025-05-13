@@ -358,7 +358,7 @@ mod test {
 
     #[test]
     fn test_loading_mapping_file() {
-        let mapping_path = "/home/krshrimali/.contextpilot_db/mapping.json";
+        let mapping_path = "/home/krshrimali/.context_pilot_db/mapping.json";
         let mapping_data = std::fs::read_to_string(mapping_path).unwrap_or_else(|_| {
             panic!(
                 "Unable to read the mapping file into string, file path: {}",
