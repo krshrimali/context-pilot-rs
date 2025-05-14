@@ -432,3 +432,18 @@ pub fn get_all_commits_for_file(file_path: String) -> Vec<String> {
     }
     commits
 }
+
+pub fn get_commit_descriptions(commit_hashes: Vec<String>) -> Vec<String> {
+    let mut descriptions = Vec::new();
+
+    for commit_hash in commit_hashes.iter() {
+        if let Ok(output) = Command::new("git").args(&["show", "-s", "--format=%s", commit_hash]).output() {
+            if output.status.success() {
+                if let Ok(desc) = String::from_utf8(output.stdout) {
+                    descriptions.push(desc.trim().to_string());
+                }
+            }
+        }
+    }
+    descriptions
+}

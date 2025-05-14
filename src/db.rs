@@ -1,4 +1,4 @@
-use crate::git_command_algo::get_files_changed;
+use crate::git_command_algo::{get_commit_descriptions, get_files_changed};
 use crossbeam::thread;
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -284,6 +284,46 @@ impl DB {
         self.curr_items = 0; // reset
     }
 
+    pub fn raw_exists_and_return(
+        &mut self,
+        start_line_number: &usize,
+        end_line_number: &usize,
+    ) -> (Vec<String>, Vec<u32>) {
+        let mut all_commit_hashes = vec![];
+        let mut uncovered_indices: Vec<u32> = vec![];
+        // Find the "closest" maximum index to the given index.
+        // Let's say if start_line_number is 5, and data is: ['3': [...], '7': [..., ...]]
+        // Output you are looking for is of "7'"
+
+        // Now get all the commit_hashes in the max_index entry.
+        let mut counter_for_paths: HashMap<String, usize> = HashMap::new();
+        for i in *start_line_number..=*end_line_number {
+            let mut max_index: Option<usize> = None;
+            // Find index that is "closest" max to the given index.
+            // This is the index that we will use to get the commit_hashes.
+            let mut keys: Vec<_> = self.current_data_v2.keys().collect();
+            keys.sort();
+            for key in keys.iter() {
+                if **key > i {
+                    max_index = Some(**key);
+                    break;
+                }
+            }
+            match max_index {
+                Some(index) => {
+                    if let Some(commit_hashes) = self.current_data_v2.get(&index) {
+                        all_commit_hashes.extend(commit_hashes.clone());
+                    }
+                }
+                None => {
+                    // No data found for the given index
+                    uncovered_indices.push(i as u32);
+                }
+            }
+        }
+        (all_commit_hashes, uncovered_indices)
+    }
+
     pub fn exists_and_return(
         &mut self,
         start_line_number: &usize,
@@ -350,6 +390,28 @@ impl DB {
         for (path, count) in relevant_paths_with_counter.iter() {
             println!("{} - {} occurrences", path, count);
         }
+    }
+
+    pub fn query_descriptions(
+        &mut self,
+        file_path: String,
+        start_number: usize,
+        end_number: usize,
+    ) -> () {
+        let mut end_line_number = end_number;
+        if end_number == 0 {
+            // Means, cover the whole file.
+            // end_number should be the last line number of the file.
+            end_line_number = std::fs::read_to_string(&file_path)
+                .unwrap_or_else(|_| panic!("Unable to read the file: {}", file_path))
+                .lines()
+                .count();
+        }
+        let (commit_hashes, _uncovered_indices) =
+            self.raw_exists_and_return(&start_number, &end_line_number);
+
+        let out = get_commit_descriptions(commit_hashes);
+        println!("Descriptions: {:?}", out);
     }
 }
 
