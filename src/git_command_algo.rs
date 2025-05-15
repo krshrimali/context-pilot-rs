@@ -433,17 +433,33 @@ pub fn get_all_commits_for_file(file_path: String) -> Vec<String> {
     commits
 }
 
-pub fn get_commit_descriptions(commit_hashes: Vec<String>) -> Vec<String> {
-    let mut descriptions = Vec::new();
+pub fn get_commit_descriptions(commit_hashes: Vec<String>) -> Vec<Vec<String>> {
+    let mut output = Vec::new();
+    let mut visited_commits = HashSet::new();
 
     for commit_hash in commit_hashes.iter() {
+        if visited_commits.contains(commit_hash) {
+            continue;
+        }
+        // First get the commit title:
+        let mut commit_title = String::new();
+        let mut commit_description = String::new();
         if let Ok(output) = Command::new("git").args(&["show", "-s", "--format=%s", commit_hash]).output() {
             if output.status.success() {
-                if let Ok(desc) = String::from_utf8(output.stdout) {
-                    descriptions.push(desc.trim().to_string());
+                if let Ok(title) = String::from_utf8(output.stdout) {
+                    commit_title = title.trim().to_string();
                 }
             }
         }
+        if let Ok(output) = Command::new("git").args(&["show", "-s", "--format=%b", commit_hash]).output() {
+            if output.status.success() {
+                visited_commits.insert(commit_hash.clone());
+                if let Ok(desc) = String::from_utf8(output.stdout) {
+                    commit_description = desc.trim().to_string();
+                }
+            }
+        }
+        output.push(vec![commit_title, commit_description]);
     }
-    descriptions
+    output
 }
