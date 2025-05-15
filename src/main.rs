@@ -150,7 +150,7 @@ impl Server {
         // let config_obj: config_impl::Config = config_impl::read_config(config::CONFIG_FILE_NAME);
 
         // curr_db.init_db(file_path);
-        let output_author_details = perform_for_whole_file(file_path_str.to_string()).await;
+        let output_author_details = perform_for_whole_file(file_path_str.to_string(), true).await;
 
         // for each_output in output_author_details.iter() {
         //     if each_output.origin_file_path != file_path_str {
@@ -349,7 +349,7 @@ impl Server {
                 file_path.clone().unwrap(),
                 start_number.unwrap(),
                 end_number.unwrap(),
-            );
+            ).await;
         }
 
         let mut tasks = vec![];
