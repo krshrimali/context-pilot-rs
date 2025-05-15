@@ -37,6 +37,7 @@ use std::collections::HashMap;
 
 pub async fn perform_for_whole_file(
     origin_file_path: String,
+    should_print: bool,
 ) -> Vec<AuthorDetailsV2> {
     let file = match std::fs::File::open(&origin_file_path) {
         Ok(f) => f,
@@ -61,7 +62,7 @@ pub async fn perform_for_whole_file(
     ).await;
 
 
-    if !output.is_empty() {
+    if !output.is_empty() && should_print {
         println!("Extracted details for file: {}", origin_file_path);
         // Do nothing for now!
         // eprintln!(

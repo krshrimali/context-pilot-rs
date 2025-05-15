@@ -7,6 +7,7 @@ use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::{collections::HashMap, fs::File, path::Path};
 use uuid;
+use crate::algo_loc;
 
 // use simple_home_dir::home_dir;
 
@@ -140,10 +141,15 @@ impl DB {
                 .unwrap_or_else(|_| panic!("Unable to convert the path to absolute path"));
             db_file_index = self.find_index(curr_file_path.as_path().to_str().unwrap());
         }
-        // let db_file_index = self.find_index(curr_file_path.unwrap_or(""));
-        // Filename will be: <db_file_index>.json
-        let valid_indices = db_file_index.unwrap_or(vec![self.index]);
-        self.current_data_v2 = self.read_all(valid_indices.clone());
+        if db_file_index.is_none() {
+            // No mapping yet - means no indexing hasn't happened yet.
+            self.current_data_v2 = HashMap::new();
+        } else {
+            // let db_file_index = self.find_index(curr_file_path.unwrap_or(""));
+            // Filename will be: <db_file_index>.json
+            let valid_indices = db_file_index.unwrap_or(vec![self.index]);
+            self.current_data_v2 = self.read_all(valid_indices.clone());
+        }
     }
 
     fn find_index(&mut self, curr_file_path: &str) -> Option<Vec<u32>> {
@@ -392,7 +398,7 @@ impl DB {
         }
     }
 
-    pub fn query_descriptions(
+    pub async fn query_descriptions(
         &mut self,
         file_path: String,
         start_number: usize,
@@ -407,11 +413,28 @@ impl DB {
                 .lines()
                 .count();
         }
-        let (commit_hashes, _uncovered_indices) =
-            self.raw_exists_and_return(&start_number, &end_line_number);
+        if self.current_data_v2.is_empty() {
+            // No data to query - means no indexing has happened yet.
+            // Let's treat this as a binary and perform the operation ourselves:
+            let output = algo_loc::perform_for_whole_file(file_path.clone(), false).await;
+            let mut commit_hashes = vec![];
+            for struct_detail in output.iter() {
+                // Check if struct_details' line number comes b/w start_number and end_number:
+                if struct_detail.line_number >= start_number
+                    && struct_detail.line_number <= end_line_number
+                {
+                    commit_hashes.extend(struct_detail.commit_hashes.clone());
+                }
+            }
+            let out = get_commit_descriptions(commit_hashes);
+            println!("{:?}", out);
+        } else {
+            let (commit_hashes, _uncovered_indices) =
+                self.raw_exists_and_return(&start_number, &end_line_number);
 
-        let out = get_commit_descriptions(commit_hashes);
-        println!("{:?}", out);
+            let out = get_commit_descriptions(commit_hashes);
+            println!("{:?}", out);
+        }
     }
 }
 
