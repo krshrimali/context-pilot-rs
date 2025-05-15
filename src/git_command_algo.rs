@@ -4,7 +4,7 @@ use crate::git_command_algo;
 use futures::stream::{FuturesUnordered, StreamExt};
 use rayon::prelude::*;
 use regex::Regex;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::{
     fs::File,
