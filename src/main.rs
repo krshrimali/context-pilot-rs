@@ -327,7 +327,7 @@ impl Server {
                 file_path.clone().unwrap(),
                 start_number.unwrap(),
                 end_number.unwrap(),
-            );
+            ).await;
         } else if request_type.is_some () && request_type.unwrap() == RequestTypeOptions::Descriptions {
             let db = DB {
                 folder_path: workspace_path.to_string().clone(),

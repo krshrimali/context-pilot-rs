@@ -380,7 +380,7 @@ impl DB {
         (counter_for_paths, uncovered_indices)
     }
 
-    pub fn query(&mut self, file_path: String, start_number: usize, end_number: usize) {
+    pub async fn query(&mut self, file_path: String, start_number: usize, end_number: usize) {
         let mut end_line_number = end_number;
         if end_number == 0 {
             // Means, cover the whole file.
@@ -390,11 +390,40 @@ impl DB {
                 .lines()
                 .count();
         }
-        let (relevant_paths_with_counter, _uncovered_indices) =
-            self.exists_and_return(&start_number, &end_line_number);
+        if self.current_data_v2.is_empty() {
+            // No data to query - means no indexing has happened yet.
+            // Let's treat this as a binary and perform operation.
+            let output = algo_loc::perform_for_whole_file(file_path.clone(), false).await;
+            let mut commit_hashes = vec![];
+            for struct_detail in output.iter() {
+                // Check if struct_details' line number comes b/w start_number and end_number:
+                if struct_detail.line_number >= start_number
+                    && struct_detail.line_number <= end_line_number
+                {
+                    commit_hashes.extend(struct_detail.commit_hashes.clone());
+                }
+            }
+            // Now iterate through the commit hashes:
+            let mut counter_for_paths: HashMap<String, usize> = HashMap::new();
+            for commit_hash in commit_hashes.iter() {
+                // Compute contextual file paths using the commit hash.
+                // We use git show for this.
+                let relevant_file_paths = get_files_changed(commit_hash);
+                // Add each file path and increment count if it already existed.
+                for rel_path in relevant_file_paths.iter() {
+                    *counter_for_paths.entry(rel_path.clone()).or_insert(0) += 1;
+                }
+            }
+            for (path, count) in counter_for_paths.iter() {
+                println!("{} - {} occurrences", path, count);
+            }
+        } else {
+            let (relevant_paths_with_counter, _uncovered_indices) =
+                self.exists_and_return(&start_number, &end_line_number);
 
-        for (path, count) in relevant_paths_with_counter.iter() {
-            println!("{} - {} occurrences", path, count);
+            for (path, count) in relevant_paths_with_counter.iter() {
+                println!("{} - {} occurrences", path, count);
+            }
         }
     }
 
