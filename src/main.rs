@@ -305,7 +305,7 @@ impl Server {
         let mut metadata = self.state_db_handler.get_current_metadata();
 
         // If this is a call to query and not to index ->
-        if request_type.is_some() && request_type.unwrap() == RequestTypeOptions::Query {
+        if request_type.is_some() && request_type.clone().unwrap() == RequestTypeOptions::Query {
             let db = DB {
                 folder_path: workspace_path.to_string().clone(),
                 ..Default::default()
@@ -324,6 +324,28 @@ impl Server {
             assert!(end_number.is_some());
             assert!(self.curr_db.is_some());
             self.curr_db.clone().unwrap().lock().await.query(
+                file_path.clone().unwrap(),
+                start_number.unwrap(),
+                end_number.unwrap(),
+            );
+        } else if request_type.is_some () && request_type.unwrap() == RequestTypeOptions::Descriptions {
+            let db = DB {
+                folder_path: workspace_path.to_string().clone(),
+                ..Default::default()
+            };
+            let curr_db: Arc<Mutex<DB>> = Arc::new(db.into());
+            curr_db.lock().await.init_db(
+                workspace_path,
+                file_path.clone().as_deref(),
+                /*cleanp=*/ false,
+            );
+            // let mut server = Server::new(State::Dead, DBHandler::new(metadata.clone()));
+            self.init_server(curr_db);
+            assert!(file_path.is_some());
+            assert!(start_number.is_some());
+            assert!(end_number.is_some());
+            assert!(self.curr_db.is_some());
+            self.curr_db.clone().unwrap().lock().await.query_descriptions(
                 file_path.clone().unwrap(),
                 start_number.unwrap(),
                 end_number.unwrap(),
@@ -440,6 +462,11 @@ async fn main() -> CliResult {
                     args.end_number,
                     Some(RequestTypeOptions::Query),
                 )
+                .await;
+        }
+        RequestTypeOptions::Descriptions => {
+            server
+                .handle_server(args.folder_path.as_str(), args.file, args.start_number, args.end_number, Some(RequestTypeOptions::Descriptions))
                 .await;
         }
     };
