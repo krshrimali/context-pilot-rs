@@ -411,7 +411,7 @@ impl DB {
             self.raw_exists_and_return(&start_number, &end_line_number);
 
         let out = get_commit_descriptions(commit_hashes);
-        println!("Descriptions: {:?}", out);
+        println!("{:?}", out);
     }
 }
 
