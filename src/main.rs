@@ -196,26 +196,6 @@ impl Server {
                     }
                 }
                 if entry_path_path.is_dir() {
-                    if self.state_db_handler.metadata.folders_to_index.is_empty() {
-                        // If no folders to index are provided, index all folders.
-                        log!(Level::Info, "Folder is valid: {}", entry_path_path.display());
-                    } else {
-                        // Check if the folder is in the folders to index list:
-                        let folder_name = entry_path_stripped
-                            .as_str();
-                        if !self
-                            .state_db_handler
-                            .metadata
-                            .folders_to_index
-                            .contains(&folder_name.to_string())
-                        {
-                            println!(
-                                "Folder is not in the folders to index list: {}",
-                                folder_name
-                            );
-                            continue;
-                        }
-                    }
                     files_set.spawn({
                         let entry_path_clone = entry_path_path.clone();
                         let state_db_handler_clone = self.state_db_handler.clone();
@@ -332,9 +312,24 @@ impl Server {
         if gitignore.is_ok() {
             gitignore_builder_obj = Some(gitignore.unwrap());
         }
-        let _ = server
-            ._iterate_through_workspace(workspace_path_buf.clone(), gitignore_builder_obj)
-            .await;
+        if self.state_db_handler.metadata.folders_to_index.len() > 0 {
+            // If subfolders are provided - just index them.
+            for subfolder in self.state_db_handler.metadata.folders_to_index.iter() {
+                let subfolder_path = PathBuf::from(format!("{}/{}", workspace_path, subfolder));
+                if subfolder_path.exists() {
+                    server
+                        ._iterate_through_workspace(subfolder_path, gitignore_builder_obj.clone())
+                        .await;
+                } else {
+                    println!("Subfolder does not exist: {}", subfolder);
+                    log!(Level::Error, "Subfolder does not exist: {}", subfolder);
+                }
+            }
+        } else {
+            let _ = server
+                ._iterate_through_workspace(workspace_path_buf.clone(), gitignore_builder_obj)
+                .await;
+        }
     }
 
     pub async fn handle_server(
