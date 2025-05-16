@@ -23,6 +23,7 @@ use quicli::prelude::{
     CliResult,
 };
 use tokio::task;
+use ignore::gitignore::{Gitignore, GitignoreBuilder};
 
 #[derive(Default, Debug, Eq, PartialEq, Clone, Copy)]
 pub enum State {
@@ -167,11 +168,11 @@ impl Server {
     async fn _iterate_through_workspace(
         &mut self,
         workspace_path: PathBuf,
+        gitignore_builder_obj: Option<Gitignore>,
     ) -> Vec<AuthorDetailsV2> {
         let mut files_set: task::JoinSet<Vec<AuthorDetailsV2>> = task::JoinSet::new();
         let path = Path::new(&workspace_path);
         let mut final_authordetails: Vec<AuthorDetailsV2> = Vec::new();
-
         if path.is_dir() {
             for entry in path
                 .read_dir()
@@ -179,11 +180,25 @@ impl Server {
             {
                 let curr_db = self.curr_db.clone();
                 let entry_path = entry.unwrap().path();
+                // Check if entry_path matches gitignore pattern - ignore if yes.
+                if let Some(gitignore_obj) = gitignore_builder_obj.clone() {
+                    // Strip workspace path + '/' from the entry_path if it's not relative:
+                    let entry_path_str = entry_path.to_str().unwrap();
+                    let to_strip = format!("{}{}", self.state_db_handler.metadata.workspace_path, "/");
+                    let entry_path = entry_path_str
+                        .strip_prefix(to_strip.as_str())
+                        .unwrap_or(entry_path_str)
+                        .to_string();
+                    if gitignore_obj.matched(&entry_path, true).is_ignore() {
+                        continue;
+                    }
+                }
                 if entry_path.is_dir() {
                     files_set.spawn({
                         let entry_path_clone = entry_path.clone();
                         let state_db_handler_clone = self.state_db_handler.clone();
                         let curr_db_clone = curr_db.clone();
+                        let gitignore_obj_cloned = gitignore_builder_obj.clone();
                         async move {
                             let mut server = Server {
                                 state: State::Running,
@@ -191,7 +206,7 @@ impl Server {
                                 state_db_handler: state_db_handler_clone,
                             };
                             let result = server
-                                ._iterate_through_workspace(entry_path_clone.clone())
+                                ._iterate_through_workspace(entry_path_clone.clone(), gitignore_obj_cloned)
                                 .await;
                             result
                         }
@@ -287,8 +302,16 @@ impl Server {
             .init_db(workspace_path.as_str(), None, /*cleanup=*/ true);
         let mut server = Server::new(State::Dead, DBHandler::new(metadata.clone()));
         server.init_server(curr_db);
+        // Initialize a gitignore builder:
+        let mut gitignore_builder = GitignoreBuilder::new(workspace_path_buf.clone());
+        gitignore_builder.add(".gitignore");
+        let gitignore = gitignore_builder.build();
+        let mut gitignore_builder_obj: Option<Gitignore> = None;
+        if gitignore.is_ok() {
+            gitignore_builder_obj = Some(gitignore.unwrap());
+        }
         let _ = server
-            ._iterate_through_workspace(workspace_path_buf.clone())
+            ._iterate_through_workspace(workspace_path_buf.clone(), gitignore_builder_obj)
             .await;
     }
 
