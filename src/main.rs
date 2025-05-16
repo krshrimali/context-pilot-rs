@@ -78,6 +78,7 @@ impl DBHandler {
             workspace_path: folder_path.to_string(),
             curr_progress: 0,
             total_count: total_valid_file_count,
+            folders_to_index: vec![]
         };
     }
 
@@ -111,6 +112,7 @@ pub struct Server {
 pub struct DBMetadata {
     state: State,
     workspace_path: String,
+    folders_to_index: Vec<String>,
     curr_progress: i64, // file index you're at OR percentage done
     total_count: i64,   // how many files are indexing
 }
@@ -179,23 +181,43 @@ impl Server {
                 .unwrap_or_else(|_| panic!("failed reading directory {}", path.display()))
             {
                 let curr_db = self.curr_db.clone();
-                let entry_path = entry.unwrap().path();
+                let entry_path_path = entry.unwrap().path();
+                let entry_path_str = entry_path_path.to_str().unwrap();
+                let to_strip = format!("{}{}", self.state_db_handler.metadata.workspace_path, "/");
+                let entry_path_stripped = entry_path_str
+                    .strip_prefix(to_strip.as_str())
+                    .unwrap_or(entry_path_str)
+                    .to_string();
                 // Check if entry_path matches gitignore pattern - ignore if yes.
                 if let Some(gitignore_obj) = gitignore_builder_obj.clone() {
                     // Strip workspace path + '/' from the entry_path if it's not relative:
-                    let entry_path_str = entry_path.to_str().unwrap();
-                    let to_strip = format!("{}{}", self.state_db_handler.metadata.workspace_path, "/");
-                    let entry_path = entry_path_str
-                        .strip_prefix(to_strip.as_str())
-                        .unwrap_or(entry_path_str)
-                        .to_string();
-                    if gitignore_obj.matched(&entry_path, true).is_ignore() {
+                    if gitignore_obj.matched(&entry_path_stripped, true).is_ignore() {
                         continue;
                     }
                 }
-                if entry_path.is_dir() {
+                if entry_path_path.is_dir() {
+                    if self.state_db_handler.metadata.folders_to_index.is_empty() {
+                        // If no folders to index are provided, index all folders.
+                        log!(Level::Info, "Folder is valid: {}", entry_path_path.display());
+                    } else {
+                        // Check if the folder is in the folders to index list:
+                        let folder_name = entry_path_stripped
+                            .as_str();
+                        if !self
+                            .state_db_handler
+                            .metadata
+                            .folders_to_index
+                            .contains(&folder_name.to_string())
+                        {
+                            println!(
+                                "Folder is not in the folders to index list: {}",
+                                folder_name
+                            );
+                            continue;
+                        }
+                    }
                     files_set.spawn({
-                        let entry_path_clone = entry_path.clone();
+                        let entry_path_clone = entry_path_path.clone();
                         let state_db_handler_clone = self.state_db_handler.clone();
                         let curr_db_clone = curr_db.clone();
                         let gitignore_obj_cloned = gitignore_builder_obj.clone();
@@ -212,11 +234,11 @@ impl Server {
                         }
                     });
                 } else {
-                    if Server::_is_valid_file(&entry_path) {
-                        log!(Level::Info, "File is valid: {}", entry_path.display());
+                    if Server::_is_valid_file(&entry_path_path) {
+                        log!(Level::Info, "File is valid: {}", entry_path_path.display());
                         files_set.spawn({
                             async move {
-                                let output = Server::_index_file(entry_path.clone()).await;
+                                let output = Server::_index_file(entry_path_path.clone()).await;
                                 output
                             }
                         });
@@ -322,9 +344,11 @@ impl Server {
         start_number: Option<usize>,
         end_number: Option<usize>,
         request_type: Option<RequestTypeOptions>,
+        indexing_optional_folders: Option<Vec<String>>,
     ) {
         // this will initialise any required states
         self.state_db_handler.init(workspace_path);
+        self.state_db_handler.metadata.folders_to_index = indexing_optional_folders.unwrap_or(vec![]);
         let mut metadata = self.state_db_handler.get_current_metadata();
 
         // If this is a call to query and not to index ->
@@ -459,21 +483,28 @@ async fn main() -> CliResult {
     //         .unwrap()
     //         .into();
     // }
-
     match args.request_type {
         RequestTypeOptions::File => {
             server
-                .handle_server(args.folder_path.as_str(), args.file, None, None, None)
+                .handle_server(args.folder_path.as_str(), args.file, None, None, None, None)
                 .await;
         }
         RequestTypeOptions::Author => {
             server
-                .handle_server(args.folder_path.as_str(), args.file, None, None, None)
+                .handle_server(args.folder_path.as_str(), args.file, None, None, None, None)
                 .await;
         }
         RequestTypeOptions::Index => {
+            // If indexing is mentioned, check if any subfolders are requested:
+            let mut subfolders: Option<Vec<String>> = None;
+            if args.index_subfolder.is_some() {
+                // These will be comma separated paths.
+                let subfolder_str = args.index_subfolder.unwrap();
+                let subfolder_vec: Vec<String> = subfolder_str.split(',').map(|s| s.to_string()).collect();
+                subfolders.replace(subfolder_vec);
+            }
             server
-                .handle_server(args.folder_path.as_str(), None, None, None, None)
+                .handle_server(args.folder_path.as_str(), None, None, None, None, subfolders)
                 .await;
         }
         RequestTypeOptions::Query => {
@@ -484,12 +515,13 @@ async fn main() -> CliResult {
                     args.start_number,
                     args.end_number,
                     Some(RequestTypeOptions::Query),
+                    None
                 )
                 .await;
         }
         RequestTypeOptions::Descriptions => {
             server
-                .handle_server(args.folder_path.as_str(), args.file, args.start_number, args.end_number, Some(RequestTypeOptions::Descriptions))
+                .handle_server(args.folder_path.as_str(), args.file, args.start_number, args.end_number, Some(RequestTypeOptions::Descriptions), None)
                 .await;
         }
     };

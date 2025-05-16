@@ -69,6 +69,9 @@ pub(crate) struct Cli {
     // TODO: Add instructions on what request_type could be
     #[structopt(short = "t")]
     pub request_type: RequestTypeOptions,
+
+    #[structopt(short = "i")]
+    pub index_subfolder: Option<String>,
 }
 
 #[derive(Default, Debug, Clone, Deserialize, Serialize)]
