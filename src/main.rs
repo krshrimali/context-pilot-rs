@@ -297,11 +297,17 @@ impl Server {
             folder_path: workspace_path.clone(),
             ..Default::default()
         };
+        // In case we are attempging to index subfolders - do NOT cleanup
+        // the DB.
+        let mut cleanup: bool = true;
+        if metadata.folders_to_index.len() > 0 {
+            cleanup = false;
+        }
         let curr_db: Arc<Mutex<DB>> = Arc::new(db.into());
         curr_db
             .lock()
             .await
-            .init_db(workspace_path.as_str(), None, /*cleanup=*/ true);
+            .init_db(workspace_path.as_str(), None, cleanup);
         let mut server = Server::new(State::Dead, DBHandler::new(metadata.clone()));
         server.init_server(curr_db);
         // Initialize a gitignore builder:
