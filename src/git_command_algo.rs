@@ -173,13 +173,7 @@ pub fn get_commit_descriptions(commit_hashes: Vec<String>) -> Vec<Vec<String>> {
         // let mut commit_author_name = String::new();
         // let mut commit_datetime = String::new();
         if let Ok(output) = Command::new("git")
-            .args([
-                "show",
-                "-s",
-                "--format=%s%n%b%n--AUTHOR--%n%an%n--DATE--%n%cd",
-                "--date=local",
-                commit_hash,
-            ])
+            .args(["show", "-s", "--format=%s%n%b%n--AUTHOR--%n%an%n--DATE--%n%cd", "--date=local", commit_hash])
             .output()
         {
             if output.status.success() {
@@ -191,8 +185,7 @@ pub fn get_commit_descriptions(commit_hashes: Vec<String>) -> Vec<Vec<String>> {
                         let message = sections[0].trim();
                         let mut lines = message.lines();
                         let commit_title = lines.next().unwrap_or("").trim().to_string();
-                        let commit_description =
-                            lines.collect::<Vec<_>>().join("\n").trim().to_string();
+                        let commit_description = lines.collect::<Vec<_>>().join("\n").trim().to_string();
 
                         // Author and date
                         let parts: Vec<&str> = sections[1].split("\n--DATE--\n").collect();
