@@ -10,6 +10,7 @@ mod git_command_algo;
 use crate::{algo_loc::perform_for_whole_file, db::DB};
 use async_recursion::async_recursion;
 use contextgpt_structs::{AuthorDetailsV2, Cli, RequestTypeOptions};
+use git_command_algo::print_all_valid_files;
 use std::collections::HashMap;
 use std::{
     path::{Path, PathBuf},
@@ -327,6 +328,15 @@ impl Server {
         request_type: Option<RequestTypeOptions>,
         indexing_optional_folders: Option<Vec<String>>,
     ) {
+        if request_type.is_some()
+            && request_type.clone().unwrap() == RequestTypeOptions::ListSubdirs
+        {
+            git_command_algo::print_all_valid_directories(
+                workspace_path.to_string(),
+                Some(String::from(".gitignore")),
+            );
+            return;
+        }
         // this will initialise any required states
         self.state_db_handler.init(workspace_path);
         self.state_db_handler.metadata.folders_to_index =
@@ -531,6 +541,19 @@ async fn main() -> CliResult {
                     args.start_number,
                     args.end_number,
                     Some(RequestTypeOptions::Descriptions),
+                    None,
+                )
+                .await;
+        }
+        RequestTypeOptions::ListSubdirs => {
+            // Just prints the subdirs to stdout
+            server
+                .handle_server(
+                    args.folder_path.as_str(),
+                    None,
+                    None,
+                    None,
+                    Some(RequestTypeOptions::ListSubdirs),
                     None,
                 )
                 .await;
