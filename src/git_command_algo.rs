@@ -18,6 +18,7 @@ pub fn print_all_valid_directories(workspace_dir: String, gitignore_file_name: O
     let mut gitignore_builder = GitignoreBuilder::new(workspace_dir.clone());
     gitignore_builder.add(gitignore_file_name);
     let gitignore = gitignore_builder.build().expect("Failed");
+    let mut all_paths: Vec<String> = vec![];
     // Iterate through all the files in the workspace_dir:
     for walk_entry in Walk::new(workspace_dir.clone()) {
         match walk_entry {
@@ -42,7 +43,7 @@ pub fn print_all_valid_directories(workspace_dir: String, gitignore_file_name: O
                     if rel_path.is_ok() {
                         let relative_path = rel_path.clone().unwrap();
                         if !relative_path.to_path_buf().to_string_lossy().is_empty() {
-                            println!("{}", relative_path.display());
+                            all_paths.push(relative_path.display().to_string());
                         }
                     }
                 }
@@ -52,6 +53,7 @@ pub fn print_all_valid_directories(workspace_dir: String, gitignore_file_name: O
             }
         }
     }
+    println!("{:?}", all_paths);
 }
 
 pub fn print_all_valid_files(workspace_dir: String, gitignore_file_name: Option<String>) -> () {
