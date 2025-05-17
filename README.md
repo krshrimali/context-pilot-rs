@@ -91,7 +91,6 @@ This will **index** your project and store smartly sharded JSON database files a
 ~/.context_pilot_db/<workspace>/
 ```
 
-
 ---
 
 ### Query for Top Context Files
