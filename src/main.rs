@@ -318,6 +318,7 @@ impl Server {
         if gitignore.is_ok() {
             gitignore_builder_obj = Some(gitignore.unwrap());
         }
+
         if self.state_db_handler.metadata.folders_to_index.len() > 0 {
             // If subfolders are provided - just index them.
             for subfolder in self.state_db_handler.metadata.folders_to_index.iter() {

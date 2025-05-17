@@ -8,14 +8,12 @@ use std::path::PathBuf;
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Config {
     pub file_count_threshold: usize,
-    pub commit_hashes_threshold: usize,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Config {
             file_count_threshold: config::OUTPUT_COUNT_THRESHOLD,
-            commit_hashes_threshold: config::LAST_MANY_COMMIT_HASHES,
         }
     }
 }
