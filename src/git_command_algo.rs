@@ -74,7 +74,7 @@ pub fn get_all_commits_for_file(file_path: String) -> Vec<String> {
 }
 
 pub fn get_commit_descriptions(commit_hashes: Vec<String>) -> Vec<Vec<String>> {
-    let mut output = Vec::new();
+    let mut output_vec = Vec::new();
     let mut visited_commits = HashSet::new();
 
     for commit_hash in commit_hashes.iter() {
@@ -82,24 +82,39 @@ pub fn get_commit_descriptions(commit_hashes: Vec<String>) -> Vec<Vec<String>> {
             continue;
         }
         // First get the commit title:
-        let mut commit_title = String::new();
-        let mut commit_description = String::new();
-        if let Ok(output) = Command::new("git").args(["show", "-s", "--format=%s", commit_hash]).output() {
-            if output.status.success() {
-                if let Ok(title) = String::from_utf8(output.stdout) {
-                    commit_title = title.trim().to_string();
-                }
-            }
-        }
-        if let Ok(output) = Command::new("git").args(["show", "-s", "--format=%b", commit_hash]).output() {
+        // let mut commit_author_name = String::new();
+        // let mut commit_datetime = String::new();
+        if let Ok(output) = Command::new("git")
+            .args(["show", "-s", "--format=%s%n%b%n--AUTHOR--%n%an%n--DATE--%n%cd", "--date=local", commit_hash])
+            .output()
+        {
             if output.status.success() {
                 visited_commits.insert(commit_hash.clone());
-                if let Ok(desc) = String::from_utf8(output.stdout) {
-                    commit_description = desc.trim().to_string();
+                if let Ok(output_str) = String::from_utf8(output.stdout) {
+                    let sections: Vec<&str> = output_str.split("\n--AUTHOR--\n").collect();
+                    if sections.len() == 2 {
+                        // Title + description
+                        let message = sections[0].trim();
+                        let mut lines = message.lines();
+                        let commit_title = lines.next().unwrap_or("").trim().to_string();
+                        let commit_description = lines.collect::<Vec<_>>().join("\n").trim().to_string();
+
+                        // Author and date
+                        let parts: Vec<&str> = sections[1].split("\n--DATE--\n").collect();
+                        if parts.len() == 2 {
+                            let author_name = parts[0].trim().to_string();
+                            let commit_datetime = parts[1].trim().to_string();
+                            output_vec.push(vec![
+                                commit_title.clone(),
+                                commit_description.clone(),
+                                author_name,
+                                commit_datetime,
+                            ]);
+                        }
+                    }
                 }
             }
         }
-        output.push(vec![commit_title, commit_description]);
     }
-    output
+    output_vec
 }
