@@ -176,12 +176,16 @@ pub fn reorder_map(
                             }],
                         );
                     } else {
-                        map.get_mut(&l_no).map(|line_details| {
+                        // map.get_mut(&l_no).map(|line_details| {
+                        //     line_details[0].commit_hashes.push(commit_hash.clone());
+                        //     // The content to replace with would be (l_no - s_line_no)th index in
+                        //     // line_change_after.changed_content.
+                        //     line_details[0].content = new_content;
+                        // });
+                        if let Some(line_details) = map.get_mut(&l_no) {
                             line_details[0].commit_hashes.push(commit_hash.clone());
-                            // The content to replace with would be (l_no - s_line_no)th index in
-                            // line_change_after.changed_content.
                             line_details[0].content = new_content;
-                        });
+                        }
                     }
                 }
             }
@@ -213,12 +217,6 @@ pub fn reorder_map(
                         );
                         continue;
                     }
-                    // let to_remove = map.remove(&new_idx);
-                    // if to_remove.is_none() {
-                    //     // Post this, there's nothing to find.
-                    //     println!("Map length: {}", map.len());
-                    //     panic!("Line number {} not found in map", new_idx);
-                    // }
                     to_remove_map.insert(new_idx, map.get(&new_idx).unwrap().to_vec());
                 }
             }
@@ -227,17 +225,6 @@ pub fn reorder_map(
             for (l_no, line_detail) in to_remove_map.iter() {
                 map.insert(*l_no, line_detail.to_vec());
             }
-
-            // There was a new line entry as well:
-
-            // For the first line that just got replaced, create a new entry.
-            // map.insert(
-            //     s_line_no,
-            //     vec![LineDetail {
-            //         content: "New Content".to_string(), // FIXME: We don't have content yet. This is bad?
-            //         commit_hashes: vec![commit_hash],
-            //     }],
-            // );
             // In the final map.keys(), delete last line_change_before.change_count - 1 entries - because they
             // are already shifted by that count.
             for key in map.keys().cloned().collect::<Vec<u32>>() {
@@ -294,16 +281,12 @@ pub fn reorder_map(
                                     commit_hashes: vec![commit_hash.clone()],
                                 }],
                             );
-                        } else {
-                            map.get_mut(&l_no).map(|line_details| {
-                                line_details[0].commit_hashes.push(commit_hash.clone());
-                                // Line content to replace with would be (l_no-s_line_no)th index
-                                // in line_change_after.changed_content.
-                                line_details[0].content = new_content.clone();
-                            });
+                        } else if let Some(line_details) = map.get_mut(&l_no) {
+                            line_details[0].commit_hashes.push(commit_hash.clone());
+                            line_details[0].content = new_content;
                         }
                         // Assert that the content is not mistakenly deleted.
-                        assert_eq!(map.get(&l_no).is_some(), true);
+                        assert!(map.get(&l_no).is_some());
                     } else {
                         // Added new line:
                         map.remove(&l_no);
@@ -336,10 +319,10 @@ pub fn reorder_map(
                             );
                         } else {
                             // This line was present in the map, so update it.
-                            map.get_mut(&l_no).map(|line_details| {
+                            if let Some(line_details) = map.get_mut(&l_no) {
                                 line_details[0].commit_hashes.push(commit_hash.clone());
-                                line_details[0].content = new_content.clone();
-                            });
+                                line_details[0].content = new_content;
+                            }
                         }
                     }
                 }
@@ -377,7 +360,7 @@ pub fn reorder_map(
                     if l_no >= line_change_after.start_line_number + line_change_after.change_count
                     {
                         let new_idx: i32 = l_no as i32 + diff; // diff is negative here.
-                        let to_remove = map.remove(&(l_no as u32));
+                        let to_remove = map.remove(&l_no);
                         if to_remove.is_none() {
                             panic!("Line number {} not found in map", l_no);
                         }
@@ -449,7 +432,7 @@ pub fn reorder_map(
                         map.len()
                     );
                 }
-                if map.get(&(i as u32)).unwrap()[0].commit_hashes.len() == 0 {
+                if map.get(&(i as u32)).unwrap()[0].commit_hashes.is_empty() {
                     panic!(
                         "Line number {} not found in map with map len: {}",
                         i,
@@ -704,7 +687,7 @@ fn parse_diff(
                     line_after.clone().unwrap().change_count,
                     map,
                     None,
-                    commit_hash.clone()
+                    commit_hash.clone(),
                 );
                 for i in 1..map.len() {
                     if map.get(&(i as u32)).is_none() {
@@ -721,7 +704,7 @@ fn parse_diff(
                             map.len()
                         );
                     }
-                };
+                }
                 let deleted_content = content.0;
                 let added_content = content.1;
                 // In any case -> line_after should have the content of the new lines.

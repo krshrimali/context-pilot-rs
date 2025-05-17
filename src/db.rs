@@ -1,15 +1,9 @@
 use crate::git_command_algo::{get_commit_descriptions, get_files_changed};
-use crossbeam::thread;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
-use std::sync::Arc;
 use std::{collections::HashMap, fs::File, path::Path};
-use uuid;
 use crate::algo_loc;
-
-// use simple_home_dir::home_dir;
 
 use crate::config::MAX_ITEMS_IN_EACH_DB_FILE;
 use crate::contextgpt_structs::AuthorDetailsV2;
@@ -23,9 +17,8 @@ type DBType = HashMap<String, HashMap<String, HashMap<u32, Vec<AuthorDetails>>>>
 type DBTypeV2 = HashMap<usize, Vec<String>>;
 
 type MappingDBType = HashMap<String, Vec<u32>>;
-type MappingDBTypeV2 = HashMap<String, String>;
 
-// index; folder_path; currLines;
+#[allow(dead_code)]
 #[derive(Default, Clone)]
 pub struct DB {
     pub index: u32,                // The line of code that you are at, right now? TODO:
@@ -42,6 +35,7 @@ pub struct DB {
     pub workspace_path: String,
 }
 
+#[allow(dead_code)]
 impl DB {
     pub fn read(&mut self) -> DBTypeV2 {
         // let db_file_path = format!("{}/{}", self.folder_path, self.index);
@@ -116,13 +110,11 @@ impl DB {
         self.index = 0;
         self.curr_items = 0;
         // Check if self.folder_path exists, cleanup if cleanup is required.
-        if cleanup {
-            if Path::new(&self.folder_path).exists() {
-                // Remove the folder and all its contents
-                std::fs::remove_dir_all(&self.folder_path).unwrap_or_else(|_| {
-                    panic!("Unable to remove the folder: {}", self.folder_path)
-                });
-            }
+        if cleanup && Path::new(&self.folder_path).exists() {
+            // Remove the folder and all its contents
+            std::fs::remove_dir_all(&self.folder_path).unwrap_or_else(|_| {
+                panic!("Unable to remove the folder: {}", self.folder_path)
+            });
         }
         // Now initialise all relevant folders/files
         // When the child folders are also not present - we just want to iteratively create all folders
@@ -158,18 +150,6 @@ impl DB {
         self.mapping_file_path = format!("{}/{}", self.folder_path, self.mapping_file_name);
         let mapping_path_obj = Path::new(&self.mapping_file_path);
         if !mapping_path_obj.exists() {
-            // mapping file doesn't exist yet... we'll create one with the index as 0 for the given curr_file_path
-            // let mut data: MappingDBType = HashMap::new();
-            // data.insert(curr_file_path.to_string(), vec![self.index]);
-            // self.mapping_data = data.clone();
-            // self.mapping_data
-            //     .insert(String::from("last_used_index"), [self.index].to_vec());
-            // let init_mapping_string =
-            //     serde_json::to_string_pretty(&self.mapping_data).expect("Unable to create data");
-            // let mut mapping_path_file: File =
-            //     File::create(&self.mapping_file_path).expect("Couldn't create this new file...");
-            // write!(mapping_path_file, "{}", init_mapping_string)
-            //     .expect("Couldn't write a very simple data object into a new mapping file...wow!");
             self.mapping_data = HashMap::new();
             self.db_file_path = format!("{}/{}.json", self.folder_path, self.index);
             self.current_data = HashMap::new();
@@ -244,7 +224,7 @@ impl DB {
         for single_detail in all_data {
             self.current_data_v2
                 .entry(single_detail.line_number)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .extend(single_detail.commit_hashes);
         }
     }
@@ -262,7 +242,7 @@ impl DB {
         let db_file_path = format!("{}/{}.json", self.folder_path, self.index);
         self.mapping_data
             .entry(self.curr_file_path.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(self.index);
         self.index += 1; // increment index for the next file.
         let output_string = serde_json::to_string(&self.current_data_v2);
@@ -302,7 +282,6 @@ impl DB {
         // Output you are looking for is of "7'"
 
         // Now get all the commit_hashes in the max_index entry.
-        let mut counter_for_paths: HashMap<String, usize> = HashMap::new();
         for i in *start_line_number..=*end_line_number {
             let mut max_index: Option<usize> = None;
             // Find index that is "closest" max to the given index.
@@ -432,7 +411,7 @@ impl DB {
         file_path: String,
         start_number: usize,
         end_number: usize,
-    ) -> () {
+    ) {
         let mut end_line_number = end_number;
         if end_number == 0 {
             // Means, cover the whole file.
@@ -467,26 +446,26 @@ impl DB {
     }
 }
 
-mod test {
-    use super::*;
-
-    #[test]
-    fn test_loading_mapping_file() {
-        let mapping_path = "/home/krshrimali/.context_pilot_db/mapping.json";
-        let mapping_data = std::fs::read_to_string(mapping_path).unwrap_or_else(|_| {
-            panic!(
-                "Unable to read the mapping file into string, file path: {}",
-                mapping_path
-            )
-        });
-        let mapping_path_obj = Path::new(mapping_path);
-        serde_json::from_str(mapping_data.as_str()).unwrap_or_else(|_| {
-            panic!(
-                "Unable to deserialize the mapping file, path: {}",
-                mapping_path
-            )
-        });
-
-        assert!(mapping_path_obj.exists());
-    }
-}
+// mod test {
+//     use super::*;
+//
+//     #[test]
+//     fn test_loading_mapping_file() {
+//         let mapping_path = "/home/krshrimali/.context_pilot_db/mapping.json";
+//         let mapping_data = std::fs::read_to_string(mapping_path).unwrap_or_else(|_| {
+//             panic!(
+//                 "Unable to read the mapping file into string, file path: {}",
+//                 mapping_path
+//             )
+//         });
+//         let mapping_path_obj = Path::new(mapping_path);
+//         serde_json::from_str(mapping_data.as_str()).unwrap_or_else(|_| {
+//             panic!(
+//                 "Unable to deserialize the mapping file, path: {}",
+//                 mapping_path
+//             )
+//         });
+//
+//         assert!(mapping_path_obj.exists());
+//     }
+// }
