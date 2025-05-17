@@ -241,10 +241,9 @@ mod tests_diff_v2 {
     }
 
     #[test]
-    #[should_panic(expected = "Invalid line format: bad input")]
     fn test_fetch_line_numbers_invalid_format() {
         let line = "bad input"; // Invalid format.
-        fetch_line_numbers(line.to_string());
+        assert_eq!(fetch_line_numbers(line.to_string()), None);
     }
 
     #[test]

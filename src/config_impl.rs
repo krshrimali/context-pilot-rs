@@ -70,7 +70,6 @@ mod test {
         let inp = "a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s,t,u,v,w,x,y,z".to_string();
         let config_obj = Config {
             file_count_threshold: 10,
-            commit_hashes_threshold: 10,
         };
         let out = trim_result(inp, config_obj.file_count_threshold);
         assert_eq!("a,b,c,d,e,f,g,h,i,j", out);
