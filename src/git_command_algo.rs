@@ -1,10 +1,98 @@
+use ignore::Walk;
+use ignore::gitignore::GitignoreBuilder;
+
 use crate::{contextgpt_structs::AuthorDetailsV2, diff_v2};
 
 use crate::git_command_algo;
 use std::collections::{HashMap, HashSet};
-use std::{
-    process::{Command, Stdio},
-};
+use std::process::{Command, Stdio};
+
+pub fn print_all_valid_directories(workspace_dir: String, gitignore_file_name: Option<String>) -> () {
+    // Prints all the valid files to stdout - used by plugins
+    // optionally to get files that are to be indexed.
+    // if gitignore_file_name.is_none() {
+    //     println!("None.");
+    //     return;
+    // }
+    let gitignore_file_name = gitignore_file_name.unwrap_or(String::from(".gitignore"));
+    let mut gitignore_builder = GitignoreBuilder::new(workspace_dir.clone());
+    gitignore_builder.add(gitignore_file_name);
+    let gitignore = gitignore_builder.build().expect("Failed");
+    let mut all_paths: Vec<String> = vec![];
+    // Iterate through all the files in the workspace_dir:
+    for walk_entry in Walk::new(workspace_dir.clone()) {
+        match walk_entry {
+            Ok(entry) => {
+                let path = entry.path();
+                if path.is_file() {
+                    continue;
+                    // // Check if the file is ignored
+                    // if gitignore.matched(path, false).is_ignore() {
+                    //     continue;
+                    // }
+                    // // Print the file path -- it's valid!
+                    // println!("{}", path.display());
+                } else {
+                    // Check if the whole dir is ignored:
+                    if gitignore.matched(path, true).is_ignore() {
+                        // Skip the directory.
+                        continue;
+                    }
+                    // Print the relative path only:
+                    let rel_path = path.strip_prefix(workspace_dir.clone());
+                    if rel_path.is_ok() {
+                        let relative_path = rel_path.clone().unwrap();
+                        if !relative_path.to_path_buf().to_string_lossy().is_empty() {
+                            all_paths.push(relative_path.display().to_string());
+                        }
+                    }
+                }
+            }
+            Err(err) => {
+                eprintln!("Error: {}", err);
+            }
+        }
+    }
+    println!("{:?}", all_paths);
+}
+
+pub fn print_all_valid_files(workspace_dir: String, gitignore_file_name: Option<String>) -> () {
+    // Prints all the valid files to stdout - used by plugins
+    // optionally to get files that are to be indexed.
+    // if gitignore_file_name.is_none() {
+    //     println!("None.");
+    //     return;
+    // }
+    let gitignore_file_name = gitignore_file_name.unwrap_or(String::from(".gitignore"));
+    let mut gitignore_builder = GitignoreBuilder::new(workspace_dir.clone());
+    gitignore_builder.add(gitignore_file_name);
+    let gitignore = gitignore_builder.build().expect("Failed");
+    // Iterate through all the files in the workspace_dir:
+    for walk_entry in Walk::new(workspace_dir.clone()) {
+        match walk_entry {
+            Ok(entry) => {
+                let path = entry.path();
+                if path.is_file() {
+                    // Check if the file is ignored
+                    if gitignore.matched(path, false).is_ignore() {
+                        continue;
+                    }
+                    // Print the file path -- it's valid!
+                    println!("{}", path.display());
+                } else {
+                    // Check if the whole dir is ignored:
+                    if gitignore.matched(path, true).is_ignore() {
+                        // Skip the directory.
+                        continue;
+                    }
+                }
+            }
+            Err(err) => {
+                eprintln!("Error: {}", err);
+            }
+        }
+    }
+}
 
 pub fn get_files_changed(commit_hash: &str) -> Vec<String> {
     // Use git show (minimal) API to find "all the files" changed in the given commit hash.
