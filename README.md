@@ -114,11 +114,12 @@ Gives you the relevant commits to the selected piece of code.
 
 ### Neovim
 
-- Plugin available using **Telescope** picker: https://github.com/krshrimali/context-pilot.nvim.
+- Plugin available: https://github.com/krshrimali/context-pilot.nvim (details available on the link).
 
 ### VSCode
 
-- Extension available to: (https://github.com/krshrimali/context-pilot-vscode)
+- Just search available on VSCode Marketplace with name `contextpilot` under the name of Kushashwa Ravi Shrimali as the publisher :)
+- Extension available here: https://github.com/krshrimali/context-pilot-vscode.
 
 ---
 
