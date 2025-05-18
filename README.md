@@ -105,10 +105,8 @@ Fetch **top related files** for the selected line range.
 ```bash
 contextpilot /path/to/workspace -t desc path/to/file.rs -s <start-line> -e <end-line>
 ```
-```
 
 Gives you the relevant commits to the selected piece of code.
-```
 
 ---
 
