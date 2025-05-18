@@ -120,13 +120,3 @@ Gives you the relevant commits to the selected piece of code.
 
 - Just search available on VSCode Marketplace with name `contextpilot` under the name of Kushashwa Ravi Shrimali as the publisher :)
 - Extension available here: https://github.com/krshrimali/context-pilot-vscode.
-
----
-
-## 🛡 License
-
-MIT License.
-
-**You are free to use, modify, and distribute this project,** but **must provide attribution** to:
-
-> **Kushashwa Ravi Shrimali**
