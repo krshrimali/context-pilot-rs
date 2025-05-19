@@ -434,13 +434,13 @@ impl DB {
                     commit_hashes.extend(struct_detail.commit_hashes.clone());
                 }
             }
-            let out = get_commit_descriptions(commit_hashes);
+            let out = get_commit_descriptions(commit_hashes, file_path.clone());
             println!("{:?}", out);
         } else {
             let (commit_hashes, _uncovered_indices) =
                 self.raw_exists_and_return(&start_number, &end_line_number);
 
-            let out = get_commit_descriptions(commit_hashes);
+            let out = get_commit_descriptions(commit_hashes, file_path.clone());
             println!("{:?}", out);
         }
     }
