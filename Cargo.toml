@@ -1,6 +1,6 @@
 [package]
 name = "contextpilot"
-version = "0.0.3"
+version = "0.9.0"
 edition = "2024"
 
 [dependencies]
