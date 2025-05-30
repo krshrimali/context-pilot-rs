@@ -148,6 +148,7 @@ impl Server {
         // For now, just store the output somewhere in the DB.
         let file_path = std::fs::canonicalize(file_path_inp).expect("Failed");
         let file_path_str = file_path.to_str().unwrap();
+        println!("performing for whole file");
         perform_for_whole_file(file_path_str.to_string(), true).await
     }
 
@@ -259,7 +260,34 @@ impl Server {
         final_authordetails
     }
 
-    pub async fn start_file(&mut self, _: &mut DBMetadata, _: Option<String>) {}
+    pub async fn start_file(&mut self, metadata: &mut DBMetadata, file_path: Option<String>) {
+        // Only index the given file and do no more than that.
+        if file_path.is_none() {
+            log!(Level::Error, "No file path provided to index.");
+            return;
+        }
+        let file_path_str = file_path.clone().unwrap();
+        let file_path_buf = PathBuf::from(file_path_str);
+        let file_path_path = file_path_buf.as_path();
+        if Server::_is_valid_file(file_path_path) {
+            println!("Indexing...");
+            let out = Server::_index_file(file_path_buf.clone()).await;
+            println!("Indexing...");
+            let db = self.curr_db.clone().unwrap();
+            println!("Indexing...");
+            let mut db_locked = db.lock().await;
+            println!("Indexing...");
+            let start_line_number = 0;
+            println!("Indexing...");
+            db_locked.append_to_db(
+                &out[0].origin_file_path,
+                start_line_number,
+                out.clone(),
+            );
+            db_locked.store();
+            println!("Done");
+        }
+    }
 
     pub async fn start_indexing(&mut self, metadata: &mut DBMetadata) {
         // start the server for the given workspace
@@ -520,6 +548,9 @@ async fn main() -> CliResult {
                     subfolders,
                 )
                 .await;
+        }
+        RequestTypeOptions::IndexFile => {
+            server.handle_server(args.folder_path.as_str(), args.file, None, None, Some(RequestTypeOptions::IndexFile), None).await;
         }
         RequestTypeOptions::Query => {
             server
