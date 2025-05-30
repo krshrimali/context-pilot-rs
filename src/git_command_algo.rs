@@ -113,7 +113,7 @@ pub fn get_files_changed(commit_hash: &str) -> Vec<String> {
     files_changed
 }
 
-pub async fn extract_details_parallel(file_path: String) -> Vec<AuthorDetailsV2> {
+pub async fn extract_details_parallel(file_path: String) -> HashMap<u32, AuthorDetailsV2> {
     // For now - this is not parallelized, TODO: @krshrimali.
     // First get all the commit hashes that ever touched the given file path.
     let commit_hashes = git_command_algo::get_all_commits_for_file(file_path.clone());
@@ -123,8 +123,11 @@ pub async fn extract_details_parallel(file_path: String) -> Vec<AuthorDetailsV2>
     }
     // Map has populated "relevant commit hashes" for each line.
     // Now use those commit hashes to find the most relevant files for each line.
-    let mut author_details_vec: Vec<AuthorDetailsV2> = Vec::new();
-    for (line_number, line_detail) in map.iter() {
+    let mut auth_details_map: HashMap<u32, AuthorDetailsV2> = HashMap::new();
+    let mut sorted_keys: Vec<u32> = map.keys().copied().collect();
+    sorted_keys.sort();
+    for line_number in sorted_keys.iter() {
+        let line_detail = map.get(line_number).unwrap();
         // author_full_name is a TODO.
         let author_details = AuthorDetailsV2 {
             origin_file_path: file_path.clone(),
@@ -132,7 +135,7 @@ pub async fn extract_details_parallel(file_path: String) -> Vec<AuthorDetailsV2>
             commit_hashes: line_detail[0].commit_hashes.clone(),
             author_full_name: Vec::new(),
         };
-        author_details_vec.push(author_details);
+        auth_details_map.insert(*line_number, author_details.clone());
     }
     let mut total_count = 0;
     let mut failed_count = 0;
@@ -149,7 +152,7 @@ pub async fn extract_details_parallel(file_path: String) -> Vec<AuthorDetailsV2>
             "blame",
             "-L",
             &format!("{},{}", line_number, line_number),
-            "--abbrev=6",
+            "--abbrev=7",
             "--",
             file_path.as_str(),
         ]);
@@ -169,46 +172,43 @@ pub async fn extract_details_parallel(file_path: String) -> Vec<AuthorDetailsV2>
             }
         }
         // Check if commit hash == author_details_vec
-        let author_detail = author_details_vec.get(*line_number as usize);
+        let author_detail = auth_details_map.get(line_number);
         if let Some(author_detail) = author_detail {
             // If the commit hash is not already in the commit_hashes, add it.
             if commit_hash.starts_with("^") {
                 // Make sure this is included as well...
                 let commit_hash = commit_hash.strip_prefix("^").unwrap();
                 if author_detail.commit_hashes.contains(&commit_hash.to_string()) {
+                    if author_detail.commit_hashes.contains(&commit_hash.to_string()) {
+                        total_count += 1;
+                    } else {
+                        failed_count += 1;
+                    }
+                }
+            } else {
+                // Just take 7 first chars:
+                if commit_hash.len() > 7 {
+                    commit_hash = commit_hash[..7].to_string();
+                } else {
+                    continue;
+                }
+                // let commit_hash = &commit_hash[..7];
+                // println!("Searching for commit hash: {}", commit_hash);
+                if author_detail.commit_hashes.contains(&commit_hash.to_string()) {
+                    total_count += 1;
+                } else {
+                    failed_count += 1;
                     // println!(
-                    //     "Found Commit hash {} not found in author details for line {}",
+                    //     "Commit hash {} not found in author details for line {}",
                     //     commit_hash, line_number
                     // );
                     // println!("Author details: {:?}", author_detail.commit_hashes);
-                    total_count += 1;
-                    // let mut updated_author_detail = author_detail.clone();
-                    // updated_author_detail.commit_hashes.push(commit_hash);
-                    // author_details_vec[*line_number as usize] = updated_author_detail;
                 }
-            } else if author_detail.commit_hashes.contains(&commit_hash) {
-                // println!(
-                //     "Found Commit hash {} not found in author details for line {}",
-                //     commit_hash, line_number
-                // );
-                // println!("Author details: {:?}", author_detail.commit_hashes);
-                total_count += 1;
-                // let mut updated_author_detail = author_detail.clone();
-                // updated_author_detail.commit_hashes.push(commit_hash);
-                // author_details_vec[*line_number as usize] = updated_author_detail;
-            } else {
-                failed_count += 1;
-                // println!("File {} has commit hash {} not found in author details for line {}",
-                //     file_path, commit_hash, line_number
-                // );
-                // println!("Author details: {:?}", author_detail.commit_hashes);
-                // println!("Commit hash {} not found in author details for line {}", commit_hash, line_number);
-                // println!("Author details: {:?}", author_detail);
             }
         }
     }
     println!("Accuracy for file {} : {}/{}", file_path.clone(), total_count, total_count + failed_count);
-    author_details_vec
+    auth_details_map
 }
 
 pub fn get_all_commits_for_file(file_path: String) -> Vec<String> {
@@ -216,7 +216,7 @@ pub fn get_all_commits_for_file(file_path: String) -> Vec<String> {
     let mut command = Command::new("git");
     command.args([
         "log",
-        "--no-merges",
+        // "--no-merges",
         "--pretty=format:%h",
         "--reverse",
         "--",

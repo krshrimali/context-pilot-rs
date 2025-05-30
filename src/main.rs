@@ -143,7 +143,7 @@ impl Server {
         false
     }
 
-    async fn _index_file(file_path_inp: PathBuf) -> Vec<AuthorDetailsV2> {
+    async fn _index_file(file_path_inp: PathBuf) -> HashMap<u32, AuthorDetailsV2> {
         // Don't make it write to the DB, write it atomically later.
         // For now, just store the output somewhere in the DB.
         let file_path = std::fs::canonicalize(file_path_inp).expect("Failed");
@@ -157,10 +157,10 @@ impl Server {
         &mut self,
         workspace_path: PathBuf,
         gitignore_builder_obj: Option<Gitignore>,
-    ) -> Vec<AuthorDetailsV2> {
-        let mut files_set: task::JoinSet<Vec<AuthorDetailsV2>> = task::JoinSet::new();
+    ) -> HashMap<u32, AuthorDetailsV2> {
+        let mut files_set: task::JoinSet<HashMap<u32, AuthorDetailsV2>> = task::JoinSet::new();
         let path = Path::new(&workspace_path);
-        let mut final_authordetails: Vec<AuthorDetailsV2> = Vec::new();
+        let mut final_authordetails: HashMap<u32, AuthorDetailsV2> = HashMap::new();
         if path.is_dir() {
             for entry in path
                 .read_dir()
@@ -223,11 +223,12 @@ impl Server {
                 // 🛠 Group by file path and update DB
                 let mut grouped_by_file: HashMap<String, Vec<AuthorDetailsV2>> = HashMap::new();
 
-                for detail in output_authordetails {
+                for line_number in output_authordetails.keys() {
+                    let detail = output_authordetails.get(line_number).unwrap();
                     grouped_by_file
                         .entry(detail.origin_file_path.clone())
                         .or_default()
-                        .push(detail);
+                        .push(detail.clone());
                 }
 
                 for (origin_file_path, details_vec) in grouped_by_file {
@@ -237,13 +238,22 @@ impl Server {
                     let db = self.curr_db.clone().unwrap();
                     let mut db_locked = db.lock().await;
                     let start_line_number = 0;
+                    // Convert details_vec to HashMap<u32, AuthorDetailsV2>
+                    let details_vec_map: HashMap<u32, AuthorDetailsV2> = details_vec
+                        .iter()
+                        .map(|detail| (detail.line_number as u32, detail.clone()))
+                        .collect();
                     db_locked.append_to_db(
                         &origin_file_path,
                         start_line_number,
-                        details_vec.clone(),
+                        details_vec_map.clone(),
                     );
                     db_locked.store();
-                    final_authordetails.extend(details_vec);
+                    final_authordetails.extend(
+                        details_vec
+                            .into_iter()
+                            .map(|detail| (detail.line_number as u32, detail)),
+                    );
                 }
             }
         } else if Server::_is_valid_file(path) {
@@ -280,7 +290,7 @@ impl Server {
             let start_line_number = 0;
             println!("Indexing...");
             db_locked.append_to_db(
-                &out[0].origin_file_path,
+                &out[&0].origin_file_path,
                 start_line_number,
                 out.clone(),
             );
