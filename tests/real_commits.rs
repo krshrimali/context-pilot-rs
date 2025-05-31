@@ -1,16 +1,13 @@
 // Testing on real git commits (From context-pilot-rs itself)
-use contextpilot::diff_v2::{
-    extract_commit_hashes, LineDetail
-};
-use std::collections::HashMap;
 use contextpilot::contextgpt_structs::AuthorDetailsV2;
+use contextpilot::diff_v2::{LineDetail, extract_commit_hashes};
+use std::collections::HashMap;
 
 #[cfg(test)]
 mod tests_real_commits {
     use std::process::{Command, Stdio};
 
     use super::*;
-    use contextpilot::git_command_algo::extract_details_parallel;
 
     #[tokio::test]
     async fn test_real_commits() {
@@ -19,9 +16,17 @@ mod tests_real_commits {
         let all_commits = std::fs::read_to_string(all_commits).expect("Failed to read file");
         let all_commits: Vec<&str> = all_commits.trim().split(',').collect();
         assert!(!all_commits.is_empty(), "No commits found in the file");
+        // Use the last commit hash as the one to check blame at.
+        let last_commit_hash = all_commits.last().unwrap();
         let mut map: HashMap<u32, Vec<LineDetail>> = HashMap::new();
         for commit_hash in all_commits.iter() {
-            extract_commit_hashes(commit_hash, &mut map, "/Users/krshrimali/Documents/context-pilot-rs/src/main.rs".to_string().as_str());
+            extract_commit_hashes(
+                commit_hash,
+                &mut map,
+                "/Users/krshrimali/Documents/context-pilot-rs/src/main.rs"
+                    .to_string()
+                    .as_str(),
+            );
         }
 
         // let mut author_details_vec: Vec<AuthorDetailsV2> = Vec::new();
@@ -56,7 +61,8 @@ mod tests_real_commits {
             let mut command = Command::new("git");
             command.args([
                 "blame",
-                "dde6f56",
+                last_commit_hash, // Use the last commit hash from the file.
+                // "dde6f56",
                 // "80e157a",
                 "-L",
                 &format!("{},{}", line_number, line_number),
@@ -78,6 +84,8 @@ mod tests_real_commits {
                 if !parts.is_empty() {
                     commit_hash = parts[0].to_string();
                 }
+            } else {
+                continue;
             }
             // Check if commit hash == author_details_vec
             let author_detail = auth_details_map.get(line_number);
@@ -86,9 +94,10 @@ mod tests_real_commits {
                 if commit_hash.starts_with("^") {
                     // Make sure this is included as well...
                     let commit_hash = commit_hash.strip_prefix("^").unwrap();
-                    // println!("All commit hashes: {:?}", author_detail.commit_hashes);
-                    // println!("Searching for commit hash: {}", commit_hash);
-                    if author_detail.commit_hashes.contains(&commit_hash.to_string()) {
+                    if author_detail
+                        .commit_hashes
+                        .contains(&commit_hash.to_string())
+                    {
                         total_count += 1;
                     } else {
                         failed_count += 1;
@@ -97,7 +106,10 @@ mod tests_real_commits {
                     // Just take 7 first chars:
                     let commit_hash = &commit_hash[..7];
                     // println!("Searching for commit hash: {}", commit_hash);
-                    if author_detail.commit_hashes.contains(&commit_hash.to_string()) {
+                    if author_detail
+                        .commit_hashes
+                        .contains(&commit_hash.to_string())
+                    {
                         total_count += 1;
                     } else {
                         failed_count += 1;
@@ -110,7 +122,12 @@ mod tests_real_commits {
                 }
             }
         }
-        println!("Accuracy for file {} : {}/{}", file_path.clone(), total_count, total_count + failed_count);
+        println!(
+            "Accuracy for file {} : {}/{}",
+            file_path.clone(),
+            total_count,
+            total_count + failed_count
+        );
 
         // Print the whole map with line number + commit hashes:
         // First sort the map according to the line numbers:
@@ -123,15 +140,18 @@ mod tests_real_commits {
             }
         }
         // Now print the sorted map:
-        println!("Sorted map:");
-        for line_number in sorted_keys.iter() {
-            let line_detail = sorted_map.get(line_number).unwrap();
-            println!(
-                "Line {}: {:?}",
-                line_number,
-                line_detail.iter().map(|d| d.commit_hashes.clone()).collect::<Vec<_>>()
-            );
-        }
+        // println!("Sorted map:");
+        // for line_number in sorted_keys.iter() {
+        //     let line_detail = sorted_map.get(line_number).unwrap();
+        //     println!(
+        //         "Line {}: {:?}",
+        //         line_number,
+        //         line_detail
+        //             .iter()
+        //             .map(|d| d.commit_hashes.clone())
+        //             .collect::<Vec<_>>()
+        //     );
+        // }
         // At the end, for now, just print the map:
         println!("Length of map: {}", map.len());
         assert!(map.len() == 113, "Map should not be empty");

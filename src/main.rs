@@ -289,11 +289,7 @@ impl Server {
             println!("Indexing...");
             let start_line_number = 0;
             println!("Indexing...");
-            db_locked.append_to_db(
-                &out[&0].origin_file_path,
-                start_line_number,
-                out.clone(),
-            );
+            db_locked.append_to_db(&out[&0].origin_file_path, start_line_number, out.clone());
             db_locked.store();
             println!("Done");
         }
@@ -560,7 +556,16 @@ async fn main() -> CliResult {
                 .await;
         }
         RequestTypeOptions::IndexFile => {
-            server.handle_server(args.folder_path.as_str(), args.file, None, None, Some(RequestTypeOptions::IndexFile), None).await;
+            server
+                .handle_server(
+                    args.folder_path.as_str(),
+                    args.file,
+                    None,
+                    None,
+                    Some(RequestTypeOptions::IndexFile),
+                    None,
+                )
+                .await;
         }
         RequestTypeOptions::Query => {
             server

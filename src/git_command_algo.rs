@@ -7,7 +7,10 @@ use crate::git_command_algo;
 use std::collections::{HashMap, HashSet};
 use std::process::{Command, Stdio};
 
-pub fn print_all_valid_directories(workspace_dir: String, gitignore_file_name: Option<String>) -> () {
+pub fn print_all_valid_directories(
+    workspace_dir: String,
+    gitignore_file_name: Option<String>,
+) -> () {
     // Prints all the valid files to stdout - used by plugins
     // optionally to get files that are to be indexed.
     // if gitignore_file_name.is_none() {
@@ -178,8 +181,14 @@ pub async fn extract_details_parallel(file_path: String) -> HashMap<u32, AuthorD
             if commit_hash.starts_with("^") {
                 // Make sure this is included as well...
                 let commit_hash = commit_hash.strip_prefix("^").unwrap();
-                if author_detail.commit_hashes.contains(&commit_hash.to_string()) {
-                    if author_detail.commit_hashes.contains(&commit_hash.to_string()) {
+                if author_detail
+                    .commit_hashes
+                    .contains(&commit_hash.to_string())
+                {
+                    if author_detail
+                        .commit_hashes
+                        .contains(&commit_hash.to_string())
+                    {
                         total_count += 1;
                     } else {
                         failed_count += 1;
@@ -194,7 +203,10 @@ pub async fn extract_details_parallel(file_path: String) -> HashMap<u32, AuthorD
                 }
                 // let commit_hash = &commit_hash[..7];
                 // println!("Searching for commit hash: {}", commit_hash);
-                if author_detail.commit_hashes.contains(&commit_hash.to_string()) {
+                if author_detail
+                    .commit_hashes
+                    .contains(&commit_hash.to_string())
+                {
                     total_count += 1;
                 } else {
                     failed_count += 1;
@@ -207,7 +219,12 @@ pub async fn extract_details_parallel(file_path: String) -> HashMap<u32, AuthorD
             }
         }
     }
-    println!("Accuracy for file {} : {}/{}", file_path.clone(), total_count, total_count + failed_count);
+    println!(
+        "Accuracy for file {} : {}/{}",
+        file_path.clone(),
+        total_count,
+        total_count + failed_count
+    );
     auth_details_map
 }
 
@@ -240,12 +257,7 @@ pub fn get_all_commits_for_file(file_path: String) -> Vec<String> {
     }
     // Add the last commit hash as well, which is the current state of the file.
     let mut command = Command::new("git");
-    command.args([
-        "log",
-        "--pretty=format:%h",
-        "--",
-        file_path.as_str(),
-    ]);
+    command.args(["log", "--pretty=format:%h", "--", file_path.as_str()]);
     let output = command
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -266,7 +278,6 @@ pub fn get_all_commits_for_file(file_path: String) -> Vec<String> {
     }
     commits
 }
-
 
 fn get_commit_base_url() -> Option<String> {
     if let Ok(output) = Command::new("git")
@@ -323,7 +334,8 @@ pub fn get_commit_descriptions(commit_hashes: Vec<String>) -> Vec<Vec<String>> {
                         let message = sections[0].trim();
                         let mut lines = message.lines();
                         let commit_title = lines.next().unwrap_or("").trim().to_string();
-                        let commit_description = lines.collect::<Vec<_>>().join("\n").trim().to_string();
+                        let commit_description =
+                            lines.collect::<Vec<_>>().join("\n").trim().to_string();
 
                         let parts: Vec<&str> = sections[1].split("\n--DATE--\n").collect();
                         if parts.len() == 2 {
