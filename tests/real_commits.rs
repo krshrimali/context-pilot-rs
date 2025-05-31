@@ -23,7 +23,7 @@ mod tests_real_commits {
             extract_commit_hashes(
                 commit_hash,
                 &mut map,
-                "/Users/krshrimali/Documents/context-pilot-rs/src/main.rs"
+                "src/main.rs"
                     .to_string()
                     .as_str(),
             );
@@ -31,7 +31,7 @@ mod tests_real_commits {
 
         // let mut author_details_vec: Vec<AuthorDetailsV2> = Vec::new();
         let mut auth_details_map: HashMap<u32, AuthorDetailsV2> = HashMap::new();
-        let file_path = String::from("/Users/krshrimali/Documents/context-pilot-rs/src/main.rs");
+        let file_path = String::from("src/main.rs");
         // Sort the map keys:
         let mut sorted_keys: Vec<u32> = map.keys().copied().collect();
         sorted_keys.sort();
@@ -141,17 +141,14 @@ mod tests_real_commits {
         }
         // Now print the sorted map:
         // println!("Sorted map:");
-        // for line_number in sorted_keys.iter() {
-        //     let line_detail = sorted_map.get(line_number).unwrap();
-        //     println!(
-        //         "Line {}: {:?}",
-        //         line_number,
-        //         line_detail
-        //             .iter()
-        //             .map(|d| d.commit_hashes.clone())
-        //             .collect::<Vec<_>>()
-        //     );
-        // }
+        for line_number in sorted_keys.iter() {
+            let line_detail = sorted_map.get(line_number).unwrap();
+            println!(
+                "Line {}: {:?}",
+                line_number,
+                line_detail
+            );
+        }
         // At the end, for now, just print the map:
         println!("Length of map: {}", map.len());
         assert!(map.len() == 113, "Map should not be empty");
