@@ -34,7 +34,8 @@ get_struct_names! {
         Index,
         Query,
         Descriptions,  // alias: desc
-        ListSubdirs  // To be used by plugins!
+        ListSubdirs,  // To be used by plugins!
+        IndexFile
     }
 }
 
@@ -49,6 +50,7 @@ impl FromStr for RequestTypeOptions {
             "descriptions" => Ok(RequestTypeOptions::Descriptions),
             "desc" => Ok(RequestTypeOptions::Descriptions),
             "listsubdirs" => Ok(RequestTypeOptions::ListSubdirs),
+            "indexfile" => Ok(RequestTypeOptions::IndexFile),
             _ => Err(format!(
                 "Could not parse the request type: {}, available field names: {:?}",
                 request_type,

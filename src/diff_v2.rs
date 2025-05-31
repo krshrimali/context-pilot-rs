@@ -36,11 +36,12 @@ impl Default for LineChange {
 fn is_similar(line_content: &str, added_line_content: &str) -> bool {
     // Check if the line content is similar to the added line content.
     // For now, just check if they are equal.
-    if strsim::levenshtein(line_content, added_line_content) > 5 {
-        return false;
-    } else {
-        return true;
-    }
+    // if strsim::levenshtein(line_content, added_line_content) > 5 {
+    //     return false;
+    // } else {
+    //     return true;
+    // }
+    return true;
 }
 
 fn find_replacements(deleted_content: Vec<String>, added_content: Vec<String>) -> Vec<u32> {
