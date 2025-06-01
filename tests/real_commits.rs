@@ -113,21 +113,15 @@ mod tests_real_commits {
                         total_count += 1;
                     } else {
                         failed_count += 1;
-                        println!(
-                            "Commit hash {} not found in author details for line {}",
-                            commit_hash, line_number
-                        );
-                        println!("Author details: {:?}", author_detail.commit_hashes);
+                        // println!(
+                        //     "Commit hash {} not found in author details for line {}",
+                        //     commit_hash, line_number
+                        // );
+                        // println!("Author details: {:?}", author_detail.commit_hashes);
                     }
                 }
             }
         }
-        println!(
-            "Accuracy for file {} : {}/{}",
-            file_path.clone(),
-            total_count,
-            total_count + failed_count
-        );
 
         // Print the whole map with line number + commit hashes:
         // First sort the map according to the line numbers:
@@ -149,6 +143,13 @@ mod tests_real_commits {
                 line_detail
             );
         }
+
+        println!(
+            "Accuracy for file {} : {}/{}",
+            file_path.clone(),
+            total_count,
+            total_count + failed_count
+        );
         // At the end, for now, just print the map:
         println!("Length of map: {}", map.len());
         assert!(map.len() == 113, "Map should not be empty");
