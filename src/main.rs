@@ -279,18 +279,30 @@ impl Server {
         let file_path_buf = PathBuf::from(file_path_str);
         let file_path_path = file_path_buf.as_path();
         if Server::_is_valid_file(file_path_path) {
-            println!("Indexing...");
+            let workspace_path = &metadata.workspace_path;
+            let db = DB {
+                folder_path: workspace_path.clone(),
+                ..Default::default()
+            };
+            let curr_db: Arc<Mutex<DB>> = Arc::new(db.into());
+            curr_db
+                .lock()
+                .await
+                .init_db(workspace_path.as_str(), None, false);
+            let mut server = Server::new(State::Dead, DBHandler::new(metadata.clone()));
+            server.init_server(curr_db);
+
             let out = Server::_index_file(file_path_buf.clone()).await;
-            println!("Indexing...");
-            let db = self.curr_db.clone().unwrap();
-            println!("Indexing...");
+            let db = server.curr_db.clone().unwrap();
             let mut db_locked = db.lock().await;
-            println!("Indexing...");
             let start_line_number = 0;
-            println!("Indexing...");
+            println!(
+                "Indexing file: {} with {} lines",
+                file_path_buf.display(),
+                out.len()
+            );
             db_locked.append_to_db(&out[&0].origin_file_path, start_line_number, out.clone());
             db_locked.store();
-            println!("Done");
         }
     }
 

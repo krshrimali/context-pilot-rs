@@ -10,7 +10,7 @@ use std::process::{Command, Stdio};
 pub fn print_all_valid_directories(
     workspace_dir: String,
     gitignore_file_name: Option<String>,
-) -> () {
+) {
     // Prints all the valid files to stdout - used by plugins
     // optionally to get files that are to be indexed.
     // if gitignore_file_name.is_none() {
