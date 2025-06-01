@@ -567,16 +567,18 @@ async fn main() -> CliResult {
                 .await;
         }
         RequestTypeOptions::IndexFile => {
-            server
-                .handle_server(
-                    args.folder_path.as_str(),
-                    args.file,
-                    None,
-                    None,
-                    Some(RequestTypeOptions::IndexFile),
-                    None,
-                )
-                .await;
+            todo!("Indexing a single file is not supported yet.");
+            // TODO: @krshrimali - fix this and re-enable.
+            // server
+            //     .handle_server(
+            //         args.folder_path.as_str(),
+            //         args.file,
+            //         None,
+            //         None,
+            //         Some(RequestTypeOptions::IndexFile),
+            //         None,
+            //     )
+            //     .await;
         }
         RequestTypeOptions::Query => {
             server
