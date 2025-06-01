@@ -19,14 +19,17 @@ mod tests_real_commits {
         // Use the last commit hash as the one to check blame at.
         let last_commit_hash = all_commits.last().unwrap();
         let mut map: HashMap<u32, Vec<LineDetail>> = HashMap::new();
+        let mut parent_commit_hash = String::from("");
         for commit_hash in all_commits.iter() {
             extract_commit_hashes(
+                &parent_commit_hash,
                 commit_hash,
                 &mut map,
                 "src/main.rs"
                     .to_string()
                     .as_str(),
             );
+            parent_commit_hash = commit_hash.to_string();
         }
 
         // let mut author_details_vec: Vec<AuthorDetailsV2> = Vec::new();
@@ -113,11 +116,11 @@ mod tests_real_commits {
                         total_count += 1;
                     } else {
                         failed_count += 1;
-                        // println!(
-                        //     "Commit hash {} not found in author details for line {}",
-                        //     commit_hash, line_number
-                        // );
-                        // println!("Author details: {:?}", author_detail.commit_hashes);
+                        println!(
+                            "Commit hash {} not found in author details for line {}",
+                            commit_hash, line_number
+                        );
+                        println!("Author details: {:?}", author_detail.commit_hashes);
                     }
                 }
             }
@@ -134,7 +137,7 @@ mod tests_real_commits {
             }
         }
         // Now print the sorted map:
-        // println!("Sorted map:");
+        println!("Sorted map:");
         for line_number in sorted_keys.iter() {
             let line_detail = sorted_map.get(line_number).unwrap();
             println!(

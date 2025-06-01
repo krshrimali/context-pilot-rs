@@ -148,7 +148,6 @@ impl Server {
         // For now, just store the output somewhere in the DB.
         let file_path = std::fs::canonicalize(file_path_inp).expect("Failed");
         let file_path_str = file_path.to_str().unwrap();
-        println!("performing for whole file");
         perform_for_whole_file(file_path_str.to_string(), true).await
     }
 
