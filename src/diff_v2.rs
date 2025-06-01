@@ -36,11 +36,12 @@ impl Default for LineChange {
 fn is_similar(line_content: &str, added_line_content: &str) -> bool {
     // Check if the line content is similar to the added line content.
     // For now, just check if they are equal.
-    if strsim::levenshtein(line_content, added_line_content) > 5 {
-        return false;
-    } else {
-        return true;
-    }
+    // if strsim::levenshtein(line_content, added_line_content) > 5 {
+    //     return false;
+    // } else {
+    //     return true;
+    // }
+    return true;
 }
 
 fn find_replacements(deleted_content: Vec<String>, added_content: Vec<String>) -> Vec<u32> {
@@ -140,6 +141,11 @@ pub fn reorder_map(
     line_change_after: LineChange,
     replaced_content_line_numbers: Vec<u32>,
 ) {
+    // println!("Category: {:?}", category);
+    // println!(
+    //     "Line change before: {:?}, after: {:?}",
+    //     line_change_before, line_change_after
+    // );
     match category {
         Some(DiffCases::FewLinesReplacedWithSingleLine) => {
             // That means, anything after the current index, should be subtracted accordingly.
@@ -217,7 +223,7 @@ pub fn reorder_map(
                         );
                         continue;
                     }
-                    to_remove_map.insert(new_idx, map.get(&new_idx).unwrap().to_vec());
+                    to_remove_map.insert(new_idx, map.get(&l_no).unwrap().to_vec());
                 }
             }
 
@@ -254,11 +260,6 @@ pub fn reorder_map(
                         }
                         to_remove_map.insert(new_idx, to_remove.unwrap().to_vec());
                     }
-                }
-
-                for (l_no, line_detail) in to_remove_map {
-                    map.remove(&l_no);
-                    map.insert(l_no, line_detail);
                 }
 
                 // We need to add lines.
@@ -299,6 +300,11 @@ pub fn reorder_map(
                             }],
                         );
                     }
+                }
+
+                for (l_no, line_detail) in to_remove_map {
+                    map.remove(&l_no);
+                    map.insert(l_no, line_detail);
                 }
             } else {
                 // Lines deleted > Lines added.
@@ -377,7 +383,10 @@ pub fn reorder_map(
         Some(DiffCases::SingleLineDeleted) => {
             // This is simple, just delete the recording of the given line, and shift the rest of
             // the code by -1.
-            let s_line_no = line_change_after.start_line_number;
+            let s_line_no = line_change_after.start_line_number + 1;
+            // if s_line_no == 0 {
+            //     s_line_no = 1; // If the line number is 0, then we start from 1.
+            // }
             map.remove(&s_line_no);
             // Now move everything that is >= s_line_no, shift left.
             let mut to_remove_map: HashMap<u32, Vec<LineDetail>> = HashMap::new();
@@ -398,8 +407,8 @@ pub fn reorder_map(
             }
         }
         Some(DiffCases::FewLinesDeleted) => {
-            let s_line_no = line_change_after.start_line_number;
-            let e_line_no = line_change_after.start_line_number + line_change_before.change_count;
+            let s_line_no = line_change_after.start_line_number + 1;
+            let e_line_no = line_change_after.start_line_number + line_change_before.change_count + 1;
 
             // Remove all lines b/w s_line_no and e_line_no (exclusive).
             for l_no in s_line_no..e_line_no {
@@ -721,7 +730,7 @@ fn parse_diff(
                 replaced_content_line_numbers.iter_mut().for_each(|x| {
                     *x = l_after_start_line_no + *x;
                 });
-
+                // Increase line numbers for both line after and line before by 1.
                 reorder_map(
                     commit_hash.clone(),
                     category,
@@ -771,22 +780,36 @@ fn parse_diff(
 }
 
 pub fn extract_commit_hashes(
+    parent_commit_hash: &String,
     commit_hash: &str,
     map: &mut HashMap<u32, Vec<LineDetail>>,
     file_name: &str,
 ) {
-    // Call git show --unified=0 for the commit_hash and extract line->[commit_hash...] list.
-    let output = std::process::Command::new("git")
-        .arg("show")
-        .arg("--unified=0")
-        .arg(commit_hash)
-        .arg("--")
-        .arg(file_name)
-        .output()
-        .expect("Failed to execute command");
+    let mut output: std::process::Output;
+    if parent_commit_hash.is_empty() {
+        // Call git show --unified=0 for the commit_hash and extract line->[commit_hash...] list.
+        output = std::process::Command::new("git")
+            .arg("show")
+            .arg("--unified=0")
+            .arg(commit_hash)
+            .arg("--")
+            .arg(file_name)
+            .output()
+            .expect("Failed to execute command");
+    } else {
+        // perform git diff b/w the parnt commit and the commit_hash.
+        output = std::process::Command::new("git")
+            .arg("diff")
+            .arg(format!("{}..{}", parent_commit_hash, commit_hash))
+            .arg("--unified=0")
+            .arg("--")
+            .arg(file_name)
+            .output()
+            .expect("Failed to execute command");
+    }
     if output.status.success() {
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        // Pass the commit diff into
+        // Pass the commit diff and reorder the map accordingly.
         let _ = parse_diff(commit_hash.to_string(), stdout, map, file_name);
     } else {
         eprintln!("Error: {}", String::from_utf8_lossy(&output.stderr));

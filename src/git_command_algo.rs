@@ -7,7 +7,10 @@ use crate::git_command_algo;
 use std::collections::{HashMap, HashSet};
 use std::process::{Command, Stdio};
 
-pub fn print_all_valid_directories(workspace_dir: String, gitignore_file_name: Option<String>) -> () {
+pub fn print_all_valid_directories(
+    workspace_dir: String,
+    gitignore_file_name: Option<String>,
+) {
     // Prints all the valid files to stdout - used by plugins
     // optionally to get files that are to be indexed.
     // if gitignore_file_name.is_none() {
@@ -113,18 +116,23 @@ pub fn get_files_changed(commit_hash: &str) -> Vec<String> {
     files_changed
 }
 
-pub async fn extract_details_parallel(file_path: String) -> Vec<AuthorDetailsV2> {
+pub async fn extract_details_parallel(file_path: String) -> HashMap<u32, AuthorDetailsV2> {
     // For now - this is not parallelized, TODO: @krshrimali.
     // First get all the commit hashes that ever touched the given file path.
     let commit_hashes = git_command_algo::get_all_commits_for_file(file_path.clone());
     let mut map: HashMap<u32, Vec<diff_v2::LineDetail>> = HashMap::new();
+    let mut parent_commit_hash: String = String::from("");
     for commit_hash in commit_hashes.iter() {
-        diff_v2::extract_commit_hashes(commit_hash, &mut map, file_path.as_str());
+        diff_v2::extract_commit_hashes(&parent_commit_hash, commit_hash, &mut map, file_path.as_str());
+        parent_commit_hash = commit_hash.clone();
     }
     // Map has populated "relevant commit hashes" for each line.
     // Now use those commit hashes to find the most relevant files for each line.
-    let mut author_details_vec: Vec<AuthorDetailsV2> = Vec::new();
-    for (line_number, line_detail) in map.iter() {
+    let mut auth_details_map: HashMap<u32, AuthorDetailsV2> = HashMap::new();
+    let mut sorted_keys: Vec<u32> = map.keys().copied().collect();
+    sorted_keys.sort();
+    for line_number in sorted_keys.iter() {
+        let line_detail = map.get(line_number).unwrap();
         // author_full_name is a TODO.
         let author_details = AuthorDetailsV2 {
             origin_file_path: file_path.clone(),
@@ -132,9 +140,95 @@ pub async fn extract_details_parallel(file_path: String) -> Vec<AuthorDetailsV2>
             commit_hashes: line_detail[0].commit_hashes.clone(),
             author_full_name: Vec::new(),
         };
-        author_details_vec.push(author_details);
+        auth_details_map.insert(*line_number, author_details.clone());
     }
-    author_details_vec
+    // FIXME: @krshrimali - Remove this once proper testing is done.
+    // let mut total_count = 0;
+    // let mut failed_count = 0;
+    // // Find accuracy of the indexing:
+    // // Accuracy is defined as, as the output for each line of code - the last commit should always
+    // // be coming from git blame.
+    // for (line_number, line_detail) in map.iter() {
+    //     if line_detail.get(0).unwrap().content.is_empty() {
+    //         continue;
+    //     }
+    //     // Find the git blame from the line_number:
+    //     let mut command = Command::new("git");
+    //     command.args([
+    //         "blame",
+    //         "-L",
+    //         &format!("{},{}", line_number, line_number),
+    //         "--abbrev=7",
+    //         "--",
+    //         file_path.as_str(),
+    //     ]);
+    //     let output = command
+    //         .stdout(Stdio::piped())
+    //         .stderr(Stdio::piped())
+    //         .output()
+    //         .unwrap();
+    //     let stdout_buf = String::from_utf8(output.stdout).unwrap();
+    //     // Extract commit hash from: c5bca082 (Kushashwa Ravi Shrimali 2023-10-21 16:52:43 +0530 1) mod algo_loc;
+    //     let mut commit_hash = String::new();
+    //     if let Some(first_line) = stdout_buf.lines().next() {
+    //         // Split by space and take the first part as commit hash.
+    //         let parts: Vec<&str> = first_line.split_whitespace().collect();
+    //         if !parts.is_empty() {
+    //             commit_hash = parts[0].to_string();
+    //         }
+    //     }
+    //     // Check if commit hash == author_details_vec
+    //     let author_detail = auth_details_map.get(line_number);
+    //     if let Some(author_detail) = author_detail {
+    //         // If the commit hash is not already in the commit_hashes, add it.
+    //         if commit_hash.starts_with("^") {
+    //             // Make sure this is included as well...
+    //             let commit_hash = commit_hash.strip_prefix("^").unwrap();
+    //             if author_detail
+    //                 .commit_hashes
+    //                 .contains(&commit_hash.to_string())
+    //             {
+    //                 if author_detail
+    //                     .commit_hashes
+    //                     .contains(&commit_hash.to_string())
+    //                 {
+    //                     total_count += 1;
+    //                 } else {
+    //                     failed_count += 1;
+    //                 }
+    //             }
+    //         } else {
+    //             // Just take 7 first chars:
+    //             if commit_hash.len() > 7 {
+    //                 commit_hash = commit_hash[..7].to_string();
+    //             } else {
+    //                 continue;
+    //             }
+    //             // let commit_hash = &commit_hash[..7];
+    //             // println!("Searching for commit hash: {}", commit_hash);
+    //             if author_detail
+    //                 .commit_hashes
+    //                 .contains(&commit_hash.to_string())
+    //             {
+    //                 total_count += 1;
+    //             } else {
+    //                 failed_count += 1;
+    //                 println!(
+    //                     "Commit hash {} not found in author details for line {}",
+    //                     commit_hash, line_number
+    //                 );
+    //                 println!("Author details: {:?}", author_detail.commit_hashes);
+    //             }
+    //         }
+    //     }
+    // }
+    // println!(
+    //     "Accuracy for file {} : {}/{}",
+    //     file_path.clone(),
+    //     total_count,
+    //     total_count + failed_count
+    // );
+    auth_details_map
 }
 
 pub fn get_all_commits_for_file(file_path: String) -> Vec<String> {
@@ -158,9 +252,35 @@ pub fn get_all_commits_for_file(file_path: String) -> Vec<String> {
     for line in stdout_buf.lines() {
         commits.push(line.to_string());
     }
+    // Ensure commits contains git blame output as well for each line.
+    // This is to ensure that we have the commit hashes in the order they were made.
+    if commits.is_empty() {
+        // If no commits found, return an empty vector.
+        return commits;
+    }
+    // Add the last commit hash as well, which is the current state of the file.
+    let mut command = Command::new("git");
+    command.args(["log", "--pretty=format:%h", "--", file_path.as_str()]);
+    let output = command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .unwrap();
+    let stdout_buf = String::from_utf8(output.stdout).unwrap();
+    // For each line number - create another hashmap.
+    let mut last_commit_map: HashMap<usize, String> = HashMap::new();
+    for (idx, line) in stdout_buf.lines().enumerate() {
+        let commit_hash = line.to_string();
+        last_commit_map.insert(idx, commit_hash.clone());
+    }
+    // Now iterate through last_commit_map and check if it is in commits.
+    for (idx, commit_hash) in last_commit_map.iter() {
+        if !commits.contains(commit_hash) {
+            commits.push(commit_hash.clone());
+        }
+    }
     commits
 }
-
 
 fn get_commit_base_url() -> Option<String> {
     if let Ok(output) = Command::new("git")
@@ -217,7 +337,8 @@ pub fn get_commit_descriptions(commit_hashes: Vec<String>) -> Vec<Vec<String>> {
                         let message = sections[0].trim();
                         let mut lines = message.lines();
                         let commit_title = lines.next().unwrap_or("").trim().to_string();
-                        let commit_description = lines.collect::<Vec<_>>().join("\n").trim().to_string();
+                        let commit_description =
+                            lines.collect::<Vec<_>>().join("\n").trim().to_string();
 
                         let parts: Vec<&str> = sections[1].split("\n--DATE--\n").collect();
                         if parts.len() == 2 {

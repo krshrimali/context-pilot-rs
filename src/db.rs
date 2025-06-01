@@ -213,7 +213,7 @@ impl DB {
         &mut self,
         configured_file_path: &String,
         _: usize,
-        all_data: Vec<AuthorDetailsV2>,
+        all_data: HashMap<u32, AuthorDetailsV2>,
     ) {
         self.curr_file_path = configured_file_path.clone();
         if all_data.is_empty() {
@@ -221,7 +221,8 @@ impl DB {
         }
 
         self.curr_items += all_data.len() as u32; // Just track number of items
-        for single_detail in all_data {
+        for line_number in all_data.keys() {
+            let single_detail = all_data.get(line_number).unwrap().clone();
             self.current_data_v2
                 .entry(single_detail.line_number)
                 .or_default()
@@ -374,7 +375,8 @@ impl DB {
             // Let's treat this as a binary and perform operation.
             let output = algo_loc::perform_for_whole_file(file_path.clone(), false).await;
             let mut commit_hashes = vec![];
-            for struct_detail in output.iter() {
+            for line_number in output.keys() {
+                let struct_detail = output.get(line_number).unwrap();
                 // Check if struct_details' line number comes b/w start_number and end_number:
                 if struct_detail.line_number >= start_number
                     && struct_detail.line_number <= end_line_number
@@ -426,8 +428,9 @@ impl DB {
             // Let's treat this as a binary and perform the operation ourselves:
             let output = algo_loc::perform_for_whole_file(file_path.clone(), false).await;
             let mut commit_hashes = vec![];
-            for struct_detail in output.iter() {
+            for line_number in output.keys() {
                 // Check if struct_details' line number comes b/w start_number and end_number:
+                let struct_detail = output.get(line_number).unwrap();
                 if struct_detail.line_number >= start_number
                     && struct_detail.line_number <= end_line_number
                 {

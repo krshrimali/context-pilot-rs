@@ -1,6 +1,6 @@
 mod authordetails_impl;
 mod config;
-mod contextgpt_structs;
+pub mod contextgpt_structs;
 mod db;
 pub mod diff_v2;
 pub mod git_command_algo;
