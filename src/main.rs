@@ -304,6 +304,7 @@ impl Server {
         //     db_locked.append_to_db(&out[&0].origin_file_path, start_line_number, out.clone());
         //     db_locked.store();
         // }
+        }
     }
 
     pub async fn start_indexing(&mut self, metadata: &mut DBMetadata) {
