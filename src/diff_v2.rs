@@ -133,7 +133,6 @@ pub fn categorize_diff(line: &str) -> Option<DiffCases> {
     }
 }
 
-
 pub fn reorder_map(
     commit_hash: String,
     category: Option<DiffCases>,
@@ -149,34 +148,56 @@ pub fn reorder_map(
     // );
     match category {
         Some(DiffCases::FewLinesReplacedWithSingleLine) => {
+            // That means, anything after the current index, should be subtracted accordingly.
+            // Modify the line numbers in the map.
+            // Check if the lines replaced - if any of those were closely related to the single
+            // line, if yes, then we store the commit hash into that hashmap for that line number,
+            // otherwise we delete the content from the hashmap and stop tracking that.
+
+            // For now, just assume that they aren't similar at all. And just delete the entries
+            // from the HashMap and revise entries post it.
             let s_line_no = line_change_after.start_line_number;
-            let e_line_no = s_line_no + line_change_before.change_count;
+            let e_line_no = line_change_after.start_line_number + line_change_before.change_count;
+            let map_len = map.len();
 
             for l_no in s_line_no..e_line_no {
+                // Replaced line content numbers means that this line was "replaced" and not
+                // removed. So, in this case - do not remove content from the map.
+                // Later on, we'll append the commit hash.
                 if !replaced_content_line_numbers.contains(&l_no) {
                     map.remove(&l_no);
                 } else {
-                    if let Some(new_content) = line_change_after
+                    let new_content = line_change_after
                         .changed_content
                         .get((l_no - s_line_no) as usize)
-                    {
-                        let entry = map.entry(l_no).or_insert_with(|| vec![LineDetail {
-                            content: new_content.clone(),
-                            commit_hashes: vec![],
-                        }]);
-
-                        if entry[0].content != *new_content {
-                            entry[0].content = new_content.clone();
-                        }
-
-                        if !entry[0].commit_hashes.contains(&commit_hash) {
-                            entry[0].commit_hashes.push(commit_hash.clone());
+                        .unwrap()
+                        .to_string();
+                    if map.get(&l_no).is_none() {
+                        // Insert an entry.
+                        map.insert(
+                            l_no,
+                            vec![LineDetail {
+                                content: new_content.clone(),
+                                commit_hashes: vec![commit_hash.clone()],
+                            }],
+                        );
+                    } else {
+                        // map.get_mut(&l_no).map(|line_details| {
+                        //     line_details[0].commit_hashes.push(commit_hash.clone());
+                        //     // The content to replace with would be (l_no - s_line_no)th index in
+                        //     // line_change_after.changed_content.
+                        //     line_details[0].content = new_content;
+                        // });
+                        if let Some(line_details) = map.get_mut(&l_no) {
+                            line_details[0].commit_hashes.push(commit_hash.clone());
+                            line_details[0].content = new_content;
                         }
                     }
                 }
             }
 
             if !replaced_content_line_numbers.contains(&s_line_no) {
+                // Insert the new line at the s_line_no index.
                 map.insert(
                     s_line_no,
                     vec![LineDetail {
@@ -186,8 +207,9 @@ pub fn reorder_map(
                 );
             }
 
-            let mut updates = vec![];
-            for &l_no in map.keys().cloned().collect::<Vec<_>>().iter() {
+            // Now update all the lines in the hash map and shift them:
+            let mut to_remove_map: HashMap<u32, Vec<LineDetail>> = HashMap::new();
+            for l_no in map.keys().cloned().collect::<Vec<u32>>() {
                 if l_no >= e_line_no {
                     let new_idx = l_no - (line_change_before.change_count - 1);
                     if new_idx >= s_line_no && new_idx < e_line_no {
@@ -204,23 +226,39 @@ pub fn reorder_map(
                     to_remove_map.insert(new_idx, map.get(&l_no).unwrap().to_vec());
                 }
             }
-            for (new_l_no, detail) in updates {
-                map.insert(new_l_no, detail);
+
+            // Now insert the new entries.
+            for (l_no, line_detail) in to_remove_map.iter() {
+                map.insert(*l_no, line_detail.to_vec());
+            }
+            // In the final map.keys(), delete last line_change_before.change_count - 1 entries - because they
+            // are already shifted by that count.
+            for key in map.keys().cloned().collect::<Vec<u32>>() {
+                if key > (map_len as u32 - (line_change_before.change_count - 1)) {
+                    map.remove(&key);
+                }
             }
         }
-
         Some(DiffCases::FewLinesReplacedWithFewLines) => {
+            // Always use line_change_after to begin with as that is the source of truth.
             let s_line_no = line_change_after.start_line_number;
-            let e_line_no = line_change_before.start_line_number + line_change_before.change_count;
-            let diff = line_change_after.change_count as i32 - line_change_before.change_count as i32;
+            let e_line_no = line_change_after.start_line_number + line_change_before.change_count;
 
+            let diff =
+                line_change_after.change_count as i32 - line_change_before.change_count as i32;
             if diff > 0 {
-                let mut updates = vec![];
-                for l_no in map.keys().cloned().collect::<Vec<_>>().iter() {
-                    if l_no >= &e_line_no {
-                        if let Some(detail) = map.remove(&l_no) {
-                            updates.push((l_no + diff as u32, detail));
+                // Lines deleted < Lines added.
+                // First move all the lines after e_line_no+diff.
+                let mut to_remove_map: HashMap<u32, Vec<LineDetail>> = HashMap::new();
+                for l_no in map.keys().cloned().collect::<Vec<u32>>() {
+                    if l_no >= e_line_no {
+                        let new_idx = l_no + (diff as u32);
+                        let to_remove = map.get(&l_no);
+                        if to_remove.is_none() {
+                            // Post this, there's nothing to find.
+                            panic!("Line number {} not found in map", l_no);
                         }
+                        to_remove_map.insert(new_idx, to_remove.unwrap().to_vec());
                     }
                 }
 
@@ -342,7 +380,6 @@ pub fn reorder_map(
                 }
             }
         }
-
         Some(DiffCases::SingleLineDeleted) => {
             // This is simple, just delete the recording of the given line, and shift the rest of
             // the code by -1.
@@ -351,500 +388,154 @@ pub fn reorder_map(
             //     s_line_no = 1; // If the line number is 0, then we start from 1.
             // }
             map.remove(&s_line_no);
-
-            let mut updates = vec![];
-            for &l_no in map.keys().cloned().collect::<Vec<_>>().iter() {
+            // Now move everything that is >= s_line_no, shift left.
+            let mut to_remove_map: HashMap<u32, Vec<LineDetail>> = HashMap::new();
+            for l_no in map.keys().cloned().collect::<Vec<u32>>() {
                 if l_no > s_line_no {
-                    if let Some(detail) = map.remove(&l_no) {
-                        updates.push((l_no - 1, detail));
+                    let new_idx = l_no - 1;
+                    let to_remove = map.remove(&l_no);
+                    if to_remove.is_none() {
+                        // Post this, there's nothing to find.
+                        panic!("Line number {} not found in map", l_no);
                     }
+                    to_remove_map.insert(new_idx, to_remove.unwrap());
                 }
             }
-            for (new_l_no, detail) in updates {
-                map.insert(new_l_no, detail);
+            // Now insert the new entries.
+            for (l_no, line_detail) in to_remove_map {
+                map.insert(l_no, line_detail);
             }
         }
-
         Some(DiffCases::FewLinesDeleted) => {
             let s_line_no = line_change_after.start_line_number + 1;
             let e_line_no = line_change_after.start_line_number + line_change_before.change_count + 1;
 
-            for l_no in s..(s + c) {
+            // Remove all lines b/w s_line_no and e_line_no (exclusive).
+            for l_no in s_line_no..e_line_no {
                 map.remove(&l_no);
             }
-
-            let mut updates = vec![];
-            for &l_no in map.keys().cloned().collect::<Vec<_>>().iter() {
-                if l_no >= s + c {
-                    if let Some(detail) = map.remove(&l_no) {
-                        updates.push((l_no - c, detail));
+            // For any line after e_line_no, shift them by line_change_before.change_count.
+            let mut to_remove_map: HashMap<u32, Vec<LineDetail>> = HashMap::new();
+            for l_no in map.keys().cloned().collect::<Vec<u32>>() {
+                if l_no >= e_line_no {
+                    let new_idx = l_no - line_change_before.change_count;
+                    let to_remove = map.remove(&l_no);
+                    if to_remove.is_none() {
+                        // Post this, there's nothing to find.
+                        panic!("Line number {} not found in map", l_no);
                     }
+                    to_remove_map.insert(new_idx, to_remove.unwrap());
                 }
             }
-            for (new_l_no, detail) in updates {
-                map.insert(new_l_no, detail);
+            // Now insert the new entries.
+            for (l_no, line_detail) in to_remove_map {
+                map.insert(l_no, line_detail);
             }
         }
-
         Some(DiffCases::SingleLineReplacedWithAnotherSingleLine) => {
-            let l_no = line_change_after.start_line_number;
-            if let Some(entry) = map.get_mut(&l_no) {
-                if let Some(new_content) = line_change_after.changed_content.get(0) {
-                    if replaced_content_line_numbers.contains(&l_no) {
-                        if !entry[0].commit_hashes.contains(&commit_hash) {
-                            entry[0].commit_hashes.push(commit_hash.clone());
-                        }
-                    } else {
-                        entry[0].commit_hashes = vec![commit_hash.clone()];
-                    }
-
-                    if entry[0].content != *new_content {
-                        entry[0].content = new_content.clone();
-                    }
+            for i in 1..map.len() {
+                if map.get(&(i as u32)).is_none() {
+                    panic!(
+                        "Line number {} not found in map with map len: {}",
+                        i,
+                        map.len()
+                    );
                 }
-            } else {
-                if let Some(new_content) = line_change_after.changed_content.get(0) {
-                    map.insert(
-                        l_no,
-                        vec![LineDetail {
-                            content: new_content.clone(),
-                            commit_hashes: vec![commit_hash.clone()],
-                        }],
+                if map.get(&(i as u32)).unwrap()[0].commit_hashes.is_empty() {
+                    panic!(
+                        "Line number {} not found in map with map len: {}",
+                        i,
+                        map.len()
                     );
                 }
             }
-        }
-
-        Some(DiffCases::NewLinesAdded) => {
             let s_line_no = line_change_after.start_line_number;
-            let shift = line_change_after.change_count;
+            // Replace the line with the new line.
+            let to_remove = map.get_mut(&s_line_no);
+            if to_remove.is_none() {
+                // Post this, there's nothing to find.
+                panic!(
+                    "Line number {} not found in map, with map length: {}",
+                    s_line_no,
+                    map.len()
+                );
+            }
 
-            let mut updates = vec![];
-            let keys: Vec<u32> = map.keys().cloned().collect();
-            for l_no in keys {
-                if l_no >= s_line_no {
-                    if let Some(detail) = map.remove(&l_no) {
-                        updates.push((l_no + shift, detail));
-                    }
+            let line_detail = to_remove.unwrap();
+            if replaced_content_line_numbers.contains(&s_line_no) {
+                // This line was replaced and not deleted -> and then added.
+                line_detail[0].commit_hashes.push(commit_hash.clone());
+            } else {
+                line_detail[0].commit_hashes = vec![commit_hash];
+            }
+            let new_content = line_change_after
+                .changed_content
+                .get((s_line_no - line_change_after.start_line_number) as usize)
+                .unwrap()
+                .to_string();
+            line_detail[0].content = new_content;
+            for i in 1..map.len() {
+                if map.get(&(i as u32)).is_none() {
+                    panic!(
+                        "Line number {} not found in map with map len: {}",
+                        i,
+                        map.len()
+                    );
                 }
-            }
-            for (new_l_no, detail) in updates {
-                map.insert(new_l_no, detail);
-            }
-
-            for i in 0..shift {
-                let l_no = s_line_no + i;
-                if let Some(content) = line_change_after.changed_content.get(i as usize) {
-                    map.insert(
-                        l_no,
-                        vec![LineDetail {
-                            content: content.clone(),
-                            commit_hashes: vec![commit_hash.clone()],
-                        }],
+                if map.get(&(i as u32)).unwrap()[0].commit_hashes.len() == 0 {
+                    panic!(
+                        "Line number {} not found in map with map len: {}",
+                        i,
+                        map.len()
                     );
                 }
             }
         }
+        Some(DiffCases::NewLinesAdded) => {
+            // Handle this case
+            let s_line_no = line_change_after.start_line_number;
+            let e_line_no = line_change_after.start_line_number + line_change_after.change_count;
 
-        Some(DiffCases::NoneFound) | None => {}
+            // Anything from s_line_no until the end should be right moved by the diff
+            // diff is line_change_after.change_count.
+            let mut to_remove_map: HashMap<u32, Vec<LineDetail>> = HashMap::new();
+            for l_no in map.keys().cloned().collect::<Vec<u32>>() {
+                if l_no >= s_line_no {
+                    let new_idx = l_no + line_change_after.change_count;
+                    let to_remove = map.remove(&l_no);
+                    if to_remove.is_none() {
+                        panic!("Line number {} not found in map", l_no);
+                    }
+                    to_remove_map.insert(new_idx, to_remove.unwrap());
+                }
+            }
+            // Now insert the new entries.
+            for (l_no, line_detail) in to_remove_map {
+                map.insert(l_no, line_detail);
+            }
+            // Now add the new lines.
+            for l_no in s_line_no..e_line_no {
+                let new_content = line_change_after
+                    .changed_content
+                    .get((l_no - s_line_no) as usize)
+                    .unwrap()
+                    .to_string();
+                map.remove(&l_no);
+                map.insert(
+                    l_no,
+                    vec![LineDetail {
+                        content: new_content,
+                        commit_hashes: vec![commit_hash.clone()],
+                    }],
+                );
+            }
+        }
+        Some(DiffCases::NoneFound) => {
+            // Handle this case
+        }
+        _ => {}
     }
 }
-
-// pub fn reorder_map(
-//     commit_hash: String,
-//     category: Option<DiffCases>,
-//     map: &mut HashMap<u32, Vec<LineDetail>>,
-//     line_change_before: LineChange,
-//     line_change_after: LineChange,
-//     replaced_content_line_numbers: Vec<u32>,
-// ) {
-//     match category {
-//         Some(DiffCases::FewLinesReplacedWithSingleLine) => {
-//             // That means, anything after the current index, should be subtracted accordingly.
-//             // Modify the line numbers in the map.
-//             // Check if the lines replaced - if any of those were closely related to the single
-//             // line, if yes, then we store the commit hash into that hashmap for that line number,
-//             // otherwise we delete the content from the hashmap and stop tracking that.
-//
-//             // For now, just assume that they aren't similar at all. And just delete the entries
-//             // from the HashMap and revise entries post it.
-//             let s_line_no = line_change_after.start_line_number;
-//             let e_line_no = line_change_after.start_line_number + line_change_before.change_count;
-//             let map_len = map.len();
-//
-//             for l_no in s_line_no..e_line_no {
-//                 // Replaced line content numbers means that this line was "replaced" and not
-//                 // removed. So, in this case - do not remove content from the map.
-//                 // Later on, we'll append the commit hash.
-//                 if !replaced_content_line_numbers.contains(&l_no) {
-//                     map.remove(&l_no);
-//                 } else {
-//                     let new_content = line_change_after
-//                         .changed_content
-//                         .get((l_no - s_line_no) as usize)
-//                         .unwrap()
-//                         .to_string();
-//                     if map.get(&l_no).is_none() {
-//                         // Insert an entry.
-//                         map.insert(
-//                             l_no,
-//                             vec![LineDetail {
-//                                 content: new_content.clone(),
-//                                 commit_hashes: vec![commit_hash.clone()],
-//                             }],
-//                         );
-//                     } else {
-//                         // map.get_mut(&l_no).map(|line_details| {
-//                         //     line_details[0].commit_hashes.push(commit_hash.clone());
-//                         //     // The content to replace with would be (l_no - s_line_no)th index in
-//                         //     // line_change_after.changed_content.
-//                         //     line_details[0].content = new_content;
-//                         // });
-//                         if let Some(line_details) = map.get_mut(&l_no) {
-//                             line_details[0].commit_hashes.push(commit_hash.clone());
-//                             line_details[0].content = new_content;
-//                         }
-//                     }
-//                 }
-//             }
-//
-//             if !replaced_content_line_numbers.contains(&s_line_no) {
-//                 // Insert the new line at the s_line_no index.
-//                 map.insert(
-//                     s_line_no,
-//                     vec![LineDetail {
-//                         content: line_change_after.changed_content[0].clone(),
-//                         commit_hashes: vec![commit_hash.clone()],
-//                     }],
-//                 );
-//             }
-//
-//             // Now update all the lines in the hash map and shift them:
-//             let mut to_remove_map: HashMap<u32, Vec<LineDetail>> = HashMap::new();
-//             for l_no in map.keys().cloned().collect::<Vec<u32>>() {
-//                 if l_no >= e_line_no {
-//                     let new_idx = l_no - (line_change_before.change_count - 1);
-//                     if new_idx >= s_line_no && new_idx < e_line_no {
-//                         let line_detail_to_replace_with = map.get(&l_no).unwrap()[0].clone();
-//                         to_remove_map.insert(
-//                             new_idx,
-//                             vec![LineDetail {
-//                                 content: line_detail_to_replace_with.content,
-//                                 commit_hashes: line_detail_to_replace_with.commit_hashes,
-//                             }],
-//                         );
-//                         continue;
-//                     }
-//                     to_remove_map.insert(new_idx, map.get(&new_idx).unwrap().to_vec());
-//                 }
-//             }
-//
-//             // Now insert the new entries.
-//             for (l_no, line_detail) in to_remove_map.iter() {
-//                 map.insert(*l_no, line_detail.to_vec());
-//             }
-//             // In the final map.keys(), delete last line_change_before.change_count - 1 entries - because they
-//             // are already shifted by that count.
-//             for key in map.keys().cloned().collect::<Vec<u32>>() {
-//                 if key > (map_len as u32 - (line_change_before.change_count - 1)) {
-//                     map.remove(&key);
-//                 }
-//             }
-//         }
-//         Some(DiffCases::FewLinesReplacedWithFewLines) => {
-//             // Always use line_change_after to begin with as that is the source of truth.
-//             let s_line_no = line_change_after.start_line_number;
-//             let e_line_no = line_change_after.start_line_number + line_change_before.change_count;
-//
-//             let diff =
-//                 line_change_after.change_count as i32 - line_change_before.change_count as i32;
-//             if diff > 0 {
-//                 // Lines deleted < Lines added.
-//                 // First move all the lines after e_line_no+diff.
-//                 let mut to_remove_map: HashMap<u32, Vec<LineDetail>> = HashMap::new();
-//                 for l_no in map.keys().cloned().collect::<Vec<u32>>() {
-//                     if l_no >= e_line_no {
-//                         let new_idx = l_no + (diff as u32);
-//                         let to_remove = map.get(&l_no);
-//                         if to_remove.is_none() {
-//                             // Post this, there's nothing to find.
-//                             panic!("Line number {} not found in map", l_no);
-//                         }
-//                         to_remove_map.insert(new_idx, to_remove.unwrap().to_vec());
-//                     }
-//                 }
-//
-//                 for (l_no, line_detail) in to_remove_map {
-//                     map.remove(&l_no);
-//                     map.insert(l_no, line_detail);
-//                 }
-//
-//                 // We need to add lines.
-//                 let e_line_no =
-//                     line_change_after.start_line_number + line_change_after.change_count;
-//                 for l_no in s_line_no..e_line_no {
-//                     let new_content = line_change_after
-//                         .changed_content
-//                         .get((l_no - s_line_no) as usize)
-//                         .unwrap()
-//                         .to_string();
-//                     if replaced_content_line_numbers.contains(&l_no) {
-//                         // This line was replaced and not deleted -> and then added.
-//                         if map.get(&l_no).is_none() {
-//                             // This line was not present in the map, so add it.
-//                             map.insert(
-//                                 l_no,
-//                                 vec![LineDetail {
-//                                     content: new_content.clone(),
-//                                     commit_hashes: vec![commit_hash.clone()],
-//                                 }],
-//                             );
-//                         } else if let Some(line_details) = map.get_mut(&l_no) {
-//                             line_details[0].commit_hashes.push(commit_hash.clone());
-//                             line_details[0].content = new_content;
-//                         }
-//                         // Assert that the content is not mistakenly deleted.
-//                         assert!(map.get(&l_no).is_some());
-//                     } else {
-//                         // Added new line:
-//                         map.remove(&l_no);
-//                         // Insert new entries again for these lines.
-//                         map.insert(
-//                             l_no,
-//                             vec![LineDetail {
-//                                 content: new_content,
-//                                 commit_hashes: vec![commit_hash.clone()],
-//                             }],
-//                         );
-//                     }
-//                 }
-//             } else {
-//                 // Lines deleted > Lines added.
-//                 for l_no in s_line_no..e_line_no {
-//                     if replaced_content_line_numbers.contains(&l_no) {
-//                         let new_content_unwrapped = line_change_after
-//                             .changed_content
-//                             .get((l_no - s_line_no) as usize);
-//                         let new_content = new_content_unwrapped.unwrap().to_string();
-//                         if map.get(&l_no).is_none() {
-//                             // This line was not present in the map, so add it.
-//                             map.insert(
-//                                 l_no,
-//                                 vec![LineDetail {
-//                                     content: new_content.clone(),
-//                                     commit_hashes: vec![commit_hash.clone()],
-//                                 }],
-//                             );
-//                         } else {
-//                             // This line was present in the map, so update it.
-//                             if let Some(line_details) = map.get_mut(&l_no) {
-//                                 line_details[0].commit_hashes.push(commit_hash.clone());
-//                                 line_details[0].content = new_content;
-//                             }
-//                         }
-//                     }
-//                 }
-//
-//                 for l_no in s_line_no..e_line_no {
-//                     if !replaced_content_line_numbers.contains(&l_no) {
-//                         map.remove(&l_no);
-//                     }
-//                 }
-//
-//                 // Add content for the new lines.
-//                 for l_no in s_line_no
-//                     ..(line_change_after.start_line_number + line_change_after.change_count)
-//                 {
-//                     if !replaced_content_line_numbers.contains(&l_no) {
-//                         let new_content = line_change_after
-//                             .changed_content
-//                             .get((l_no - s_line_no) as usize)
-//                             .unwrap()
-//                             .to_string();
-//                         map.insert(
-//                             l_no,
-//                             vec![LineDetail {
-//                                 content: new_content.clone(),
-//                                 commit_hashes: vec![commit_hash.clone()],
-//                             }],
-//                         );
-//                     }
-//                 }
-//
-//                 // Now for all the lines in the map that are > line_change_after.start_line_number
-//                 // + line_change_after.change_count, move them by -diff.
-//                 let mut to_remove_map: HashMap<u32, Vec<LineDetail>> = HashMap::new();
-//                 for l_no in map.keys().cloned().collect::<Vec<u32>>() {
-//                     if l_no >= line_change_after.start_line_number + line_change_after.change_count
-//                     {
-//                         let new_idx: i32 = l_no as i32 + diff; // diff is negative here.
-//                         let to_remove = map.remove(&l_no);
-//                         if to_remove.is_none() {
-//                             panic!("Line number {} not found in map", l_no);
-//                         }
-//                         to_remove_map.insert(new_idx as u32, to_remove.unwrap());
-//                     }
-//                 }
-//
-//                 // Now insert the new entries.
-//                 for (l_no, line_detail) in to_remove_map {
-//                     map.insert(l_no, line_detail);
-//                 }
-//             }
-//         }
-//         Some(DiffCases::SingleLineDeleted) => {
-//             // This is simple, just delete the recording of the given line, and shift the rest of
-//             // the code by -1.
-//             let s_line_no = line_change_after.start_line_number;
-//             map.remove(&s_line_no);
-//             // Now move everything that is >= s_line_no, shift left.
-//             let mut to_remove_map: HashMap<u32, Vec<LineDetail>> = HashMap::new();
-//             for l_no in map.keys().cloned().collect::<Vec<u32>>() {
-//                 if l_no > s_line_no {
-//                     let new_idx = l_no - 1;
-//                     let to_remove = map.remove(&l_no);
-//                     if to_remove.is_none() {
-//                         // Post this, there's nothing to find.
-//                         panic!("Line number {} not found in map", l_no);
-//                     }
-//                     to_remove_map.insert(new_idx, to_remove.unwrap());
-//                 }
-//             }
-//             // Now insert the new entries.
-//             for (l_no, line_detail) in to_remove_map {
-//                 map.insert(l_no, line_detail);
-//             }
-//         }
-//         Some(DiffCases::FewLinesDeleted) => {
-//             let s_line_no = line_change_after.start_line_number;
-//             let e_line_no = line_change_after.start_line_number + line_change_before.change_count;
-//
-//             // Remove all lines b/w s_line_no and e_line_no (exclusive).
-//             for l_no in s_line_no..e_line_no {
-//                 map.remove(&l_no);
-//             }
-//             // For any line after e_line_no, shift them by line_change_before.change_count.
-//             let mut to_remove_map: HashMap<u32, Vec<LineDetail>> = HashMap::new();
-//             for l_no in map.keys().cloned().collect::<Vec<u32>>() {
-//                 if l_no >= e_line_no {
-//                     let new_idx = l_no - line_change_before.change_count;
-//                     let to_remove = map.remove(&l_no);
-//                     if to_remove.is_none() {
-//                         // Post this, there's nothing to find.
-//                         panic!("Line number {} not found in map", l_no);
-//                     }
-//                     to_remove_map.insert(new_idx, to_remove.unwrap());
-//                 }
-//             }
-//             // Now insert the new entries.
-//             for (l_no, line_detail) in to_remove_map {
-//                 map.insert(l_no, line_detail);
-//             }
-//         }
-//         Some(DiffCases::SingleLineReplacedWithAnotherSingleLine) => {
-//             for i in 1..map.len() {
-//                 if map.get(&(i as u32)).is_none() {
-//                     panic!(
-//                         "Line number {} not found in map with map len: {}",
-//                         i,
-//                         map.len()
-//                     );
-//                 }
-//                 if map.get(&(i as u32)).unwrap()[0].commit_hashes.is_empty() {
-//                     panic!(
-//                         "Line number {} not found in map with map len: {}",
-//                         i,
-//                         map.len()
-//                     );
-//                 }
-//             }
-//             let s_line_no = line_change_after.start_line_number;
-//             // Replace the line with the new line.
-//             let to_remove = map.get_mut(&s_line_no);
-//             if to_remove.is_none() {
-//                 // Post this, there's nothing to find.
-//                 panic!(
-//                     "Line number {} not found in map, with map length: {}",
-//                     s_line_no,
-//                     map.len()
-//                 );
-//             }
-//
-//             let line_detail = to_remove.unwrap();
-//             if replaced_content_line_numbers.contains(&s_line_no) {
-//                 // This line was replaced and not deleted -> and then added.
-//                 line_detail[0].commit_hashes.push(commit_hash.clone());
-//             } else {
-//                 line_detail[0].commit_hashes = vec![commit_hash];
-//             }
-//             let new_content = line_change_after
-//                 .changed_content
-//                 .get((s_line_no - line_change_after.start_line_number) as usize)
-//                 .unwrap()
-//                 .to_string();
-//             line_detail[0].content = new_content;
-//             for i in 1..map.len() {
-//                 if map.get(&(i as u32)).is_none() {
-//                     panic!(
-//                         "Line number {} not found in map with map len: {}",
-//                         i,
-//                         map.len()
-//                     );
-//                 }
-//                 if map.get(&(i as u32)).unwrap()[0].commit_hashes.len() == 0 {
-//                     panic!(
-//                         "Line number {} not found in map with map len: {}",
-//                         i,
-//                         map.len()
-//                     );
-//                 }
-//             }
-//         }
-//         Some(DiffCases::NewLinesAdded) => {
-//             // Handle this case
-//             let s_line_no = line_change_after.start_line_number;
-//             let e_line_no = line_change_after.start_line_number + line_change_after.change_count;
-//
-//             // Anything from s_line_no until the end should be right moved by the diff
-//             // diff is line_change_after.change_count.
-//             let mut to_remove_map: HashMap<u32, Vec<LineDetail>> = HashMap::new();
-//             for l_no in map.keys().cloned().collect::<Vec<u32>>() {
-//                 if l_no >= s_line_no {
-//                     let new_idx = l_no + line_change_after.change_count;
-//                     let to_remove = map.remove(&l_no);
-//                     if to_remove.is_none() {
-//                         panic!("Line number {} not found in map", l_no);
-//                     }
-//                     to_remove_map.insert(new_idx, to_remove.unwrap());
-//                 }
-//             }
-//             // Now insert the new entries.
-//             for (l_no, line_detail) in to_remove_map {
-//                 map.insert(l_no, line_detail);
-//             }
-//             // Now add the new lines.
-//             for l_no in s_line_no..e_line_no {
-//                 let new_content = line_change_after
-//                     .changed_content
-//                     .get((l_no - s_line_no) as usize)
-//                     .unwrap()
-//                     .to_string();
-//                 map.remove(&l_no);
-//                 map.insert(
-//                     l_no,
-//                     vec![LineDetail {
-//                         content: new_content,
-//                         commit_hashes: vec![commit_hash.clone()],
-//                     }],
-//                 );
-//             }
-//         }
-//         Some(DiffCases::NoneFound) => {
-//             // Handle this case
-//         }
-//         _ => {}
-//     }
-// }
 
 pub fn fetch_line_numbers(line: String) -> Option<(LineChange, LineChange)> {
     // Extract the line numbers from the diff line.
