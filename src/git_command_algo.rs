@@ -119,14 +119,13 @@ pub fn get_files_changed(commit_hash: &str) -> Vec<String> {
 pub async fn extract_details_parallel(file_path: String) -> HashMap<u32, AuthorDetailsV2> {
     // For now - this is not parallelized, TODO: @krshrimali.
     // First get all the commit hashes that ever touched the given file path.
-    let commit_hashes: Vec<String> = git_command_algo::get_all_commits_for_file(file_path.clone());
+    let commit_hashes = git_command_algo::get_all_commits_for_file(file_path.clone());
     let mut map: HashMap<u32, Vec<diff_v2::LineDetail>> = HashMap::new();
     let mut parent_commit_hash: String = String::from("");
     for commit_hash in commit_hashes.iter() {
         diff_v2::extract_commit_hashes(&parent_commit_hash, commit_hash, &mut map, file_path.as_str());
         parent_commit_hash = commit_hash.clone();
     }
-    // Check total number of lines in map:
     // Map has populated "relevant commit hashes" for each line.
     // Now use those commit hashes to find the most relevant files for each line.
     let mut auth_details_map: HashMap<u32, AuthorDetailsV2> = HashMap::new();

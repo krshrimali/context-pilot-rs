@@ -270,28 +270,27 @@ impl Server {
     }
 
     pub async fn start_file(&mut self, metadata: &mut DBMetadata, file_path: Option<String>) {
-        // For now - do nothing.
-        // // Only index the given file and do no more than that.
-        // if file_path.is_none() {
-        //     log!(Level::Error, "No file path provided to index.");
-        //     return;
-        // }
-        // let file_path_str = file_path.clone().unwrap();
-        // let file_path_buf = PathBuf::from(file_path_str);
-        // let file_path_path = file_path_buf.as_path();
-        // if Server::_is_valid_file(file_path_path) {
-        //     let workspace_path = &metadata.workspace_path;
-        //     let db = DB {
-        //         folder_path: workspace_path.clone(),
-        //         ..Default::default()
-        //     };
-        //     let curr_db: Arc<Mutex<DB>> = Arc::new(db.into());
-        //     curr_db
-        //         .lock()
-        //         .await
-        //         .init_db(workspace_path.as_str(), None, false);
-        //     let mut server = Server::new(State::Dead, DBHandler::new(metadata.clone()));
-        //     server.init_server(curr_db);
+        // Only index the given file and do no more than that.
+        if file_path.is_none() {
+            log!(Level::Error, "No file path provided to index.");
+            return;
+        }
+        let file_path_str = file_path.clone().unwrap();
+        let file_path_buf = PathBuf::from(file_path_str);
+        let file_path_path = file_path_buf.as_path();
+        if Server::_is_valid_file(file_path_path) {
+            let workspace_path = &metadata.workspace_path;
+            let db = DB {
+                folder_path: workspace_path.clone(),
+                ..Default::default()
+            };
+            let curr_db: Arc<Mutex<DB>> = Arc::new(db.into());
+            curr_db
+                .lock()
+                .await
+                .init_db(workspace_path.as_str(), None, false);
+            let mut server = Server::new(State::Dead, DBHandler::new(metadata.clone()));
+            server.init_server(curr_db);
 
         //     let out = Server::_index_file(file_path_buf.clone()).await;
         //     let db = server.curr_db.clone().unwrap();
@@ -564,20 +563,6 @@ async fn main() -> CliResult {
                     None,
                     None,
                     subfolders,
-                )
-                .await;
-        }
-        RequestTypeOptions::IndexFile => {
-            todo!("Work in Progress - please don't use this mode yet.");
-            // Only index a given file
-            server
-                .handle_server(
-                    args.folder_path.as_str(),
-                    Some(args.file.unwrap()),
-                    None,
-                    None,
-                    Some(RequestTypeOptions::IndexFile),
-                    None,
                 )
                 .await;
         }
