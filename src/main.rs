@@ -270,6 +270,47 @@ impl Server {
     }
 
     pub async fn start_file(&mut self, metadata: &mut DBMetadata, file_path: Option<String>) {
+        // Only index the given file...
+        let workspace_path = &metadata.workspace_path;
+
+        let workspace_path_buf = PathBuf::from(workspace_path);
+        // First check if indexing is already done - if yes, just cleanup and restart.
+        // Check if mapping.json exists.
+        let db = DB {
+            folder_path: workspace_path.clone(),
+            ..Default::default()
+        };
+        // In case we are attempging to index subfolders - do NOT cleanup
+        // the DB.
+        let mut cleanup: bool = true;
+        if !metadata.folders_to_index.is_empty() {
+            cleanup = false;
+        }
+        let curr_db: Arc<Mutex<DB>> = Arc::new(db.into());
+        let mut db_locked = curr_db
+            .lock()
+            .await;
+        db_locked.init_db(workspace_path.as_str(), None, cleanup);
+        let mut server = Server::new(State::Dead, DBHandler::new(metadata.clone()));
+        server.init_server(curr_db.clone());
+
+        let filep = PathBuf::from(file_path.unwrap());
+        if Server::_is_valid_file(filep.as_path()) {
+            let output = Server::_index_file(filep).await;
+            if output.is_empty() {
+                return;
+            }
+            let start_line_number = 0;
+            db_locked.append_to_db(
+                &output[0].origin_file_path,
+                start_line_number,
+                output.clone(),
+            );
+            db_locked.store();
+            return;
+        }
+    }
+    pub async fn start_file(&mut self, metadata: &mut DBMetadata, file_path: Option<String>) {
         // Only index the given file and do no more than that.
         if file_path.is_none() {
             log!(Level::Error, "No file path provided to index.");
@@ -563,6 +604,19 @@ async fn main() -> CliResult {
                     None,
                     None,
                     subfolders,
+                )
+                .await;
+        }
+        RequestTypeOptions::IndexFile => {
+            // Only index a given file
+            server
+                .handle_server(
+                    args.folder_path.as_str(),
+                    Some(args.file.unwrap()),
+                    None,
+                    None,
+                    Some(RequestTypeOptions::IndexFile),
+                    None,
                 )
                 .await;
         }
