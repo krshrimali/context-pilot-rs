@@ -1,6 +1,6 @@
 use crate::algo_loc;
-use crate::git_command_algo::{get_commit_descriptions, get_commits_after, get_files_changed};
 use crate::git_command_algo::get_latest_commit;
+use crate::git_command_algo::{get_commit_descriptions, get_commits_after, get_files_changed};
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::PathBuf;
@@ -345,10 +345,7 @@ impl DB {
         // Find the last commit hash for the current file
         let last_commit = get_latest_commit(&self.curr_file_path);
 
-        self.prepare_indexing_metadata(
-            &self.curr_file_path.clone(),
-            &last_commit,
-        );
+        self.prepare_indexing_metadata(&self.curr_file_path.clone(), &last_commit);
 
         self.current_data_v2.clear(); // clear everything after storing
         self.curr_items = 0; // reset
@@ -449,8 +446,7 @@ impl DB {
         let mut indexing_metadata = self.read_indexing_file();
         // write in the format: {"file_path": ["last_indexed_commit"]}
         let file_path_key = file_path.clone();
-        let last_commit_hash_value = last_commit_hash
-            .clone().unwrap().to_string();
+        let last_commit_hash_value = last_commit_hash.clone().unwrap().to_string();
         indexing_metadata
             .entry(file_path_key)
             .or_default()
@@ -509,12 +505,24 @@ impl DB {
             let recent_commit = get_latest_commit(&file_path).unwrap();
             // Read the mapping file first from self.mapping_file_path
             let indexing_metadata = self.read_indexing_file();
-            let last_indexing_data =
-                indexing_metadata
-                    .get(&file_path.clone())
-                    .unwrap_or_else(|| {
-                        panic!("No indexing metadata found for the file: {}", file_path);
-                    });
+            println!("Indexing metadata: {:?}", indexing_metadata);
+            // Canonicalize the file_path to ensure it matches the keys in indexing_metadata
+            let canonicalized_file_path = PathBuf::from(file_path.clone())
+                .canonicalize()
+                .unwrap_or_else(|_| {
+                    panic!(
+                        "Unable to canonicalize the file path: {}",
+                        file_path.clone()
+                    )
+                })
+                .to_str()
+                .unwrap()
+                .to_string();
+            let last_indexing_data = indexing_metadata
+                .get(&canonicalized_file_path.clone())
+                .unwrap_or_else(|| {
+                    panic!("No indexing metadata found for the file: {}", file_path);
+                });
             let last_indexed_commit = last_indexing_data.last().cloned();
             if last_indexed_commit.is_some() {
                 if last_indexed_commit.clone().unwrap().eq(&recent_commit) {
@@ -523,7 +531,7 @@ impl DB {
                 } else {
                     // Index the new commits and update the DB.
                     // First get the new commits that have not been indexed yet.
-                    let commits_to_index = get_commits_after(last_indexed_commit.unwrap());
+                    let commits_to_index = get_commits_after(last_indexed_commit.unwrap(), file_path.clone());
                     // Index these commits first.
                     perform_for_whole_file(file_path.clone(), false, Some(commits_to_index)).await;
                 }
@@ -570,6 +578,48 @@ impl DB {
             let out = get_commit_descriptions(commit_hashes);
             println!("{:?}", out);
         } else {
+            // Generally - check first if the last indexed commit is the same as the current one.
+            // If it is, then we can just return the data from the DB.
+            let recent_commit = get_latest_commit(&file_path).unwrap();
+            // Read the mapping file first from self.mapping_file_path
+            let indexing_metadata = self.read_indexing_file();
+            println!("Indexing metadata: {:?}", indexing_metadata);
+            // Canonicalize the file_path to ensure it matches the keys in indexing_metadata
+            let canonicalized_file_path = PathBuf::from(file_path.clone())
+                .canonicalize()
+                .unwrap_or_else(|_| {
+                    panic!(
+                        "Unable to canonicalize the file path: {}",
+                        file_path.clone()
+                    )
+                })
+                .to_str()
+                .unwrap()
+                .to_string();
+            let last_indexing_data = indexing_metadata
+                .get(&canonicalized_file_path.clone())
+                .unwrap_or_else(|| {
+                    panic!("No indexing metadata found for the file: {}", file_path);
+                });
+            let last_indexed_commit = last_indexing_data.last().cloned();
+            if last_indexed_commit.is_some() {
+                if last_indexed_commit.clone().unwrap().eq(&recent_commit) {
+                    // No need to index again, just return the data from the DB.
+                    eprintln!("No new commits to index, returning existing data.");
+                } else {
+                    println!(
+                        "Indexing for file: {} with last indexed commit: {}",
+                        file_path,
+                        recent_commit.clone()
+                    );
+                    // Index the new commits and update the DB.
+                    // First get the new commits that have not been indexed yet.
+                    let commits_to_index = get_commits_after(last_indexed_commit.unwrap(), file_path.clone());
+                    println!("Indexing metadata: {:?}", commits_to_index);
+                    // Index these commits first.
+                    perform_for_whole_file(file_path.clone(), false, Some(commits_to_index)).await;
+                }
+            }
             let (commit_hashes, _uncovered_indices) =
                 self.raw_exists_and_return(&start_number, &end_line_number);
 

@@ -304,7 +304,7 @@ pub fn get_all_commits_for_file(file_path: String) -> Vec<String> {
         last_commit_map.insert(idx, commit_hash.clone());
     }
     // Now iterate through last_commit_map and check if it is in commits.
-    for (idx, commit_hash) in last_commit_map.iter() {
+    for (_, commit_hash) in last_commit_map.iter() {
         if !commits.contains(commit_hash) {
             commits.push(commit_hash.clone());
         }
@@ -416,12 +416,12 @@ pub fn get_latest_commit(file_path: &String) -> Option<String> {
     None
 }
 
-pub fn get_commits_after(last_indexed_commit: String) -> Vec<String> {
+pub fn get_commits_after(last_indexed_commit: String, file_path: String) -> Vec<String> {
     // Get all the commits after the last indexed commit.
     // If last_indexed_commit is None, return all commits.
     // If recent_commit is None, return all commits after last_indexed_commit.
     let mut command = Command::new("git");
-    command.args(["rev-list", &last_indexed_commit, "..", "HEAD"]);
+    command.args(["log", "--pretty=format:%h", format!("{}..HEAD", &last_indexed_commit).as_str(), "--", file_path.as_str()]);
 
     let output = command
         .stdout(Stdio::piped())
