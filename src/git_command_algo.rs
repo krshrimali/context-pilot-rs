@@ -116,6 +116,38 @@ pub fn get_files_changed(commit_hash: &str) -> Vec<String> {
     files_changed
 }
 
+
+pub async fn index_some_commits(
+    origin_file_path: String,
+    commits_to_index: Vec<String>,
+) -> HashMap<u32, AuthorDetailsV2> {
+    // For now - this is not parallelized, TODO: @krshrimali.
+    // First get all the commit hashes that ever touched the given file path.
+    let mut map: HashMap<u32, Vec<diff_v2::LineDetail>> = HashMap::new();
+    let mut parent_commit_hash: String = String::from("");
+    for commit_hash in commits_to_index.iter() {
+        diff_v2::extract_commit_hashes(&parent_commit_hash, commit_hash, &mut map, origin_file_path.as_str());
+        parent_commit_hash = commit_hash.clone();
+    }
+    // Map has populated "relevant commit hashes" for each line.
+    // Now use those commit hashes to find the most relevant files for each line.
+    let mut auth_details_map: HashMap<u32, AuthorDetailsV2> = HashMap::new();
+    let mut sorted_keys: Vec<u32> = map.keys().copied().collect();
+    sorted_keys.sort();
+    for line_number in sorted_keys.iter() {
+        let line_detail = map.get(line_number).unwrap();
+        // author_full_name is a TODO.
+        let author_details = AuthorDetailsV2 {
+            origin_file_path: origin_file_path.clone(),
+            line_number: *line_number as usize,
+            commit_hashes: line_detail[0].commit_hashes.clone(),
+            author_full_name: Vec::new(),
+        };
+        auth_details_map.insert(*line_number, author_details.clone());
+    }
+    auth_details_map
+}
+
 pub async fn extract_details_parallel(file_path: String) -> HashMap<u32, AuthorDetailsV2> {
     // For now - this is not parallelized, TODO: @krshrimali.
     // First get all the commit hashes that ever touched the given file path.
@@ -232,11 +264,9 @@ pub async fn extract_details_parallel(file_path: String) -> HashMap<u32, AuthorD
 }
 
 pub fn get_all_commits_for_file(file_path: String) -> Vec<String> {
-    // git log --pretty=format:"%h" --reverse -- file_path
     let mut command = Command::new("git");
     command.args([
         "log",
-        // "--no-merges",
         "--pretty=format:%h",
         "--reverse",
         "--",
@@ -274,7 +304,7 @@ pub fn get_all_commits_for_file(file_path: String) -> Vec<String> {
         last_commit_map.insert(idx, commit_hash.clone());
     }
     // Now iterate through last_commit_map and check if it is in commits.
-    for (idx, commit_hash) in last_commit_map.iter() {
+    for (_, commit_hash) in last_commit_map.iter() {
         if !commits.contains(commit_hash) {
             commits.push(commit_hash.clone());
         }
@@ -364,4 +394,45 @@ pub fn get_commit_descriptions(commit_hashes: Vec<String>) -> Vec<Vec<String>> {
         }
     }
     output_vec
+}
+
+pub fn get_latest_commit(file_path: &String) -> Option<String> {
+    // Get the latest commit hash for the given file path.
+    let mut command = Command::new("git");
+    command.args(["log", "-1", "--pretty=format:%h", "--", file_path.as_str()]);
+    let output = command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .unwrap();
+    if output.status.success() {
+        if let Ok(commit_hash) = String::from_utf8(output.stdout) {
+            let commit_hash = commit_hash.trim().to_string();
+            if !commit_hash.is_empty() {
+                return Some(commit_hash);
+            }
+        }
+    }
+    None
+}
+
+pub fn get_commits_after(last_indexed_commit: String, file_path: String) -> Vec<String> {
+    // Get all the commits after the last indexed commit.
+    // If last_indexed_commit is None, return all commits.
+    // If recent_commit is None, return all commits after last_indexed_commit.
+    let mut command = Command::new("git");
+    command.args(["log", "--pretty=format:%h", format!("{}..HEAD", &last_indexed_commit).as_str(), "--", file_path.as_str()]);
+
+    let output = command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .unwrap();
+
+    if output.status.success() {
+        let stdout_buf = String::from_utf8(output.stdout).unwrap();
+        return stdout_buf.lines().map(|s| s.to_string()).collect();
+    }
+
+    Vec::new()
 }

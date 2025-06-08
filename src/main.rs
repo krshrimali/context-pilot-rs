@@ -148,7 +148,7 @@ impl Server {
         // For now, just store the output somewhere in the DB.
         let file_path = std::fs::canonicalize(file_path_inp).expect("Failed");
         let file_path_str = file_path.to_str().unwrap();
-        perform_for_whole_file(file_path_str.to_string(), true).await
+        perform_for_whole_file(file_path_str.to_string(), true, None).await
     }
 
     #[async_recursion]
@@ -292,18 +292,18 @@ impl Server {
             let mut server = Server::new(State::Dead, DBHandler::new(metadata.clone()));
             server.init_server(curr_db);
 
-        //     let out = Server::_index_file(file_path_buf.clone()).await;
-        //     let db = server.curr_db.clone().unwrap();
-        //     let mut db_locked = db.lock().await;
-        //     let start_line_number = 0;
-        //     println!(
-        //         "Indexing file: {} with {} lines",
-        //         file_path_buf.display(),
-        //         out.len()
-        //     );
-        //     db_locked.append_to_db(&out[&0].origin_file_path, start_line_number, out.clone());
-        //     db_locked.store();
-        // }
+            //     let out = Server::_index_file(file_path_buf.clone()).await;
+            //     let db = server.curr_db.clone().unwrap();
+            //     let mut db_locked = db.lock().await;
+            //     let start_line_number = 0;
+            //     println!(
+            //         "Indexing file: {} with {} lines",
+            //         file_path_buf.display(),
+            //         out.len()
+            //     );
+            //     db_locked.append_to_db(&out[&0].origin_file_path, start_line_number, out.clone());
+            //     db_locked.store();
+            // }
         }
     }
 
