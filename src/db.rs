@@ -1,10 +1,12 @@
-use crate::git_command_algo::{get_commit_descriptions, get_files_changed};
+use crate::algo_loc;
+use crate::git_command_algo::{get_commit_descriptions, get_commits_after, get_files_changed};
+use crate::git_command_algo::get_latest_commit;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::PathBuf;
 use std::{collections::HashMap, fs::File, path::Path};
-use crate::algo_loc;
 
+use crate::algo_loc::perform_for_whole_file;
 use crate::config::MAX_ITEMS_IN_EACH_DB_FILE;
 use crate::contextgpt_structs::AuthorDetailsV2;
 use crate::{config, contextgpt_structs::AuthorDetails};
@@ -33,6 +35,7 @@ pub struct DB {
     // pub mapping_data_v2: MappingDBTypeV2,
     pub curr_file_path: String,
     pub workspace_path: String,
+    pub indexing_file_name: String, // This is for storing the indexing metadata
 }
 
 #[allow(dead_code)]
@@ -112,9 +115,8 @@ impl DB {
         // Check if self.folder_path exists, cleanup if cleanup is required.
         if cleanup && Path::new(&self.folder_path).exists() {
             // Remove the folder and all its contents
-            std::fs::remove_dir_all(&self.folder_path).unwrap_or_else(|_| {
-                panic!("Unable to remove the folder: {}", self.folder_path)
-            });
+            std::fs::remove_dir_all(&self.folder_path)
+                .unwrap_or_else(|_| panic!("Unable to remove the folder: {}", self.folder_path));
         }
         // Now initialise all relevant folders/files
         // When the child folders are also not present - we just want to iteratively create all folders
@@ -144,40 +146,105 @@ impl DB {
         }
     }
 
-    fn find_index(&mut self, curr_file_path: &str) -> Option<Vec<u32>> {
-        // In each folder -> we'll have a mapping file which contains which filename corresponds to which index (to be used in the DB file)
+    fn read_mapping_file(&mut self) -> MappingDBType {
+        // Read the mapping file from the folder_path
         self.mapping_file_name = "mapping.json".to_string();
-        self.mapping_file_path = format!("{}/{}", self.folder_path, self.mapping_file_name);
-        let mapping_path_obj = Path::new(&self.mapping_file_path);
+        let mapping_path = format!("{}/{}", self.folder_path, self.mapping_file_name);
+        self.mapping_file_path = String::from(mapping_path.clone());
+        let mapping_path_obj = Path::new(&mapping_path);
         if !mapping_path_obj.exists() {
+            eprintln!("Mapping file does not exist at: {}", mapping_path);
             self.mapping_data = HashMap::new();
             self.db_file_path = format!("{}/{}.json", self.folder_path, self.index);
             self.current_data = HashMap::new();
-            return None;
+            return HashMap::new();
         }
-        let mapping_data = match std::fs::read_to_string(&self.mapping_file_path) {
+        let mapping_data = match std::fs::read_to_string(&mapping_path) {
             Ok(s) => s,
             Err(e) => {
-                eprintln!("Error reading file: {}: {}", self.mapping_file_path, e);
-                return None;
+                eprintln!("Error reading file: {}: {}", mapping_path, e);
+                return HashMap::new();
             }
         };
-        let mut mapping_json: HashMap<String, Vec<u32>> =
-            serde_json::from_str(mapping_data.as_str()).unwrap_or_else(|_| {
-                panic!(
-                    "Unable to deserialize the mapping file, path: {}",
-                    self.mapping_file_path
-                )
-            });
-        let mapping_json_copy = mapping_json.clone();
-        let indices = mapping_json_copy.get(curr_file_path);
-        self.mapping_data = mapping_json.clone();
+        serde_json::from_str(mapping_data.as_str()).unwrap_or_else(|_| {
+            panic!(
+                "Unable to deserialize the mapping file, path: {}",
+                mapping_path
+            )
+        })
+    }
+
+    fn read_indexing_file(&mut self) -> HashMap<String, Vec<String>> {
+        // Read the indexing file from the folder_path
+        self.indexing_file_name = "indexing_metadata.json".to_string();
+        let indexing_path = format!("{}/{}", self.folder_path, self.indexing_file_name);
+        let indexing_path_obj = Path::new(&indexing_path);
+        if !indexing_path_obj.exists() {
+            // Does not exist: create a new file:
+            eprintln!(
+                "Indexing metadata file does not exist at: {}",
+                indexing_path
+            );
+            // Create an empty file
+            if let Err(e) = File::create(&indexing_path) {
+                eprintln!("Error creating file: {}: {}", indexing_path, e);
+            }
+            return HashMap::new();
+        }
+        let indexing_data = match std::fs::read_to_string(&indexing_path) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("Error reading file: {}: {}", indexing_path, e);
+                return HashMap::new();
+            }
+        };
+        serde_json::from_str(indexing_data.as_str()).unwrap_or_else(|_| {
+            panic!(
+                "Unable to deserialize the indexing metadata file, path: {}",
+                indexing_path
+            )
+        })
+    }
+
+    fn find_index(&mut self, curr_file_path: &str) -> Option<Vec<u32>> {
+        // In each folder -> we'll have a mapping file which contains which filename corresponds to which index (to be used in the DB file)
+        // self.mapping_file_name = "mapping.json".to_string();
+        // self.mapping_file_path = format!("{}/{}", self.folder_path, self.mapping_file_name);
+        // let mapping_path_obj = Path::new(&self.mapping_file_path);
+        // if !mapping_path_obj.exists() {
+        //     self.mapping_data = HashMap::new();
+        //     self.db_file_path = format!("{}/{}.json", self.folder_path, self.index);
+        //     self.current_data = HashMap::new();
+        //     return None;
+        // }
+        // let mapping_data = match std::fs::read_to_string(&self.mapping_file_path) {
+        //     Ok(s) => s,
+        //     Err(e) => {
+        //         eprintln!("Error reading file: {}: {}", self.mapping_file_path, e);
+        //         return None;
+        //     }
+        // };
+        // let mut mapping_json: HashMap<String, Vec<u32>> =
+        //     serde_json::from_str(mapping_data.as_str()).unwrap_or_else(|_| {
+        //         panic!(
+        //             "Unable to deserialize the mapping file, path: {}",
+        //             self.mapping_file_path
+        //         )
+        //     });
+        // let mapping_json_copy = mapping_json.clone();
+        // let indices = mapping_json_copy.get(curr_file_path);
+        // self.mapping_data = mapping_json.clone();
+        self.mapping_data = self.read_mapping_file();
+        if self.mapping_data.is_empty() {
+            return None;
+        }
+        let indices = self.mapping_data.get(curr_file_path);
+        let mut mapping_json = self.mapping_data.clone();
         if indices.is_none() {
             // The mapping file is there but we just don't have the corresponding entry for it
             // TODO: Store last available index for the DB
             // self.index = self.index + 1;
-            self.index = self.get_available_index(&mapping_json);
-
+            self.index = self.get_available_index(&self.mapping_data);
             self.db_file_path = format!("{}/{}.json", self.folder_path, self.index);
             mapping_json.insert(curr_file_path.to_string(), vec![self.index]);
             self.mapping_data = mapping_json.clone();
@@ -208,6 +275,14 @@ impl DB {
                 max_index + 1
             })
     }
+
+    // pub fn last_indexed_commit(&self, mapping_json: &MappingDBType) -> Option<String> {
+    //     // Generally, indexing would have already happened once, after which - we should just
+    //     // attempt to index the new commits that have not been indexed yet. This function should
+    //     // just return the last indexed commit. The logic using it should handle updating the mapping
+    //     // post indexing any new commits from here.
+    //     mapping_json.get("last_commit_indexed_commit").and_then(|v| v.first().copied())
+    // }
 
     pub fn append_to_db(
         &mut self,
@@ -266,6 +341,14 @@ impl DB {
                 self.mapping_file_path
             );
         }
+
+        // Find the last commit hash for the current file
+        let last_commit = get_latest_commit(&self.curr_file_path);
+
+        self.prepare_indexing_metadata(
+            &self.curr_file_path.clone(),
+            &last_commit,
+        );
 
         self.current_data_v2.clear(); // clear everything after storing
         self.curr_items = 0; // reset
@@ -360,6 +443,25 @@ impl DB {
         (counter_for_paths, uncovered_indices)
     }
 
+    fn prepare_indexing_metadata(&mut self, file_path: &String, last_commit_hash: &Option<String>) {
+        // Prepare the indexing metadata file
+        let indexing_metadata_path = format!("{}/indexing_metadata.json", self.folder_path);
+        let mut indexing_metadata = self.read_indexing_file();
+        // write in the format: {"file_path": ["last_indexed_commit"]}
+        let file_path_key = file_path.clone();
+        let last_commit_hash_value = last_commit_hash
+            .clone().unwrap().to_string();
+        indexing_metadata
+            .entry(file_path_key)
+            .or_default()
+            .push(last_commit_hash_value);
+        // Write the metadata to the file
+        let output_string = serde_json::to_string_pretty(&indexing_metadata)
+            .expect("Failed to serialize indexing metadata");
+        std::fs::write(indexing_metadata_path, output_string)
+            .expect("Failed to write indexing metadata file");
+    }
+
     pub async fn query(&mut self, file_path: String, start_number: usize, end_number: usize) {
         let mut end_line_number = end_number;
         if end_number == 0 {
@@ -373,7 +475,7 @@ impl DB {
         if self.current_data_v2.is_empty() {
             // No data to query - means no indexing has happened yet.
             // Let's treat this as a binary and perform operation.
-            let output = algo_loc::perform_for_whole_file(file_path.clone(), false).await;
+            let output = algo_loc::perform_for_whole_file(file_path.clone(), false, None).await;
             let mut commit_hashes = vec![];
             for line_number in output.keys() {
                 let struct_detail = output.get(line_number).unwrap();
@@ -395,10 +497,38 @@ impl DB {
                     *counter_for_paths.entry(rel_path.clone()).or_insert(0) += 1;
                 }
             }
+            // Write the last commit hash to the index metadata.
+            let last_commit_hash = commit_hashes.last().unwrap().to_string();
+            self.prepare_indexing_metadata(&file_path, &Some(last_commit_hash));
             for (path, count) in counter_for_paths.iter() {
                 println!("{} - {} occurrences", path, count);
             }
         } else {
+            // Generally - check first if the last indexed commit is the same as the current one.
+            // If it is, then we can just return the data from the DB.
+            let recent_commit = get_latest_commit(&file_path).unwrap();
+            // Read the mapping file first from self.mapping_file_path
+            let indexing_metadata = self.read_indexing_file();
+            let last_indexing_data =
+                indexing_metadata
+                    .get(&file_path.clone())
+                    .unwrap_or_else(|| {
+                        panic!("No indexing metadata found for the file: {}", file_path);
+                    });
+            let last_indexed_commit = last_indexing_data.last().cloned();
+            if last_indexed_commit.is_some() {
+                if last_indexed_commit.clone().unwrap().eq(&recent_commit) {
+                    // No need to index again, just return the data from the DB.
+                    eprintln!("No new commits to index, returning existing data.");
+                } else {
+                    // Index the new commits and update the DB.
+                    // First get the new commits that have not been indexed yet.
+                    let commits_to_index = get_commits_after(last_indexed_commit.unwrap());
+                    // Index these commits first.
+                    perform_for_whole_file(file_path.clone(), false, Some(commits_to_index)).await;
+                }
+            }
+
             let (relevant_paths_with_counter, _uncovered_indices) =
                 self.exists_and_return(&start_number, &end_line_number);
 
@@ -426,7 +556,7 @@ impl DB {
         if self.current_data_v2.is_empty() {
             // No data to query - means no indexing has happened yet.
             // Let's treat this as a binary and perform the operation ourselves:
-            let output = algo_loc::perform_for_whole_file(file_path.clone(), false).await;
+            let output = algo_loc::perform_for_whole_file(file_path.clone(), false, None).await;
             let mut commit_hashes = vec![];
             for line_number in output.keys() {
                 // Check if struct_details' line number comes b/w start_number and end_number:
