@@ -331,6 +331,23 @@ fn get_commit_base_url() -> Option<String> {
                     // Optionally strip ".git" if present
                     let path = path.strip_suffix(".git").unwrap_or(path);
                     return Some(format!("https://github.com/{}/commit/", path));
+                } else if url.starts_with("git@github.") {
+                    // Handle enterprise GitHub SSH URLs (e.g., git@github.deshaw.com:org/repo.git)
+                    let parts: Vec<&str> = url.split(':').collect();
+                    if parts.len() == 2 {
+                        let domain = parts[0].strip_prefix("git@").unwrap();
+                        let path = parts[1].strip_suffix(".git").unwrap_or(parts[1]);
+                        return Some(format!("https://{}/{}/commit/", domain, path));
+                    }
+                } else if url.starts_with("https://github.") {
+                    // Handle enterprise GitHub HTTPS URLs (e.g., https://github.deshaw.com/org/repo.git)
+                    let parts: Vec<&str> = url.split("github.").collect();
+                    if parts.len() == 2 {
+                        let domain = format!("github.{}", parts[1]);
+                        let path = domain.split('/').skip(1).collect::<Vec<&str>>().join("/");
+                        let path = path.strip_suffix(".git").unwrap_or(&path);
+                        return Some(format!("https://{}/{}/commit/", domain.split('/').next().unwrap(), path));
+                    }
                 }
             }
         }
@@ -435,4 +452,60 @@ pub fn get_commits_after(last_indexed_commit: String) -> Vec<String> {
     }
 
     Vec::new()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::process::Command;
+
+    fn mock_git_remote_url(url: &str) {
+        // Mock the git remote get-url command to return our test URL
+        Command::new("git")
+            .args(["config", "--local", "remote.origin.url", url])
+            .output()
+            .expect("Failed to set mock git remote URL");
+    }
+
+    #[test]
+    fn test_get_commit_base_url_github_com_ssh() {
+        mock_git_remote_url("git@github.com:org/repo.git");
+        let base_url = get_commit_base_url().unwrap();
+        assert_eq!(base_url, "https://github.com/org/repo/commit/");
+    }
+
+    #[test]
+    fn test_get_commit_base_url_github_com_https() {
+        mock_git_remote_url("https://github.com/org/repo.git");
+        let base_url = get_commit_base_url().unwrap();
+        assert_eq!(base_url, "https://github.com/org/repo/commit/");
+    }
+
+    #[test]
+    fn test_get_commit_base_url_enterprise_ssh() {
+        mock_git_remote_url("git@github.deshaw.com:org/repo.git");
+        let base_url = get_commit_base_url().unwrap();
+        assert_eq!(base_url, "https://github.deshaw.com/org/repo/commit/");
+    }
+
+    #[test]
+    fn test_get_commit_base_url_enterprise_https() {
+        mock_git_remote_url("https://github.deshaw.com/org/repo.git");
+        let base_url = get_commit_base_url().unwrap();
+        assert_eq!(base_url, "https://github.deshaw.com/org/repo/commit/");
+    }
+
+    #[test]
+    fn test_get_commit_base_url_without_git_suffix() {
+        mock_git_remote_url("git@github.deshaw.com:org/repo");
+        let base_url = get_commit_base_url().unwrap();
+        assert_eq!(base_url, "https://github.deshaw.com/org/repo/commit/");
+    }
+
+    #[test]
+    fn test_get_commit_base_url_invalid_url() {
+        mock_git_remote_url("invalid-url");
+        let base_url = get_commit_base_url();
+        assert!(base_url.is_none());
+    }
 }
