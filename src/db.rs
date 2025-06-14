@@ -322,7 +322,6 @@ impl DB {
             for index in old_index.iter() {
                 let old_file_path = format!("{}/{}.json", self.folder_path, index);
                 if std::path::Path::new(&old_file_path).exists() {
-                    println!("Mapping data for file, data is: {:?}", old_index.clone());
                     if let Err(e) = std::fs::remove_file(&old_file_path) {
                         eprintln!("❌ Failed to remove old DB file {}: {}", old_file_path, e);
                         // Still remove this from the mapping file:
@@ -342,11 +341,6 @@ impl DB {
             .entry(self.curr_file_path.clone())
             .or_default()
             .push(self.index);
-        println!(
-            "Data post removal for file path: {}, {:?}",
-            self.curr_file_path,
-            self.mapping_data.get(&self.curr_file_path).unwrap().clone()
-        );
         // Re-write the mapping file since data has changed:
         self.index += 1; // increment index for the next file.
         let output_string = serde_json::to_string(&self.current_data_v2);
@@ -360,7 +354,6 @@ impl DB {
         if let Ok(mut file) = File::create(&self.mapping_file_path) {
             let mapping_string = serde_json::to_string_pretty(&self.mapping_data)
                 .expect("Failed to serialize mapping");
-            println!("Mapping string: {} -- ", mapping_string);
             if let Err(e) = write!(file, "{}", mapping_string) {
                 eprintln!("❌ Failed writing mapping: {}", e);
             }
