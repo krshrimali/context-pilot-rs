@@ -2,7 +2,6 @@ use contextpilot::contextgpt_structs::AuthorDetailsV2;
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::Write;
-use std::path::{Path, PathBuf};
 use tempfile::tempdir;
 
 // Mock function for testing purposes

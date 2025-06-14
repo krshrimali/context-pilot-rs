@@ -25,3 +25,6 @@ futures = "*"
 similar = "2.7.0"
 strsim = "0.11.1"
 ignore = "*"
+
+[dev-dependencies]
+tempfile = "3.8.0"
