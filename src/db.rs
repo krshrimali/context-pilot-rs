@@ -1,6 +1,6 @@
 use crate::algo_loc;
-use crate::git_command_algo::{get_commit_descriptions, get_commits_after, get_files_changed};
 use crate::git_command_algo::get_latest_commit;
+use crate::git_command_algo::{get_commit_descriptions, get_commits_after, get_files_changed};
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::PathBuf;
@@ -345,10 +345,7 @@ impl DB {
         // Find the last commit hash for the current file
         let last_commit = get_latest_commit(&self.curr_file_path);
 
-        self.prepare_indexing_metadata(
-            &self.curr_file_path.clone(),
-            &last_commit,
-        );
+        self.prepare_indexing_metadata(&self.curr_file_path.clone(), &last_commit);
 
         self.current_data_v2.clear(); // clear everything after storing
         self.curr_items = 0; // reset
@@ -443,23 +440,41 @@ impl DB {
         (counter_for_paths, uncovered_indices)
     }
 
-    fn prepare_indexing_metadata(&mut self, file_path: &String, last_commit_hash: &Option<String>) {
-        // Prepare the indexing metadata file
-        let indexing_metadata_path = format!("{}/indexing_metadata.json", self.folder_path);
+    fn update_last_indexed_commit(
+        &mut self,
+        file_path: &String,
+        commit_hash: &str,
+    ) -> Result<(), String> {
+        // Read the existing indexing metadata
         let mut indexing_metadata = self.read_indexing_file();
-        // write in the format: {"file_path": ["last_indexed_commit"]}
-        let file_path_key = file_path.clone();
-        let last_commit_hash_value = last_commit_hash
-            .clone().unwrap().to_string();
+
+        // Update or create the entry for this file path
         indexing_metadata
-            .entry(file_path_key)
-            .or_default()
-            .push(last_commit_hash_value);
-        // Write the metadata to the file
-        let output_string = serde_json::to_string_pretty(&indexing_metadata)
-            .expect("Failed to serialize indexing metadata");
-        std::fs::write(indexing_metadata_path, output_string)
-            .expect("Failed to write indexing metadata file");
+            .entry(file_path.clone())
+            .or_insert_with(Vec::new)
+            .push(commit_hash.to_string());
+
+        // Write back to the indexing metadata file
+        let indexing_path = format!("{}/{}", self.folder_path, self.indexing_file_name);
+
+        // Serialize the updated metadata
+        let indexing_string = serde_json::to_string_pretty(&indexing_metadata)
+            .map_err(|e| format!("Failed to serialize indexing metadata: {}", e))?;
+
+        // Write to file
+        std::fs::write(&indexing_path, indexing_string)
+            .map_err(|e| format!("Failed to write indexing metadata: {}", e))?;
+
+        Ok(())
+    }
+
+    fn prepare_indexing_metadata(&mut self, file_path: &String, last_commit_hash: &Option<String>) {
+        // If we have a valid commit hash, update the indexing metadata
+        if let Some(commit) = last_commit_hash {
+            if let Err(e) = self.update_last_indexed_commit(file_path, commit) {
+                eprintln!("Failed to update indexing metadata: {}", e);
+            }
+        }
     }
 
     pub async fn query(&mut self, file_path: String, start_number: usize, end_number: usize) {
@@ -475,7 +490,8 @@ impl DB {
         if self.current_data_v2.is_empty() {
             // No data to query - means no indexing has happened yet.
             // Let's treat this as a binary and perform operation.
-            let output = algo_loc::perform_for_whole_file(file_path.clone(), false, None).await;
+            let output =
+                algo_loc::perform_for_whole_file(file_path.clone(), false, None, None).await;
             let mut commit_hashes = vec![];
             for line_number in output.keys() {
                 let struct_detail = output.get(line_number).unwrap();
@@ -497,6 +513,7 @@ impl DB {
                     *counter_for_paths.entry(rel_path.clone()).or_insert(0) += 1;
                 }
             }
+            println!("Commit hashes found: {:?}", commit_hashes);
             // Write the last commit hash to the index metadata.
             let last_commit_hash = commit_hashes.last().unwrap().to_string();
             self.prepare_indexing_metadata(&file_path, &Some(last_commit_hash));
@@ -516,6 +533,8 @@ impl DB {
                         panic!("No indexing metadata found for the file: {}", file_path);
                     });
             let last_indexed_commit = last_indexing_data.last().cloned();
+            println!("Last indexed commit: {:?}", last_indexed_commit);
+            println!("Recent commit: {:?}", recent_commit);
             if last_indexed_commit.is_some() {
                 if last_indexed_commit.clone().unwrap().eq(&recent_commit) {
                     // No need to index again, just return the data from the DB.
@@ -525,7 +544,8 @@ impl DB {
                     // First get the new commits that have not been indexed yet.
                     let commits_to_index = get_commits_after(last_indexed_commit.unwrap());
                     // Index these commits first.
-                    perform_for_whole_file(file_path.clone(), false, Some(commits_to_index)).await;
+                    perform_for_whole_file(file_path.clone(), false, Some(commits_to_index), None)
+                        .await;
                 }
             }
 
@@ -556,7 +576,8 @@ impl DB {
         if self.current_data_v2.is_empty() {
             // No data to query - means no indexing has happened yet.
             // Let's treat this as a binary and perform the operation ourselves:
-            let output = algo_loc::perform_for_whole_file(file_path.clone(), false, None).await;
+            let output =
+                algo_loc::perform_for_whole_file(file_path.clone(), false, None, None).await;
             let mut commit_hashes = vec![];
             for line_number in output.keys() {
                 // Check if struct_details' line number comes b/w start_number and end_number:
@@ -567,9 +588,38 @@ impl DB {
                     commit_hashes.extend(struct_detail.commit_hashes.clone());
                 }
             }
+            // Get commit descriptions for these hashes
             let out = get_commit_descriptions(commit_hashes);
             println!("{:?}", out);
         } else {
+            // Generally - check first if the last indexed commit is the same as the current one.
+            // If it is, then we can just return the data from the DB.
+            let recent_commit = get_latest_commit(&file_path).unwrap();
+            // Read the mapping file first from self.mapping_file_path
+            let indexing_metadata = self.read_indexing_file();
+            let last_indexing_data =
+                indexing_metadata
+                    .get(&file_path.clone())
+                    .unwrap_or_else(|| {
+                        panic!("No indexing metadata found for the file: {}", file_path);
+                    });
+            let last_indexed_commit = last_indexing_data.last().cloned();
+            println!("Last indexed commit: {:?}", last_indexed_commit);
+            println!("Recent commit: {:?}", recent_commit);
+            if last_indexed_commit.is_some() {
+                if last_indexed_commit.clone().unwrap().eq(&recent_commit) {
+                    // No need to index again, just return the data from the DB.
+                    eprintln!("No new commits to index, returning existing data.");
+                } else {
+                    // Index the new commits and update the DB.
+                    // First get the new commits that have not been indexed yet.
+                    let commits_to_index = get_commits_after(last_indexed_commit.unwrap());
+                    // Index these commits first.
+                    perform_for_whole_file(file_path.clone(), false, Some(commits_to_index), None)
+                        .await;
+                }
+            }
+
             let (commit_hashes, _uncovered_indices) =
                 self.raw_exists_and_return(&start_number, &end_line_number);
 
