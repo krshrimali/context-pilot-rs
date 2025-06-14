@@ -360,7 +360,7 @@ impl DB {
         if let Ok(mut file) = File::create(&self.mapping_file_path) {
             let mapping_string = serde_json::to_string_pretty(&self.mapping_data)
                 .expect("Failed to serialize mapping");
-            println!("Mapping string: {}", mapping_string);
+            println!("Mapping string: {} -- ", mapping_string);
             if let Err(e) = write!(file, "{}", mapping_string) {
                 eprintln!("❌ Failed writing mapping: {}", e);
             }
