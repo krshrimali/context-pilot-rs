@@ -533,12 +533,10 @@ impl DB {
                         panic!("No indexing metadata found for the file: {}", file_path);
                     });
             let last_indexed_commit = last_indexing_data.last().cloned();
-            println!("Last indexed commit: {:?}", last_indexed_commit);
-            println!("Recent commit: {:?}", recent_commit);
             if last_indexed_commit.is_some() {
                 if last_indexed_commit.clone().unwrap().eq(&recent_commit) {
                     // No need to index again, just return the data from the DB.
-                    eprintln!("No new commits to index, returning existing data.");
+                    // eprintln!("No new commits to index, returning existing data.");
                 } else {
                     // Index the new commits and update the DB.
                     // First get the new commits that have not been indexed yet.
@@ -604,12 +602,10 @@ impl DB {
                         panic!("No indexing metadata found for the file: {}", file_path);
                     });
             let last_indexed_commit = last_indexing_data.last().cloned();
-            println!("Last indexed commit: {:?}", last_indexed_commit);
-            println!("Recent commit: {:?}", recent_commit);
             if last_indexed_commit.is_some() {
                 if last_indexed_commit.clone().unwrap().eq(&recent_commit) {
                     // No need to index again, just return the data from the DB.
-                    eprintln!("No new commits to index, returning existing data.");
+                    // eprintln!("No new commits to index, returning existing data.");
                 } else {
                     // Index the new commits and update the DB.
                     // First get the new commits that have not been indexed yet.

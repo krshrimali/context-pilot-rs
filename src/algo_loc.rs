@@ -32,13 +32,6 @@ pub async fn perform_for_whole_file(
                                             if let Some(last_indexing_data) =
                                                 indexing_metadata.get(&origin_file_path)
                                             {
-                                                println!("Found previous indexing data:");
-                                                println!(
-                                                    "- Last indexed commit: {:?}",
-                                                    last_indexing_data
-                                                );
-                                                println!("- Recent commit: {:?}", recent_commit);
-
                                                 if let Some(last_indexed_commit) =
                                                     last_indexing_data.last()
                                                 {
@@ -59,10 +52,7 @@ pub async fn perform_for_whole_file(
                     }
                 }
             }
-            None => eprintln!(
-                "Warning: Could not get latest commit for file: {}",
-                origin_file_path
-            ),
+            None => {}
         }
     }
 
