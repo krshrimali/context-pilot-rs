@@ -343,7 +343,7 @@ impl DB {
             .or_default()
             .push(self.index);
         println!(
-            "Data post removal for file: {}, {:?}",
+            "Data post removal for file path: {}, {:?}",
             self.curr_file_path,
             self.mapping_data.get(&self.curr_file_path).unwrap().clone()
         );
