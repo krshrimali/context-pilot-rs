@@ -322,6 +322,7 @@ impl DB {
             for index in old_index.iter() {
                 let old_file_path = format!("{}/{}.json", self.folder_path, index);
                 if std::path::Path::new(&old_file_path).exists() {
+                    println!("Mapping data for file, data is: {:?}", old_index.clone());
                     if let Err(e) = std::fs::remove_file(&old_file_path) {
                         eprintln!("❌ Failed to remove old DB file {}: {}", old_file_path, e);
                         // Still remove this from the mapping file:
@@ -335,6 +336,11 @@ impl DB {
                 }
             }
         }
+
+        println!(
+            "Data post removal for file: {:?}",
+            self.mapping_data.get(&self.curr_file_path).unwrap().clone()
+        );
 
         let db_file_path = format!("{}/{}.json", self.folder_path, self.index);
         self.mapping_data
