@@ -36,6 +36,12 @@ pub async fn perform_for_whole_file(
                                                     last_indexing_data.last()
                                                 {
                                                     if last_indexed_commit == &recent_commit {
+                                                        if should_print {
+                                                            println!(
+                                                                "File {} is already indexed with the latest commit {}",
+                                                                origin_file_path, recent_commit
+                                                            );
+                                                        }
                                                         return HashMap::new();
                                                     }
                                                 }
@@ -58,6 +64,9 @@ pub async fn perform_for_whole_file(
 
     // Proceed with indexing if needed
     let output: HashMap<u32, AuthorDetailsV2>;
+    if should_print {
+        println!("Indexing file: {}", origin_file_path);
+    }
     if commits_to_index.is_none() {
         output = extract_details_parallel(origin_file_path.clone()).await;
     } else {

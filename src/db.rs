@@ -314,6 +314,22 @@ impl DB {
             eprintln!("No data to store.");
             return;
         }
+        // In case mapping file already had an entry for the self.curr_file_path,
+        // we should delete the JSON files and add the new ones.
+        if self.mapping_data.contains_key(&self.curr_file_path) {
+            // Remove the old file if it exists
+            let old_index = self.mapping_data.get(&self.curr_file_path).unwrap();
+            for index in old_index.iter() {
+                let old_file_path = format!("{}/{}.json", self.folder_path, index);
+                if std::path::Path::new(&old_file_path).exists() {
+                    if let Err(e) = std::fs::remove_file(&old_file_path) {
+                        eprintln!("❌ Failed to remove old DB file {}: {}", old_file_path, e);
+                    } else {
+                        println!("✅ Successfully removed old shard: {}", old_file_path);
+                    }
+                }
+            }
+        }
 
         let db_file_path = format!("{}/{}.json", self.folder_path, self.index);
         self.mapping_data
