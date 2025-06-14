@@ -177,7 +177,6 @@ impl Server {
                     .strip_prefix(to_strip.as_str())
                     .unwrap_or(entry_path_str)
                     .to_string();
-                let w_path = workspace_path.clone().to_str().unwrap();
                 // Check if entry_path matches gitignore pattern - ignore if yes.
                 if let Some(gitignore_obj) = gitignore_builder_obj.clone() {
                     // Strip workspace path + '/' from the entry_path if it's not relative:
