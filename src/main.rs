@@ -12,6 +12,7 @@ use async_recursion::async_recursion;
 use contextgpt_structs::{AuthorDetailsV2, Cli, RequestTypeOptions};
 use git_command_algo::print_all_valid_files;
 use std::collections::HashMap;
+use std::fs::metadata;
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
@@ -21,8 +22,8 @@ use tokio::sync::Mutex;
 
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use quicli::prelude::{
+    log::{log, Level},
     CliResult,
-    log::{Level, log},
 };
 use tokio::task;
 
@@ -143,12 +144,15 @@ impl Server {
         false
     }
 
-    async fn _index_file(file_path_inp: PathBuf) -> HashMap<u32, AuthorDetailsV2> {
+    async fn _index_file(
+        file_path_inp: PathBuf,
+        workspace_path: String,
+    ) -> HashMap<u32, AuthorDetailsV2> {
         // Don't make it write to the DB, write it atomically later.
         // For now, just store the output somewhere in the DB.
         let file_path = std::fs::canonicalize(file_path_inp).expect("Failed");
         let file_path_str = file_path.to_str().unwrap();
-        perform_for_whole_file(file_path_str.to_string(), true).await
+        perform_for_whole_file(file_path_str.to_string(), true, None, Some(workspace_path)).await
     }
 
     #[async_recursion]
@@ -206,8 +210,10 @@ impl Server {
                     });
                 } else if Server::_is_valid_file(&entry_path_path) {
                     log!(Level::Info, "File is valid: {}", entry_path_path.display());
+                    let workspace_path = workspace_path.clone();
+                    let w_path = self.state_db_handler.metadata.workspace_path.clone();
                     files_set.spawn({
-                        async move { Server::_index_file(entry_path_path.clone()).await }
+                        async move { Server::_index_file(entry_path_path.clone(), w_path).await }
                     });
                 }
             }
@@ -261,7 +267,8 @@ impl Server {
                 "File is valid but not in a sub-directory: {}",
                 path.display()
             );
-            let output = Server::_index_file(path.to_path_buf()).await;
+            let w_path = self.state_db_handler.metadata.workspace_path.clone();
+            let output = Server::_index_file(path.to_path_buf(), w_path).await;
             return output;
         } else {
             log!(Level::Warn, "File is not valid: {}", path.display());
@@ -292,18 +299,18 @@ impl Server {
             let mut server = Server::new(State::Dead, DBHandler::new(metadata.clone()));
             server.init_server(curr_db);
 
-        //     let out = Server::_index_file(file_path_buf.clone()).await;
-        //     let db = server.curr_db.clone().unwrap();
-        //     let mut db_locked = db.lock().await;
-        //     let start_line_number = 0;
-        //     println!(
-        //         "Indexing file: {} with {} lines",
-        //         file_path_buf.display(),
-        //         out.len()
-        //     );
-        //     db_locked.append_to_db(&out[&0].origin_file_path, start_line_number, out.clone());
-        //     db_locked.store();
-        // }
+            //     let out = Server::_index_file(file_path_buf.clone()).await;
+            //     let db = server.curr_db.clone().unwrap();
+            //     let mut db_locked = db.lock().await;
+            //     let start_line_number = 0;
+            //     println!(
+            //         "Indexing file: {} with {} lines",
+            //         file_path_buf.display(),
+            //         out.len()
+            //     );
+            //     db_locked.append_to_db(&out[&0].origin_file_path, start_line_number, out.clone());
+            //     db_locked.store();
+            // }
         }
     }
 
@@ -323,9 +330,9 @@ impl Server {
             folder_path: workspace_path.clone(),
             ..Default::default()
         };
-        // In case we are attempging to index subfolders - do NOT cleanup
+        // In case we are attempting to index subfolders - do NOT cleanup
         // the DB.
-        let mut cleanup: bool = true;
+        let mut cleanup: bool = false;
         if !metadata.folders_to_index.is_empty() {
             cleanup = false;
         }
@@ -449,6 +456,7 @@ impl Server {
                     end_number.unwrap(),
                 )
                 .await;
+            return;
         }
 
         let mut tasks = vec![];
