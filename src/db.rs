@@ -324,6 +324,8 @@ impl DB {
                 if std::path::Path::new(&old_file_path).exists() {
                     if let Err(e) = std::fs::remove_file(&old_file_path) {
                         eprintln!("❌ Failed to remove old DB file {}: {}", old_file_path, e);
+                        // Still remove this from the mapping file:
+                        self.mapping_data.remove(&self.curr_file_path);
                     } else {
                         println!("✅ Successfully removed old shard: {}", old_file_path);
                         // Also remove this from the mapping file and update:
