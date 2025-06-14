@@ -48,7 +48,9 @@ pub async fn perform_for_whole_file(
                                                 }
                                             }
                                         }
-                                        Err(e) => eprintln!("Failed to parse metadata JSON: {}", e),
+                                        Err(e) => {
+                                            eprintln!("Failed to parse metadata JSON check: {}", e)
+                                        }
                                     }
                                 }
                                 Err(e) => eprintln!("Failed to read metadata file: {}", e),
