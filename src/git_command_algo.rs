@@ -86,6 +86,7 @@ pub fn print_all_valid_files(workspace_dir: String, gitignore_file_name: Option<
                     // Check if the whole dir is ignored:
                     if gitignore.matched(path, true).is_ignore() {
                         // Skip the directory.
+                        // CHECK
                         continue;
                     }
                 }

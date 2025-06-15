@@ -462,6 +462,8 @@ impl Server {
             }
 
             // Initialize the server state
+            // CHECK
+            // ANOTHER CHECK
             self.state_db_handler.start(&metadata);
 
             // Start indexing the file
