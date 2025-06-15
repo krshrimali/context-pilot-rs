@@ -40,6 +40,7 @@ pub struct DB {
 
 #[allow(dead_code)]
 impl DB {
+    // Sample testing
     pub fn read(&mut self) -> DBTypeV2 {
         // let db_file_path = format!("{}/{}", self.folder_path, self.index);
         if Path::new(self.db_file_path.as_str()).exists() {
@@ -369,10 +370,7 @@ impl DB {
             // Check if the exact index exists in our data
             if self.current_data_v2.contains_key(&i) {
                 max_index = Some(i);
-                println!("Exact index found: {}", i);
             } else {
-                println!("Exact index not found: {}", i);
-                println!("Current data: {:?}", self.current_data_v2.keys().collect::<Vec<_>>());
                 // Find index that is "closest" max to the given index.
                 // This is the index that we will use to get the commit_hashes.
                 let mut keys: Vec<_> = self.current_data_v2.keys().collect();
