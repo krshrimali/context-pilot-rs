@@ -314,27 +314,6 @@ impl DB {
             eprintln!("No data to store.");
             return;
         }
-        // In case mapping file already had an entry for the self.curr_file_path,
-        // we should delete the JSON files and add the new ones.
-        if self.mapping_data.contains_key(&self.curr_file_path) {
-            // Remove the old file if it exists
-            let old_index = self.mapping_data.get(&self.curr_file_path).unwrap().clone();
-            for index in old_index.iter() {
-                let old_file_path = format!("{}/{}.json", self.folder_path, index);
-                if std::path::Path::new(&old_file_path).exists() {
-                    if let Err(e) = std::fs::remove_file(&old_file_path) {
-                        eprintln!("❌ Failed to remove old DB file {}: {}", old_file_path, e);
-                        // Still remove this from the mapping file:
-                        self.mapping_data.remove(&self.curr_file_path);
-                    } else {
-                        println!("✅ Successfully removed old shard: {}", old_file_path);
-                        // Also remove this from the mapping file and update:
-                        // self.mapping_data is borrowed as immutable:
-                        self.mapping_data.remove(&self.curr_file_path);
-                    }
-                }
-            }
-        }
 
         let db_file_path = format!("{}/{}.json", self.folder_path, self.index);
         self.mapping_data
@@ -387,14 +366,22 @@ impl DB {
         // Now get all the commit_hashes in the max_index entry.
         for i in *start_line_number..=*end_line_number {
             let mut max_index: Option<usize> = None;
-            // Find index that is "closest" max to the given index.
-            // This is the index that we will use to get the commit_hashes.
-            let mut keys: Vec<_> = self.current_data_v2.keys().collect();
-            keys.sort();
-            for key in keys.iter() {
-                if **key >= i {
-                    max_index = Some(**key);
-                    break;
+            // Check if the exact index exists in our data
+            if self.current_data_v2.contains_key(&i) {
+                max_index = Some(i);
+                println!("Exact index found: {}", i);
+            } else {
+                println!("Exact index not found: {}", i);
+                println!("Current data: {:?}", self.current_data_v2.keys().collect::<Vec<_>>());
+                // Find index that is "closest" max to the given index.
+                // This is the index that we will use to get the commit_hashes.
+                let mut keys: Vec<_> = self.current_data_v2.keys().collect();
+                keys.sort();
+                for key in keys.iter() {
+                    if **key > i {
+                        max_index = Some(**key);
+                        break;
+                    }
                 }
             }
             match max_index {
@@ -427,15 +414,9 @@ impl DB {
         let mut counter_for_paths: HashMap<String, usize> = HashMap::new();
         for i in *start_line_number..=*end_line_number {
             let mut max_index: Option<usize> = None;
-            // Find index that is "closest" max to the given index.
-            // This is the index that we will use to get the commit_hashes.
-            let mut keys: Vec<_> = self.current_data_v2.keys().collect();
-            keys.sort();
-            for key in keys.iter() {
-                if **key > i {
-                    max_index = Some(**key);
-                    break;
-                }
+            // Check if the exact index exists in our data
+            if self.current_data_v2.contains_key(&i) {
+                max_index = Some(i);
             }
             match max_index {
                 Some(index) => {
