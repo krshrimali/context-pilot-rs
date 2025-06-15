@@ -392,7 +392,7 @@ impl DB {
             let mut keys: Vec<_> = self.current_data_v2.keys().collect();
             keys.sort();
             for key in keys.iter() {
-                if **key > i {
+                if **key >= i {
                     max_index = Some(**key);
                     break;
                 }
