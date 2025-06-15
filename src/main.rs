@@ -283,7 +283,7 @@ impl Server {
             return;
         }
         let file_path_str = file_path.clone().unwrap();
-        let file_path_buf = PathBuf::from(file_path_str);
+        let file_path_buf = PathBuf::from(file_path_str.clone());
         let file_path_path = file_path_buf.as_path();
         if Server::_is_valid_file(file_path_path) {
             let workspace_path = &metadata.workspace_path;
@@ -292,25 +292,63 @@ impl Server {
                 ..Default::default()
             };
             let curr_db: Arc<Mutex<DB>> = Arc::new(db.into());
+
+            // Initialize the DB
             curr_db
                 .lock()
                 .await
-                .init_db(workspace_path.as_str(), None, false);
-            let mut server = Server::new(State::Dead, DBHandler::new(metadata.clone()));
-            server.init_server(curr_db);
+                .init_db(workspace_path.as_str(), Some(&file_path_str), false);
 
-            //     let out = Server::_index_file(file_path_buf.clone()).await;
-            //     let db = server.curr_db.clone().unwrap();
-            //     let mut db_locked = db.lock().await;
-            //     let start_line_number = 0;
-            //     println!(
-            //         "Indexing file: {} with {} lines",
-            //         file_path_buf.display(),
-            //         out.len()
-            //     );
-            //     db_locked.append_to_db(&out[&0].origin_file_path, start_line_number, out.clone());
-            //     db_locked.store();
-            // }
+            let mut server = Server::new(State::Dead, DBHandler::new(metadata.clone()));
+            server.init_server(curr_db.clone());
+
+            // Check if the file already exists in the DB
+            let mut db_locked = curr_db.lock().await;
+            let indices = db_locked.find_index(&file_path_str);
+            drop(db_locked);
+
+            // If the file exists, delete all shards
+            if let Some(indices_vec) = indices {
+                log!(Level::Info, "File already exists in DB. Deleting existing shards.");
+                for index in indices_vec {
+                    let shard_path = format!("{}/{}.json", workspace_path, index);
+                    if Path::new(&shard_path).exists() {
+                        if let Err(e) = std::fs::remove_file(&shard_path) {
+                            log!(Level::Error, "Failed to delete shard {}: {}", shard_path, e);
+                        } else {
+                            log!(Level::Info, "Deleted shard: {}", shard_path);
+                        }
+                    }
+                }
+            }
+
+            // Index the file
+            let w_path = workspace_path.clone();
+            let out = Server::_index_file(file_path_buf.clone(), w_path).await;
+
+            if !out.is_empty() {
+                let db = server.curr_db.clone().unwrap();
+                let mut db_locked = db.lock().await;
+                let start_line_number = 0;
+
+                println!(
+                    "Indexing file: {} with {} lines",
+                    file_path_buf.display(),
+                    out.len()
+                );
+
+                // Get the origin file path from the first entry
+                let first_entry = out.values().next().unwrap();
+                let origin_file_path = &first_entry.origin_file_path;
+
+                // Store the output to the DB
+                db_locked.append_to_db(origin_file_path, start_line_number, out.clone());
+                db_locked.store();
+
+                log!(Level::Info, "Successfully indexed file: {}", file_path_str);
+            } else {
+                log!(Level::Warn, "No data to index for file: {}", file_path_str);
+            }
         }
     }
 
@@ -395,6 +433,21 @@ impl Server {
         self.state_db_handler.metadata.folders_to_index =
             indexing_optional_folders.unwrap_or(vec![]);
         let mut metadata = self.state_db_handler.get_current_metadata();
+
+        // If this is a call to index a single file
+        if request_type.is_some() && request_type.clone().unwrap() == RequestTypeOptions::IndexFile {
+            if file_path.is_none() {
+                log!(Level::Error, "No file path provided to index.");
+                return;
+            }
+
+            // Initialize the server state
+            self.state_db_handler.start(&metadata);
+
+            // Start indexing the file
+            self.start_file(&mut metadata, file_path).await;
+            return;
+        }
 
         // If this is a call to query and not to index ->
         if request_type.is_some() && request_type.clone().unwrap() == RequestTypeOptions::Query {
@@ -576,18 +629,16 @@ async fn main() -> CliResult {
                 .await;
         }
         RequestTypeOptions::IndexFile => {
-            todo!("Indexing a single file is not supported yet.");
-            // TODO: @krshrimali - fix this and re-enable.
-            // server
-            //     .handle_server(
-            //         args.folder_path.as_str(),
-            //         args.file,
-            //         None,
-            //         None,
-            //         Some(RequestTypeOptions::IndexFile),
-            //         None,
-            //     )
-            //     .await;
+            server
+                .handle_server(
+                    args.folder_path.as_str(),
+                    args.file,
+                    None,
+                    None,
+                    Some(RequestTypeOptions::IndexFile),
+                    None,
+                )
+                .await;
         }
         RequestTypeOptions::Query => {
             server

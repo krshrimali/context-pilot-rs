@@ -206,7 +206,7 @@ impl DB {
         })
     }
 
-    fn find_index(&mut self, curr_file_path: &str) -> Option<Vec<u32>> {
+    pub fn find_index(&mut self, curr_file_path: &str) -> Option<Vec<u32>> {
         // In each folder -> we'll have a mapping file which contains which filename corresponds to which index (to be used in the DB file)
         // self.mapping_file_name = "mapping.json".to_string();
         // self.mapping_file_path = format!("{}/{}", self.folder_path, self.mapping_file_name);
