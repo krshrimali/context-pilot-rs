@@ -316,10 +316,12 @@ impl DB {
         }
 
         let db_file_path = format!("{}/{}.json", self.folder_path, self.index);
-        self.mapping_data
-            .entry(self.curr_file_path.clone())
-            .or_default()
-            .push(self.index);
+
+        // Check if the file path already exists in the mapping data and if the index is already in the vector
+        let indices = self.mapping_data.entry(self.curr_file_path.clone()).or_default();
+        if !indices.contains(&self.index) {
+            indices.push(self.index);
+        }
         // Re-write the mapping file since data has changed:
         self.index += 1; // increment index for the next file.
         let output_string = serde_json::to_string(&self.current_data_v2);
