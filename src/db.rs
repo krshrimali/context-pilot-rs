@@ -40,7 +40,6 @@ pub struct DB {
 
 #[allow(dead_code)]
 impl DB {
-    // Sample testing
     pub fn read(&mut self) -> DBTypeV2 {
         // let db_file_path = format!("{}/{}", self.folder_path, self.index);
         if Path::new(self.db_file_path.as_str()).exists() {
