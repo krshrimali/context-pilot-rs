@@ -1,5 +1,7 @@
 use crate::contextgpt_structs::AuthorDetails;
 
+// AuthorDetails is a struct that contains the details of the author of the commit.
+// It is used to store the details of the author of the commit.
 impl AuthorDetails {
     pub fn serialize_from_str(
         input_str: String,
