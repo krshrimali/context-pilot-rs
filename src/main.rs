@@ -307,7 +307,7 @@ impl Server {
             let indices = db_locked.find_index(&file_path_str);
             drop(db_locked);
 
-            // If the file exists, delete all shards
+            // If the file exists, delete all shards and update mapping data
             if let Some(indices_vec) = indices {
                 log!(Level::Info, "File already exists in DB. Deleting existing shards.");
                 for index in indices_vec {
@@ -320,6 +320,26 @@ impl Server {
                         }
                     }
                 }
+
+                // Update mapping data to remove references to deleted shards
+                let mut db_locked = curr_db.lock().await;
+                // Remove the file path from the mapping data
+                db_locked.mapping_data.remove(&file_path_str);
+
+                // Write the updated mapping data to disk
+                let mapping_file_path = format!("{}/mapping.json", workspace_path);
+                if let Ok(mut file) = std::fs::File::create(&mapping_file_path) {
+                    let mapping_string = serde_json::to_string_pretty(&db_locked.mapping_data)
+                        .expect("Failed to serialize mapping");
+                    if let Err(e) = std::io::Write::write_fmt(&mut file, format_args!("{}", mapping_string)) {
+                        log!(Level::Error, "Failed writing mapping: {}", e);
+                    } else {
+                        log!(Level::Info, "Updated mapping file to remove deleted shards");
+                    }
+                } else {
+                    log!(Level::Error, "Failed to create mapping file: {}", mapping_file_path);
+                }
+                drop(db_locked);
             }
 
             // Index the file
