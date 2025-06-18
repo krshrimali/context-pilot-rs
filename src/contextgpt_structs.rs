@@ -35,7 +35,9 @@ get_struct_names! {
         Query,
         Descriptions,  // alias: desc
         ListSubdirs,  // To be used by plugins!
-        IndexFile
+        IndexFile,
+        PRReviewComments,  // Fetch PR review comments for a commit
+        DescWithPRComments  // Get commit descriptions and PR review comments
     }
 }
 
@@ -51,6 +53,10 @@ impl FromStr for RequestTypeOptions {
             "desc" => Ok(RequestTypeOptions::Descriptions),
             "listsubdirs" => Ok(RequestTypeOptions::ListSubdirs),
             "indexfile" => Ok(RequestTypeOptions::IndexFile),
+            "prreviewcomments" => Ok(RequestTypeOptions::PRReviewComments),
+            "pr-review-comments" => Ok(RequestTypeOptions::PRReviewComments),
+            "descwithprcomments" => Ok(RequestTypeOptions::DescWithPRComments),
+            "desc-with-pr-comments" => Ok(RequestTypeOptions::DescWithPRComments),
             _ => Err(format!(
                 "Could not parse the request type: {}, available field names: {:?}",
                 request_type,
