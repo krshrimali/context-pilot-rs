@@ -627,6 +627,110 @@ async fn main() -> CliResult {
                 )
                 .await;
         }
+        RequestTypeOptions::PRReviewComments => {
+            // Fetch PR review comments for a commit
+            if args.file.is_none() {
+                eprintln!("Error: Commit hash is required for fetching PR review comments");
+                return Ok(());
+            }
+
+            let commit_hash = args.file.unwrap();
+            match git_command_algo::fetch_pr_review_comments(&commit_hash).await {
+                Ok(comments) => {
+                    if comments.is_empty() {
+                        println!("No PR review comments found for commit {}", commit_hash);
+                    } else {
+                        println!("PR review comments for commit {}:", commit_hash);
+                        for comment in comments {
+                            println!("{}", comment);
+                            println!("---");
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Error fetching PR review comments: {}", e);
+                }
+            }
+        }
+        RequestTypeOptions::DescWithPRComments => {
+            // First, get commit hashes using the "desc" mode
+            if args.file.is_none() {
+                eprintln!("Error: File path is required for desc-with-pr-comments mode");
+                return Ok(());
+            }
+            if args.start_number.is_none() || args.end_number.is_none() {
+                eprintln!("Error: Start and end line numbers are required for desc-with-pr-comments mode");
+                return Ok(());
+            }
+
+            // Initialize DB and get commit hashes
+            let db = DB {
+                folder_path: args.folder_path.to_string().clone(),
+                ..Default::default()
+            };
+            let curr_db: Arc<Mutex<DB>> = Arc::new(db.into());
+            curr_db.lock().await.init_db(
+                args.folder_path.as_str(),
+                args.file.as_deref(),
+                /*cleanup=*/ false,
+            );
+
+            let file_path = args.file.clone().unwrap();
+            let start_line = args.start_number.unwrap();
+            let end_line = args.end_number.unwrap();
+
+            // Get commit hashes from DB
+            let (commit_hashes, _) = curr_db
+                .lock()
+                .await
+                .raw_exists_and_return(&start_line, &end_line);
+
+            if commit_hashes.is_empty() {
+                println!("No commit hashes found for lines {}-{} in file {}", start_line, end_line, file_path);
+                return Ok(());
+            }
+
+            println!("Found {} commit hashes for lines {}-{} in file {}", 
+                commit_hashes.len(), start_line, end_line, file_path);
+
+            // Now fetch descriptions and PR review comments for each commit hash
+            let results = git_command_algo::fetch_desc_with_pr_comments(commit_hashes).await;
+
+            // Display the results
+            for (commit_hash, description, comments) in results {
+                println!("commit_hash: {}", commit_hash);
+
+                if !description.is_empty() {
+                    println!("Commit details:");
+                    if description.len() > 0 {
+                        println!("  Title: {}", description[0]);
+                    }
+                    if description.len() > 1 && !description[1].is_empty() {
+                        println!("  Description: {}", description[1]);
+                    }
+                    if description.len() > 2 {
+                        println!("  Author: {}", description[2]);
+                    }
+                    if description.len() > 3 {
+                        println!("  Date: {}", description[3]);
+                    }
+                    if description.len() > 4 && !description[4].is_empty() {
+                        println!("  URL: {}", description[4]);
+                    }
+                }
+
+                println!("PR review comments for commit hash: {}", commit_hash);
+                if comments.is_empty() {
+                    println!("  No PR review comments found");
+                } else {
+                    for comment in comments {
+                        println!("  {}", comment.replace("\n", "\n  "));
+                        println!("  ---");
+                    }
+                }
+                println!("\n");
+            }
+        }
     };
     Ok(())
 }

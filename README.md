@@ -110,6 +110,26 @@ Gives you the relevant commits to the selected piece of code.
 
 ---
 
+### Fetch PR review comments
+
+```bash
+contextpilot /path/to/workspace -t prreviewcomments <commit-hash>
+```
+
+Fetches GitHub PR review comments for a commit that was merged via a PR. This helps you see the code review discussions that happened during the PR review process.
+
+---
+
+### Get commit descriptions with PR review comments
+
+```bash
+contextpilot /path/to/workspace -t descwithprcomments path/to/file.rs -s <start-line> -e <end-line>
+```
+
+This combines the functionality of `desc` and `prreviewcomments` modes. It first gets the relevant commit hashes for the selected line range, then fetches both commit descriptions and PR review comments for each commit. This gives you a complete picture of the code changes and the discussions that happened during code review.
+
+---
+
 ## 🖥️ Editor Integrations
 
 ### Neovim

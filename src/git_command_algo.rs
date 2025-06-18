@@ -6,6 +6,7 @@ use crate::{contextgpt_structs::AuthorDetailsV2, diff_v2};
 use crate::git_command_algo;
 use std::collections::{HashMap, HashSet};
 use std::process::{Command, Stdio};
+use octocrab::Octocrab;
 
 pub fn print_all_valid_directories(
     workspace_dir: String,
@@ -435,4 +436,260 @@ pub fn get_commits_after(last_indexed_commit: String) -> Vec<String> {
     }
 
     Vec::new()
+}
+
+/// Extract repository owner and name from the Git remote URL
+fn extract_repo_info() -> Option<(String, String)> {
+    if let Ok(output) = Command::new("git")
+        .args(["remote", "get-url", "origin"])
+        .output()
+    {
+        if output.status.success() {
+            if let Ok(url) = String::from_utf8(output.stdout) {
+                let url = url.trim();
+
+                // Handle GitHub URLs (both HTTPS and SSH)
+                if url.starts_with("git@github.com:") {
+                    let path = url.strip_prefix("git@github.com:").unwrap();
+                    // Optionally strip ".git" if present
+                    let path = path.strip_suffix(".git").unwrap_or(path);
+                    let parts: Vec<&str> = path.split('/').collect();
+                    if parts.len() >= 2 {
+                        return Some((parts[0].to_string(), parts[1].to_string()));
+                    }
+                } else if url.starts_with("https://github.com/") {
+                    let path = url.strip_prefix("https://github.com/").unwrap();
+                    // Optionally strip ".git" if present
+                    let path = path.strip_suffix(".git").unwrap_or(path);
+                    let parts: Vec<&str> = path.split('/').collect();
+                    if parts.len() >= 2 {
+                        return Some((parts[0].to_string(), parts[1].to_string()));
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Find the PR number associated with a commit
+fn find_pr_number_for_commit(commit_hash: &str) -> Option<u64> {
+    // Use git log to find the PR number from the commit message
+    // GitHub automatically adds a reference like "Merge pull request #123" to merge commits
+    let mut command = Command::new("git");
+    command.args(["log", "-1", "--format=%B", commit_hash]);
+
+    if let Ok(output) = command.output() {
+        if output.status.success() {
+            if let Ok(commit_msg) = String::from_utf8(output.stdout) {
+                // Look for patterns like "Merge pull request #123" or "(#123)"
+                let pr_regex = regex::Regex::new(r"(?:Merge pull request|PR|pull request|pull|)\s+#(\d+)|\(#(\d+)\)").unwrap();
+                if let Some(captures) = pr_regex.captures(&commit_msg) {
+                    // Get the PR number from whichever capture group matched
+                    let pr_number = captures.get(1).or_else(|| captures.get(2)).unwrap().as_str();
+                    return pr_number.parse::<u64>().ok();
+                }
+            }
+        }
+    }
+
+    None
+}
+
+/// Fetch PR review comments for a commit
+pub async fn fetch_pr_review_comments(commit_hash: &str) -> Result<Vec<String>, String> {
+    // Extract repository owner and name
+    let repo_info = extract_repo_info().ok_or_else(|| "Failed to extract repository information".to_string())?;
+    let (owner, repo) = repo_info;
+
+    // Find the PR number associated with the commit
+    let pr_number = find_pr_number_for_commit(commit_hash)
+        .ok_or_else(|| format!("Could not find PR number for commit {}", commit_hash))?;
+
+    println!("Fetching PR review comments for PR #{} (commit: {})", pr_number, commit_hash);
+
+    // Initialize the GitHub API client
+    let octocrab = Octocrab::builder()
+        .build()
+        .map_err(|e| format!("Failed to initialize GitHub API client: {}", e))?;
+
+    // Fetch the PR review comments
+    let comments = octocrab
+        .pulls(owner, repo)
+        .list_comments(Some(pr_number))
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch PR review comments: {}", e))?;
+
+    // Format the comments for display
+    let formatted_comments = comments
+        .items
+        .into_iter()
+        .map(|comment| {
+            let username = comment.user.as_ref()
+                .map(|user| user.login.clone())
+                .unwrap_or_else(|| "Unknown".to_string());
+
+            let created_at = comment.created_at.format("%Y-%m-%d %H:%M:%S").to_string();
+
+            format!(
+                "Comment by {} on {}:\n{}\nPath: {}, Position: {}\n",
+                username,
+                created_at,
+                comment.body,
+                comment.path,
+                comment.position.unwrap_or_default()
+            )
+        })
+        .collect();
+
+    Ok(formatted_comments)
+}
+
+/// Fetch commit descriptions and PR review comments for a list of commit hashes
+/// 
+/// This function:
+/// 1. Gets commit descriptions for each commit hash
+/// 2. Fetches PR review comments for each commit hash in parallel
+/// 3. Combines the results and returns them
+///
+/// # Arguments
+/// * `commit_hashes` - A vector of commit hashes to process
+///
+/// # Returns
+/// A vector of tuples containing:
+/// * The commit hash
+/// * The commit description (title, body, author, date, URL)
+/// * The PR review comments for that commit
+///
+/// # Example
+/// ```
+/// use contextpilot::git_command_algo;
+///
+/// #[tokio::main]
+/// async fn main() {
+///     let commit_hashes = vec!["abcd123".to_string()];
+///     let results = git_command_algo::fetch_desc_with_pr_comments(commit_hashes).await;
+///     
+///     for (commit_hash, description, comments) in results {
+///         println!("Commit: {}", commit_hash);
+///         println!("Description: {:?}", description);
+///         println!("Comments: {:?}", comments);
+///     }
+/// }
+/// ```
+pub async fn fetch_desc_with_pr_comments(commit_hashes: Vec<String>) -> Vec<(String, Vec<String>, Vec<String>)> {
+    use tokio::task;
+    use futures::future;
+    use std::sync::Arc;
+
+    // Get commit descriptions first
+    let descriptions = get_commit_descriptions(commit_hashes.clone());
+
+    // Create a mapping of commit hash to description for easier lookup
+    let mut commit_desc_map: HashMap<String, Vec<String>> = HashMap::new();
+    for (i, desc) in descriptions.iter().enumerate() {
+        if i < commit_hashes.len() {
+            commit_desc_map.insert(commit_hashes[i].clone(), desc.clone());
+        }
+    }
+
+    // Create a shared Octocrab instance for all tasks
+    let octocrab = match Octocrab::builder().build() {
+        Ok(client) => Arc::new(client),
+        Err(e) => {
+            eprintln!("Failed to initialize GitHub API client: {}", e);
+            return Vec::new();
+        }
+    };
+
+    // Extract repository info once
+    let repo_info = match extract_repo_info() {
+        Some(info) => info,
+        None => {
+            eprintln!("Failed to extract repository information");
+            return Vec::new();
+        }
+    };
+    let (owner, repo) = repo_info;
+    let owner = Arc::new(owner);
+    let repo = Arc::new(repo);
+
+    // Create tasks to fetch PR review comments for each commit hash in parallel
+    let mut tasks = Vec::new();
+
+    for commit_hash in &commit_hashes {
+        let commit = commit_hash.clone();
+        let octocrab_clone = octocrab.clone();
+        let owner_clone = owner.clone();
+        let repo_clone = repo.clone();
+
+        // Spawn a task for each commit hash
+        let task = task::spawn(async move {
+            let pr_number = match find_pr_number_for_commit(&commit) {
+                Some(num) => num,
+                None => {
+                    return (commit, Vec::new());
+                }
+            };
+
+            match octocrab_clone
+                .pulls((*owner_clone).clone(), (*repo_clone).clone())
+                .list_comments(Some(pr_number))
+                .send()
+                .await
+            {
+                Ok(comments) => {
+                    let formatted_comments = comments
+                        .items
+                        .into_iter()
+                        .map(|comment| {
+                            let username = comment.user.as_ref()
+                                .map(|user| user.login.clone())
+                                .unwrap_or_else(|| "Unknown".to_string());
+
+                            let created_at = comment.created_at.format("%Y-%m-%d %H:%M:%S").to_string();
+
+                            format!(
+                                "Comment by {} on {}:\n{}\nPath: {}, Position: {}\n",
+                                username,
+                                created_at,
+                                comment.body,
+                                comment.path,
+                                comment.position.unwrap_or_default()
+                            )
+                        })
+                        .collect();
+
+                    (commit, formatted_comments)
+                }
+                Err(e) => {
+                    eprintln!("Error fetching PR review comments for commit {}: {}", commit, e);
+                    (commit, Vec::new())
+                }
+            }
+        });
+
+        tasks.push(task);
+    }
+
+    // Wait for all tasks to complete
+    let results = future::join_all(tasks).await;
+
+    // Combine the results
+    let mut combined_results = Vec::new();
+
+    for result in results {
+        match result {
+            Ok((commit_hash, comments)) => {
+                let description = commit_desc_map.get(&commit_hash).cloned().unwrap_or_default();
+                combined_results.push((commit_hash, description, comments));
+            }
+            Err(e) => {
+                eprintln!("Task error: {}", e);
+            }
+        }
+    }
+
+    combined_results
 }
