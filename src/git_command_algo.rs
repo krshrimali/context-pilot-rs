@@ -416,12 +416,12 @@ pub fn get_latest_commit(file_path: &String) -> Option<String> {
     None
 }
 
-pub fn get_commits_after(last_indexed_commit: String, file_path: String) -> Vec<String> {
+pub fn get_commits_after(last_indexed_commit: String) -> Vec<String> {
     // Get all the commits after the last indexed commit.
     // If last_indexed_commit is None, return all commits.
     // If recent_commit is None, return all commits after last_indexed_commit.
     let mut command = Command::new("git");
-    command.args(["log", "--pretty=format:%h", format!("{}..HEAD", &last_indexed_commit).as_str(), "--", file_path.as_str()]);
+    command.args(["rev-list", &last_indexed_commit, "..", "HEAD"]);
 
     let output = command
         .stdout(Stdio::piped())
