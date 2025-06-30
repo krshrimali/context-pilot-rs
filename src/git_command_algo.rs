@@ -304,7 +304,7 @@ pub fn get_all_commits_for_file(file_path: String) -> Vec<String> {
         last_commit_map.insert(idx, commit_hash.clone());
     }
     // Now iterate through last_commit_map and check if it is in commits.
-    for (idx, commit_hash) in last_commit_map.iter() {
+    for (_, commit_hash) in last_commit_map.iter() {
         if !commits.contains(commit_hash) {
             commits.push(commit_hash.clone());
         }

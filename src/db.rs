@@ -617,7 +617,6 @@ impl DB {
                         .await;
                 }
             }
-
             let (commit_hashes, _uncovered_indices) =
                 self.raw_exists_and_return(&start_number, &end_line_number);
 
