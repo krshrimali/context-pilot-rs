@@ -124,7 +124,6 @@ impl DB {
         self.index = 0;
         self.curr_items = 0;
         // Check if self.folder_path exists, cleanup if cleanup is required.
-        println!("Folder path: {}", self.folder_path);
         if cleanup && Path::new(&self.folder_path).exists() {
             // Remove the folder and all its contents
             std::fs::remove_dir_all(&self.folder_path)
