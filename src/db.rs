@@ -11,11 +11,7 @@ use crate::config::MAX_ITEMS_IN_EACH_DB_FILE;
 use crate::contextgpt_structs::AuthorDetailsV2;
 use crate::{config, contextgpt_structs::AuthorDetails};
 
-// workspace_path: file_path: 1: AuthorDetails
 type DBType = HashMap<String, HashMap<String, HashMap<u32, Vec<AuthorDetails>>>>;
-
-// type DBTypeV2 = HashMap<String, HashMap<String, HashMap<u32, Vec<AuthorDetailsV2>>>>;
-// {"line_number": [commit_hash_1, ...]}
 type DBTypeV2 = HashMap<usize, Vec<String>>;
 
 type MappingDBType = HashMap<String, Vec<u32>>;
@@ -238,33 +234,6 @@ impl DB {
     }
 
     pub fn find_index(&mut self, curr_file_path: &str) -> Option<Vec<u32>> {
-        // In each folder -> we'll have a mapping file which contains which filename corresponds to which index (to be used in the DB file)
-        // self.mapping_file_name = "mapping.json".to_string();
-        // self.mapping_file_path = format!("{}/{}", self.folder_path, self.mapping_file_name);
-        // let mapping_path_obj = Path::new(&self.mapping_file_path);
-        // if !mapping_path_obj.exists() {
-        //     self.mapping_data = HashMap::new();
-        //     self.db_file_path = format!("{}/{}.json", self.folder_path, self.index);
-        //     self.current_data = HashMap::new();
-        //     return None;
-        // }
-        // let mapping_data = match std::fs::read_to_string(&self.mapping_file_path) {
-        //     Ok(s) => s,
-        //     Err(e) => {
-        //         eprintln!("Error reading file: {}: {}", self.mapping_file_path, e);
-        //         return None;
-        //     }
-        // };
-        // let mut mapping_json: HashMap<String, Vec<u32>> =
-        //     serde_json::from_str(mapping_data.as_str()).unwrap_or_else(|_| {
-        //         panic!(
-        //             "Unable to deserialize the mapping file, path: {}",
-        //             self.mapping_file_path
-        //         )
-        //     });
-        // let mapping_json_copy = mapping_json.clone();
-        // let indices = mapping_json_copy.get(curr_file_path);
-        // self.mapping_data = mapping_json.clone();
         self.mapping_data = self.read_mapping_file();
         if self.mapping_data.is_empty() {
             return None;
@@ -311,14 +280,6 @@ impl DB {
                 max_index + 1
             })
     }
-
-    // pub fn last_indexed_commit(&self, mapping_json: &MappingDBType) -> Option<String> {
-    //     // Generally, indexing would have already happened once, after which - we should just
-    //     // attempt to index the new commits that have not been indexed yet. This function should
-    //     // just return the last indexed commit. The logic using it should handle updating the mapping
-    //     // post indexing any new commits from here.
-    //     mapping_json.get("last_commit_indexed_commit").and_then(|v| v.first().copied())
-    // }
 
     pub fn append_to_db(
         &mut self,
@@ -674,27 +635,3 @@ impl DB {
         }
     }
 }
-
-// mod test {
-//     use super::*;
-//
-//     #[test]
-//     fn test_loading_mapping_file() {
-//         let mapping_path = "/home/krshrimali/.context_pilot_db/mapping.json";
-//         let mapping_data = std::fs::read_to_string(mapping_path).unwrap_or_else(|_| {
-//             panic!(
-//                 "Unable to read the mapping file into string, file path: {}",
-//                 mapping_path
-//             )
-//         });
-//         let mapping_path_obj = Path::new(mapping_path);
-//         serde_json::from_str(mapping_data.as_str()).unwrap_or_else(|_| {
-//             panic!(
-//                 "Unable to deserialize the mapping file, path: {}",
-//                 mapping_path
-//             )
-//         });
-//
-//         assert!(mapping_path_obj.exists());
-//     }
-// }
