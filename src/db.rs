@@ -73,7 +73,12 @@ impl DB {
         for &valid_index in valid_indices.iter() {
             self.index = valid_index;
 
-            self.db_file_path = format!("{}/{}.json", self.folder_path, self.index);
+            self.db_file_path = format!(
+                "{}{}{}.json",
+                self.folder_path,
+                std::path::MAIN_SEPARATOR,
+                self.index
+            );
             let db_obj = Path::new(&self.db_file_path);
             if !db_obj.exists() {
                 File::create(db_obj).expect("Couldn't find the DB file");
@@ -88,7 +93,17 @@ impl DB {
 
     // Initialise the DB if it doesn't exist already
     pub fn init_db(&mut self, workspace_path: &str, curr_file_path: Option<&str>, cleanup: bool) {
-        let db_folder = format!("{}/{}", config::DB_FOLDER, self.folder_path);
+        // Strip C:\ from the self.folder_path value for Windows:
+        let mut folder_path_copy = self.folder_path.clone();
+        if cfg!(target_os = "windows") {
+            folder_path_copy = folder_path_copy.strip_prefix(r"C:\").unwrap().to_string();
+        }
+        let db_folder = format!(
+            "{}{}{}",
+            config::DB_FOLDER,
+            std::path::MAIN_SEPARATOR,
+            folder_path_copy
+        );
         self.workspace_path = String::from(workspace_path);
         self.curr_file_path = String::from(curr_file_path.unwrap_or(""));
         // let mut main_folder_path = String::new();
@@ -109,6 +124,7 @@ impl DB {
         self.index = 0;
         self.curr_items = 0;
         // Check if self.folder_path exists, cleanup if cleanup is required.
+        println!("Folder path: {}", self.folder_path);
         if cleanup && Path::new(&self.folder_path).exists() {
             // Remove the folder and all its contents
             std::fs::remove_dir_all(&self.folder_path)
@@ -145,13 +161,23 @@ impl DB {
     fn read_mapping_file(&mut self) -> MappingDBType {
         // Read the mapping file from the folder_path
         self.mapping_file_name = "mapping.json".to_string();
-        let mapping_path = format!("{}/{}", self.folder_path, self.mapping_file_name);
+        let mapping_path = format!(
+            "{}{}{}",
+            self.folder_path,
+            std::path::MAIN_SEPARATOR,
+            self.mapping_file_name
+        );
         self.mapping_file_path = String::from(mapping_path.clone());
         let mapping_path_obj = Path::new(&mapping_path);
         if !mapping_path_obj.exists() {
             eprintln!("Mapping file does not exist at: {}", mapping_path);
             self.mapping_data = HashMap::new();
-            self.db_file_path = format!("{}/{}.json", self.folder_path, self.index);
+            self.db_file_path = format!(
+                "{}{}{}.json",
+                self.folder_path,
+                std::path::MAIN_SEPARATOR,
+                self.index
+            );
             self.current_data = HashMap::new();
             return HashMap::new();
         }
@@ -173,7 +199,12 @@ impl DB {
     fn read_indexing_file(&mut self) -> HashMap<String, Vec<String>> {
         // Read the indexing file from the folder_path
         self.indexing_file_name = "indexing_metadata.json".to_string();
-        let indexing_path = format!("{}/{}", self.folder_path, self.indexing_file_name);
+        let indexing_path = format!(
+            "{}{}{}",
+            self.folder_path,
+            std::path::MAIN_SEPARATOR,
+            self.indexing_file_name
+        );
         let indexing_path_obj = Path::new(&indexing_path);
         if !indexing_path_obj.exists() {
             // Does not exist: create a new file:
@@ -214,7 +245,12 @@ impl DB {
             // TODO: Store last available index for the DB
             // self.index = self.index + 1;
             self.index = self.get_available_index(&self.mapping_data);
-            self.db_file_path = format!("{}/{}.json", self.folder_path, self.index);
+            self.db_file_path = format!(
+                "{}{}{}.json",
+                self.folder_path,
+                std::path::MAIN_SEPARATOR,
+                self.index
+            );
             mapping_json.insert(curr_file_path.to_string(), vec![self.index]);
             self.mapping_data = mapping_json.clone();
             let init_mapping_string =
@@ -276,10 +312,18 @@ impl DB {
             return;
         }
 
-        let db_file_path = format!("{}/{}.json", self.folder_path, self.index);
+        let db_file_path = format!(
+            "{}{}{}.json",
+            self.folder_path,
+            std::path::MAIN_SEPARATOR,
+            self.index
+        );
 
         // Check if the file path already exists in the mapping data and if the index is already in the vector
-        let indices = self.mapping_data.entry(self.curr_file_path.clone()).or_default();
+        let indices = self
+            .mapping_data
+            .entry(self.curr_file_path.clone())
+            .or_default();
         if !indices.contains(&self.index) {
             indices.push(self.index);
         }
@@ -418,7 +462,12 @@ impl DB {
             .push(commit_hash.to_string());
 
         // Write back to the indexing metadata file
-        let indexing_path = format!("{}/{}", self.folder_path, self.indexing_file_name);
+        let indexing_path = format!(
+            "{}{}{}",
+            self.folder_path,
+            std::path::MAIN_SEPARATOR,
+            self.indexing_file_name
+        );
 
         // Serialize the updated metadata
         let indexing_string = serde_json::to_string_pretty(&indexing_metadata)
