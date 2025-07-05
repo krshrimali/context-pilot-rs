@@ -22,12 +22,28 @@ pub async fn perform_for_whole_file(
                         .and_then(|name| name.to_str())
                         .unwrap_or("default_workspace");
 
-                    let db_folder = home.join(config::DB_FOLDER).join(workspace_name);
+                    println!(
+                        "DEBUG: Workspace name: {}",
+                        workspace_path_buf.to_string_lossy()
+                    );
+                    let db_folder = format!(
+                        "{}{}{}{}{}",
+                        home.to_string_lossy(),
+                        std::path::MAIN_SEPARATOR,
+                        config::DB_FOLDER,
+                        std::path::MAIN_SEPARATOR,
+                        workspace_path_buf.to_string_lossy().to_string()
+                    );
 
-                    if let Some(path_str) = db_folder.to_str() {
-                        let indexing_path = PathBuf::from(path_str).join("indexing_metadata.json");
+                    if let path_str = db_folder.to_string() {
+                        // let indexing_path = db_folder.join(path_str).join("indexing_metadata.json");
+                        let indexing_path = format!(
+                            "{}{}indexing_metadata.json",
+                            path_str,
+                            std::path::MAIN_SEPARATOR
+                        );
 
-                        if indexing_path.exists() {
+                        if PathBuf::from(indexing_path.clone()).exists() {
                             match std::fs::read_to_string(&indexing_path) {
                                 Ok(metadata_str) => {
                                     match serde_json::from_str::<HashMap<String, Vec<String>>>(
@@ -71,7 +87,9 @@ pub async fn perform_for_whole_file(
                                             // Try different path variations to find existing metadata
                                             let possible_paths = vec![
                                                 origin_file_path.clone(),
-                                                if let Ok(canonical) = PathBuf::from(&origin_file_path).canonicalize() {
+                                                if let Ok(canonical) =
+                                                    PathBuf::from(&origin_file_path).canonicalize()
+                                                {
                                                     canonical.to_string_lossy().to_string()
                                                 } else {
                                                     origin_file_path.clone()
@@ -79,23 +97,44 @@ pub async fn perform_for_whole_file(
                                                 relative_path.clone(),
                                             ];
 
-                                            println!("DEBUG: Checking if file is already indexed with latest commit: {}", recent_commit);
+                                            println!(
+                                                "DEBUG: Checking if file is already indexed with latest commit: {}",
+                                                recent_commit
+                                            );
                                             println!("DEBUG: Possible paths to check:");
                                             for (i, path) in possible_paths.iter().enumerate() {
                                                 println!("DEBUG:   {}: {}", i, path);
                                             }
 
                                             for path_variant in possible_paths {
-                                                println!("DEBUG: Checking path variant: {}", path_variant);
-                                                if let Some(last_indexing_data) = indexing_metadata.get(&path_variant) {
-                                                    println!("DEBUG: Found indexing data for path: {}", path_variant);
-                                                    println!("DEBUG: Last indexing data: {:?}", last_indexing_data);
+                                                println!(
+                                                    "DEBUG: Checking path variant: {}",
+                                                    path_variant
+                                                );
+                                                if let Some(last_indexing_data) =
+                                                    indexing_metadata.get(&path_variant)
+                                                {
+                                                    println!(
+                                                        "DEBUG: Found indexing data for path: {}",
+                                                        path_variant
+                                                    );
+                                                    println!(
+                                                        "DEBUG: Last indexing data: {:?}",
+                                                        last_indexing_data
+                                                    );
 
-                                                    if let Some(last_indexed_commit) = last_indexing_data.last() {
-                                                        println!("DEBUG: Last indexed commit: {}", last_indexed_commit);
+                                                    if let Some(last_indexed_commit) =
+                                                        last_indexing_data.last()
+                                                    {
+                                                        println!(
+                                                            "DEBUG: Last indexed commit: {}",
+                                                            last_indexed_commit
+                                                        );
 
                                                         if last_indexed_commit == &recent_commit {
-                                                            println!("DEBUG: Commit matches! No reindexing needed.");
+                                                            println!(
+                                                                "DEBUG: Commit matches! No reindexing needed."
+                                                            );
                                                             if should_print {
                                                                 println!(
                                                                     "File {} is already indexed with the latest commit {}",
@@ -104,23 +143,34 @@ pub async fn perform_for_whole_file(
                                                             }
                                                             return HashMap::new();
                                                         } else {
-                                                            println!("DEBUG: Commit doesn't match. Reindexing needed.");
+                                                            println!(
+                                                                "DEBUG: Commit doesn't match. Reindexing needed."
+                                                            );
                                                             if should_print {
                                                                 println!(
                                                                     "File {} has a new commit {} (last indexed: {})",
-                                                                    path_variant, recent_commit, last_indexed_commit
+                                                                    path_variant,
+                                                                    recent_commit,
+                                                                    last_indexed_commit
                                                                 );
                                                             }
                                                         }
                                                     } else {
-                                                        println!("DEBUG: No last indexed commit found.");
+                                                        println!(
+                                                            "DEBUG: No last indexed commit found."
+                                                        );
                                                     }
                                                 } else {
-                                                    println!("DEBUG: No indexing data found for path: {}", path_variant);
+                                                    println!(
+                                                        "DEBUG: No indexing data found for path: {}",
+                                                        path_variant
+                                                    );
                                                 }
                                             }
 
-                                            println!("DEBUG: No matching indexed commit found. Proceeding with indexing.");
+                                            println!(
+                                                "DEBUG: No matching indexed commit found. Proceeding with indexing."
+                                            );
                                         }
                                         Err(e) => {
                                             eprintln!("Failed to parse metadata JSON check: {}", e)
