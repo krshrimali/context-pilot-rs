@@ -22,8 +22,8 @@ use tokio::sync::Mutex;
 
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use quicli::prelude::{
-    log::{log, Level},
     CliResult,
+    log::{Level, log},
 };
 use tokio::task;
 
@@ -277,18 +277,20 @@ impl Server {
     }
 
     pub async fn start_file(&mut self, metadata: &mut DBMetadata, file_path: Option<String>) {
-        // Only index the given file and do no more than that.
         if file_path.is_none() {
             log!(Level::Error, "No file path provided to index.");
             return;
         }
+
         let file_path_str = file_path.clone().unwrap();
-        let file_path_buf = PathBuf::from(file_path_str.clone());
-        let file_path_path = file_path_buf.as_path();
-        if Server::_is_valid_file(file_path_path) {
+        let file_path_buf = PathBuf::from(&file_path_str);
+
+        if Server::_is_valid_file(file_path_buf.as_path()) {
             let workspace_path = &metadata.workspace_path;
+
+            let workspace_path_buf = PathBuf::from(workspace_path);
             let db = DB {
-                folder_path: workspace_path.clone(),
+                folder_path: workspace_path.to_string(),
                 ..Default::default()
             };
             let curr_db: Arc<Mutex<DB>> = Arc::new(db.into());
@@ -302,42 +304,58 @@ impl Server {
             let mut server = Server::new(State::Dead, DBHandler::new(metadata.clone()));
             server.init_server(curr_db.clone());
 
-            // Check if the file already exists in the DB
+            // Check if file exists in DB
             let mut db_locked = curr_db.lock().await;
             let indices = db_locked.find_index(&file_path_str);
             drop(db_locked);
 
-            // If the file exists, delete all shards and update mapping data
+            // Handle existing shards
             if let Some(indices_vec) = indices {
-                log!(Level::Info, "File already exists in DB. Deleting existing shards.");
+                log!(
+                    Level::Info,
+                    "File already exists in DB. Deleting existing shards."
+                );
                 for index in indices_vec {
-                    let shard_path = format!("{}/{}.json", workspace_path, index);
-                    if Path::new(&shard_path).exists() {
+                    // Create shard path in a cross-platform way
+                    let shard_path = PathBuf::from(workspace_path).join(format!("{}.json", index));
+
+                    if shard_path.exists() {
                         if let Err(e) = std::fs::remove_file(&shard_path) {
-                            log!(Level::Error, "Failed to delete shard {}: {}", shard_path, e);
+                            log!(
+                                Level::Error,
+                                "Failed to delete shard {}: {}",
+                                shard_path.display(),
+                                e
+                            );
                         } else {
-                            log!(Level::Info, "Deleted shard: {}", shard_path);
+                            log!(Level::Info, "Deleted shard: {}", shard_path.display());
                         }
                     }
                 }
 
-                // Update mapping data to remove references to deleted shards
+                // Update mapping data
                 let mut db_locked = curr_db.lock().await;
-                // Remove the file path from the mapping data
                 db_locked.mapping_data.remove(&file_path_str);
 
-                // Write the updated mapping data to disk
-                let mapping_file_path = format!("{}/mapping.json", workspace_path);
-                if let Ok(mut file) = std::fs::File::create(&mapping_file_path) {
+                // Write mapping file in a cross-platform way
+                let mapping_path = PathBuf::from(workspace_path).join("mapping.json");
+
+                if let Ok(mut file) = std::fs::File::create(&mapping_path) {
                     let mapping_string = serde_json::to_string_pretty(&db_locked.mapping_data)
                         .expect("Failed to serialize mapping");
-                    if let Err(e) = std::io::Write::write_fmt(&mut file, format_args!("{}", mapping_string)) {
+                    if let Err(e) =
+                        std::io::Write::write_fmt(&mut file, format_args!("{}", mapping_string))
+                    {
                         log!(Level::Error, "Failed writing mapping: {}", e);
                     } else {
                         log!(Level::Info, "Updated mapping file to remove deleted shards");
                     }
                 } else {
-                    log!(Level::Error, "Failed to create mapping file: {}", mapping_file_path);
+                    log!(
+                        Level::Error,
+                        "Failed to create mapping file: {}",
+                        mapping_path.display()
+                    );
                 }
                 drop(db_locked);
             }
@@ -455,7 +473,8 @@ impl Server {
         let mut metadata = self.state_db_handler.get_current_metadata();
 
         // If this is a call to index a single file
-        if request_type.is_some() && request_type.clone().unwrap() == RequestTypeOptions::IndexFile {
+        if request_type.is_some() && request_type.clone().unwrap() == RequestTypeOptions::IndexFile
+        {
             if file_path.is_none() {
                 log!(Level::Error, "No file path provided to index.");
                 return;
