@@ -82,7 +82,7 @@ async fn test_index_file_mode() {
     fs::create_dir_all(&home_dir).expect("Failed to create home directory");
 
     // Set up environment for testing
-    std::env::set_var("HOME", home_dir.to_str().unwrap());
+    unsafe { std::env::set_var("HOME", home_dir.to_str().unwrap()); }
 
     // Create workspace path and DB folder
     let workspace_name = "test_workspace";
@@ -153,7 +153,7 @@ async fn test_index_file_mode_with_existing_index() {
     fs::create_dir_all(&home_dir).expect("Failed to create home directory");
 
     // Set up environment for testing
-    std::env::set_var("HOME", home_dir.to_str().unwrap());
+    unsafe { std::env::set_var("HOME", home_dir.to_str().unwrap()); }
 
     // Create workspace path and DB folder
     let workspace_name = "test_workspace";
@@ -246,7 +246,7 @@ async fn test_index_file_mode_with_specific_commits() {
     fs::create_dir_all(&home_dir).expect("Failed to create home directory");
 
     // Set up environment for testing
-    std::env::set_var("HOME", home_dir.to_str().unwrap());
+    unsafe { std::env::set_var("HOME", home_dir.to_str().unwrap()); }
 
     // Create workspace path and DB folder
     let workspace_name = "test_workspace";
@@ -309,7 +309,7 @@ async fn test_index_file_mode_does_not_affect_workspace_indexing() {
     fs::create_dir_all(&home_dir).expect("Failed to create home directory");
 
     // Set up environment for testing
-    std::env::set_var("HOME", home_dir.to_str().unwrap());
+    unsafe { std::env::set_var("HOME", home_dir.to_str().unwrap()); }
 
     // Create workspace path and DB folder
     let workspace_name = "test_workspace";
