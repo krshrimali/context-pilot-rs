@@ -330,7 +330,8 @@ impl DB {
         // Re-write the mapping file since data has changed:
         self.index += 1; // increment index for the next file.
         let output_string = serde_json::to_string(&self.current_data_v2);
-        if let Err(e) = std::fs::write(&db_file_path, output_string.unwrap()) {
+        let result_string = output_string.expect("Failed to serialize data");
+        if let Err(e) = std::fs::write(&db_file_path, result_string.clone()) {
             eprintln!("❌ Failed writing DB file {}: {}", db_file_path, e);
         } else {
             println!("✅ Successfully stored shard: {}", db_file_path);
