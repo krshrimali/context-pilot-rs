@@ -97,10 +97,6 @@ impl DBHandler {
         // this should ideally start the DB server
         // DB Server and the other server should be kept separate
         // this should not be async though - as we'll really want this to finish before it finishes
-        // println!(
-        //     "Passing workspace path to init_db: {}",
-        //     metadata.workspace_path
-        // );
     }
 }
 
