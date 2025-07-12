@@ -26,6 +26,7 @@ use quicli::prelude::{
     CliResult,
 };
 use tokio::task;
+use contextpilot::accuracy;
 
 #[derive(Default, Debug, Eq, PartialEq, Clone, Copy)]
 pub enum State {
@@ -210,7 +211,6 @@ impl Server {
                     });
                 } else if Server::_is_valid_file(&entry_path_path) {
                     log!(Level::Info, "File is valid: {}", entry_path_path.display());
-                    let workspace_path = workspace_path.clone();
                     let w_path = self.state_db_handler.metadata.workspace_path.clone();
                     files_set.spawn({
                         async move { Server::_index_file(entry_path_path.clone(), w_path).await }
@@ -698,5 +698,8 @@ async fn main() -> CliResult {
                 .await;
         }
     };
+    println!("Calculating accuracy...");
+    accuracy::accuracy().await;
+    println!("Done!");
     Ok(())
 }
