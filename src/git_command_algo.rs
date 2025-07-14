@@ -13,10 +13,6 @@ pub fn print_all_valid_directories(
 ) {
     // Prints all the valid files to stdout - used by plugins
     // optionally to get files that are to be indexed.
-    // if gitignore_file_name.is_none() {
-    //     println!("None.");
-    //     return;
-    // }
     let gitignore_file_name = gitignore_file_name.unwrap_or(String::from(".gitignore"));
     let mut gitignore_builder = GitignoreBuilder::new(workspace_dir.clone());
     gitignore_builder.add(gitignore_file_name);
@@ -34,7 +30,6 @@ pub fn print_all_valid_directories(
                     //     continue;
                     // }
                     // // Print the file path -- it's valid!
-                    // println!("{}", path.display());
                 } else {
                     // Check if the whole dir is ignored:
                     if gitignore.matched(path, true).is_ignore() {
@@ -62,10 +57,6 @@ pub fn print_all_valid_directories(
 pub fn print_all_valid_files(workspace_dir: String, gitignore_file_name: Option<String>) -> () {
     // Prints all the valid files to stdout - used by plugins
     // optionally to get files that are to be indexed.
-    // if gitignore_file_name.is_none() {
-    //     println!("None.");
-    //     return;
-    // }
     let gitignore_file_name = gitignore_file_name.unwrap_or(String::from(".gitignore"));
     let mut gitignore_builder = GitignoreBuilder::new(workspace_dir.clone());
     gitignore_builder.add(gitignore_file_name);
@@ -174,92 +165,6 @@ pub async fn extract_details_parallel(file_path: String) -> HashMap<u32, AuthorD
         };
         auth_details_map.insert(*line_number, author_details.clone());
     }
-    // FIXME: @krshrimali - Remove this once proper testing is done.
-    // let mut total_count = 0;
-    // let mut failed_count = 0;
-    // // Find accuracy of the indexing:
-    // // Accuracy is defined as, as the output for each line of code - the last commit should always
-    // // be coming from git blame.
-    // for (line_number, line_detail) in map.iter() {
-    //     if line_detail.get(0).unwrap().content.is_empty() {
-    //         continue;
-    //     }
-    //     // Find the git blame from the line_number:
-    //     let mut command = Command::new("git");
-    //     command.args([
-    //         "blame",
-    //         "-L",
-    //         &format!("{},{}", line_number, line_number),
-    //         "--abbrev=7",
-    //         "--",
-    //         file_path.as_str(),
-    //     ]);
-    //     let output = command
-    //         .stdout(Stdio::piped())
-    //         .stderr(Stdio::piped())
-    //         .output()
-    //         .unwrap();
-    //     let stdout_buf = String::from_utf8(output.stdout).unwrap();
-    //     // Extract commit hash from: c5bca082 (Kushashwa Ravi Shrimali 2023-10-21 16:52:43 +0530 1) mod algo_loc;
-    //     let mut commit_hash = String::new();
-    //     if let Some(first_line) = stdout_buf.lines().next() {
-    //         // Split by space and take the first part as commit hash.
-    //         let parts: Vec<&str> = first_line.split_whitespace().collect();
-    //         if !parts.is_empty() {
-    //             commit_hash = parts[0].to_string();
-    //         }
-    //     }
-    //     // Check if commit hash == author_details_vec
-    //     let author_detail = auth_details_map.get(line_number);
-    //     if let Some(author_detail) = author_detail {
-    //         // If the commit hash is not already in the commit_hashes, add it.
-    //         if commit_hash.starts_with("^") {
-    //             // Make sure this is included as well...
-    //             let commit_hash = commit_hash.strip_prefix("^").unwrap();
-    //             if author_detail
-    //                 .commit_hashes
-    //                 .contains(&commit_hash.to_string())
-    //             {
-    //                 if author_detail
-    //                     .commit_hashes
-    //                     .contains(&commit_hash.to_string())
-    //                 {
-    //                     total_count += 1;
-    //                 } else {
-    //                     failed_count += 1;
-    //                 }
-    //             }
-    //         } else {
-    //             // Just take 7 first chars:
-    //             if commit_hash.len() > 7 {
-    //                 commit_hash = commit_hash[..7].to_string();
-    //             } else {
-    //                 continue;
-    //             }
-    //             // let commit_hash = &commit_hash[..7];
-    //             // println!("Searching for commit hash: {}", commit_hash);
-    //             if author_detail
-    //                 .commit_hashes
-    //                 .contains(&commit_hash.to_string())
-    //             {
-    //                 total_count += 1;
-    //             } else {
-    //                 failed_count += 1;
-    //                 println!(
-    //                     "Commit hash {} not found in author details for line {}",
-    //                     commit_hash, line_number
-    //                 );
-    //                 println!("Author details: {:?}", author_detail.commit_hashes);
-    //             }
-    //         }
-    //     }
-    // }
-    // println!(
-    //     "Accuracy for file {} : {}/{}",
-    //     file_path.clone(),
-    //     total_count,
-    //     total_count + failed_count
-    // );
     auth_details_map
 }
 
@@ -417,21 +322,41 @@ pub fn get_latest_commit(file_path: &String) -> Option<String> {
 }
 
 pub fn get_commits_after(last_indexed_commit: String) -> Vec<String> {
-    // Get all the commits after the last indexed commit.
-    // If last_indexed_commit is None, return all commits.
-    // If recent_commit is None, return all commits after last_indexed_commit.
     let mut command = Command::new("git");
     command.args(["rev-list", &last_indexed_commit, "..", "HEAD"]);
 
-    let output = command
+    let output = match command
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output()
-        .unwrap();
+    {
+        Ok(output) => output,
+        Err(e) => {
+            eprintln!("❌ Failed to execute git command: {}", e);
+            return Vec::new();
+        }
+    };
 
     if output.status.success() {
-        let stdout_buf = String::from_utf8(output.stdout).unwrap();
-        return stdout_buf.lines().map(|s| s.to_string()).collect();
+        match String::from_utf8(output.stdout) {
+            Ok(stdout_buf) => {
+                let commits: Vec<String> = stdout_buf.lines()
+                    .filter(|line| !line.trim().is_empty())
+                    .map(|s| s.to_string())
+                    .collect();
+                return commits;
+            }
+            Err(e) => {
+                eprintln!("❌ Failed to parse git output as UTF-8: {}", e);
+                return Vec::new();
+            }
+        }
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        eprintln!("❌ Git command failed: {}", stderr.trim());
+        if stderr.contains("bad revision") || stderr.contains("unknown revision") {
+            eprintln!("⚠ Invalid commit hash: {}", last_indexed_commit);
+        }
     }
 
     Vec::new()

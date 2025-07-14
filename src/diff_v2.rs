@@ -141,11 +141,6 @@ pub fn reorder_map(
     line_change_after: LineChange,
     replaced_content_line_numbers: Vec<u32>,
 ) {
-    // println!("Category: {:?}", category);
-    // println!(
-    //     "Line change before: {:?}, after: {:?}",
-    //     line_change_before, line_change_after
-    // );
     match category {
         Some(DiffCases::FewLinesReplacedWithSingleLine) => {
             // That means, anything after the current index, should be subtracted accordingly.

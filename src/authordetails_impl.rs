@@ -16,12 +16,10 @@ impl AuthorDetails {
             return AuthorDetails::default(); // or log and return dummy
         }
 
-        // println!("parts: {:?}", parts);
 
         let line_number = match parts.last().unwrap().parse::<usize>() {
             Ok(num) => num,
             Err(_) => {
-                // eprintln!("Error parsing line number from input string");
                 return AuthorDetails::default(); // or log and return dummy
             }
         };
