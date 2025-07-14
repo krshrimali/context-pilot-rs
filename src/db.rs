@@ -533,29 +533,32 @@ impl DB {
                 println!("{} - {} occurrences", path, count);
             }
         } else {
-            // Generally - check first if the last indexed commit is the same as the current one.
-            // If it is, then we can just return the data from the DB.
             let recent_commit = get_latest_commit(&file_path).unwrap();
-            // Read the mapping file first from self.mapping_file_path
             let indexing_metadata = self.read_indexing_file();
-            let last_indexing_data =
-                indexing_metadata
-                    .get(&file_path.clone())
-                    .unwrap_or_else(|| {
-                        panic!("No indexing metadata found for the file: {}", file_path);
-                    });
-            let last_indexed_commit = last_indexing_data.last().cloned();
-            if last_indexed_commit.is_some() {
-                if last_indexed_commit.clone().unwrap().eq(&recent_commit) {
-                    // No need to index again, just return the data from the DB.
-                    // eprintln!("No new commits to index, returning existing data.");
-                } else {
-                    // Index the new commits and update the DB.
-                    // First get the new commits that have not been indexed yet.
-                    let commits_to_index = get_commits_after(last_indexed_commit.unwrap());
-                    // Index these commits first.
-                    perform_for_whole_file(file_path.clone(), false, Some(commits_to_index), None)
-                        .await;
+            let last_indexing_data = indexing_metadata.get(&file_path.clone());
+            
+            match last_indexing_data {
+                Some(data) => {
+                    let last_indexed_commit = data.last().cloned();
+                    if let Some(last_commit) = last_indexed_commit {
+                        if last_commit.eq(&recent_commit) {
+                            eprintln!("✓ File {} is already indexed with the latest commit {}", file_path, recent_commit);
+                        } else {
+                            eprintln!("⚠ Reindexing {} from commit {} to {}", file_path, last_commit, recent_commit);
+                            let commits_to_index = get_commits_after(last_commit);
+                            if !commits_to_index.is_empty() {
+                                perform_for_whole_file(file_path.clone(), false, Some(commits_to_index), None)
+                                    .await;
+                            }
+                        }
+                    } else {
+                        eprintln!("⚠ No previous commit found for {}, performing full indexing", file_path);
+                        perform_for_whole_file(file_path.clone(), false, None, None).await;
+                    }
+                }
+                None => {
+                    eprintln!("ℹ First-time indexing for file: {}", file_path);
+                    perform_for_whole_file(file_path.clone(), false, None, None).await;
                 }
             }
 
@@ -602,29 +605,32 @@ impl DB {
             let out = get_commit_descriptions(commit_hashes);
             println!("{:?}", out);
         } else {
-            // Generally - check first if the last indexed commit is the same as the current one.
-            // If it is, then we can just return the data from the DB.
             let recent_commit = get_latest_commit(&file_path).unwrap();
-            // Read the mapping file first from self.mapping_file_path
             let indexing_metadata = self.read_indexing_file();
-            let last_indexing_data =
-                indexing_metadata
-                    .get(&file_path.clone())
-                    .unwrap_or_else(|| {
-                        panic!("No indexing metadata found for the file: {}", file_path);
-                    });
-            let last_indexed_commit = last_indexing_data.last().cloned();
-            if last_indexed_commit.is_some() {
-                if last_indexed_commit.clone().unwrap().eq(&recent_commit) {
-                    // No need to index again, just return the data from the DB.
-                    // eprintln!("No new commits to index, returning existing data.");
-                } else {
-                    // Index the new commits and update the DB.
-                    // First get the new commits that have not been indexed yet.
-                    let commits_to_index = get_commits_after(last_indexed_commit.unwrap());
-                    // Index these commits first.
-                    perform_for_whole_file(file_path.clone(), false, Some(commits_to_index), None)
-                        .await;
+            let last_indexing_data = indexing_metadata.get(&file_path.clone());
+            
+            match last_indexing_data {
+                Some(data) => {
+                    let last_indexed_commit = data.last().cloned();
+                    if let Some(last_commit) = last_indexed_commit {
+                        if last_commit.eq(&recent_commit) {
+                            eprintln!("✓ File {} is already indexed with the latest commit {}", file_path, recent_commit);
+                        } else {
+                            eprintln!("⚠ Reindexing {} from commit {} to {}", file_path, last_commit, recent_commit);
+                            let commits_to_index = get_commits_after(last_commit);
+                            if !commits_to_index.is_empty() {
+                                perform_for_whole_file(file_path.clone(), false, Some(commits_to_index), None)
+                                    .await;
+                            }
+                        }
+                    } else {
+                        eprintln!("⚠ No previous commit found for {}, performing full indexing", file_path);
+                        perform_for_whole_file(file_path.clone(), false, None, None).await;
+                    }
+                }
+                None => {
+                    eprintln!("ℹ First-time indexing for file: {}", file_path);
+                    perform_for_whole_file(file_path.clone(), false, None, None).await;
                 }
             }
             let (commit_hashes, _uncovered_indices) =

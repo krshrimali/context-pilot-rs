@@ -56,12 +56,19 @@ fn is_already_indexed(origin_file_path: &str, workspace_path: &str, should_print
                 }
                 if last_indexed_commit == recent_commit {
                     if should_print {
-                        println!(
-                            "File {} is already indexed with the latest commit {}",
+                        eprintln!(
+                            "✓ File {} is already indexed with the latest commit {}",
                             origin_file_path, recent_commit
                         );
                     }
                     return true;
+                } else {
+                    if should_print {
+                        eprintln!(
+                            "⚠ File {} needs reindexing from commit {} to {}",
+                            origin_file_path, last_indexed_commit, recent_commit
+                        );
+                    }
                 }
             }
         }
