@@ -525,7 +525,6 @@ impl DB {
                     *counter_for_paths.entry(rel_path.clone()).or_insert(0) += 1;
                 }
             }
-            println!("Commit hashes found: {:?}", commit_hashes);
             // Write the last commit hash to the index metadata.
             let last_commit_hash = commit_hashes.last().unwrap().to_string();
             self.prepare_indexing_metadata(&file_path, &Some(last_commit_hash));
