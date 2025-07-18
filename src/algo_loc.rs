@@ -103,9 +103,7 @@ async fn index_file(
     commits_to_index: Option<Vec<String>>,
     should_print: bool,
 ) -> HashMap<u32, AuthorDetailsV2> {
-    if should_print {
-        println!("Indexing file: {}", origin_file_path);
-    }
+    println!("Indexing file: {}", origin_file_path);
 
     match commits_to_index {
         Some(commits) => index_some_commits(origin_file_path.to_string(), commits).await,
