@@ -23,26 +23,12 @@ pub async fn perform_for_whole_file(
 fn is_already_indexed(origin_file_path: &str, workspace_path: &str, should_print: bool) -> bool {
     // Get the latest commit safely
     let Some(recent_commit) = get_latest_commit(&origin_file_path.to_string()) else {
-        if should_print {
-            println!("No commits found for file: {}", origin_file_path);
-        }
         return false;
     };
-
-    if should_print {
-        println!(
-            "Latest commit for file: {} is: {}",
-            origin_file_path, recent_commit
-        );
-    }
 
     let Some(indexing_path) = build_indexing_path(workspace_path) else {
         return false;
     };
-
-    if should_print {
-        println!("Indexing path: {}", indexing_path);
-    }
 
     if !Path::new(&indexing_path).exists() {
         return false;
@@ -51,16 +37,7 @@ fn is_already_indexed(origin_file_path: &str, workspace_path: &str, should_print
     match read_indexing_metadata(&indexing_path) {
         Ok(metadata) => {
             if let Some(last_indexed_commit) = get_last_indexed_commit(&metadata, origin_file_path) {
-                if should_print {
-                    println!("Last indexed commit: {}", last_indexed_commit);
-                }
                 if last_indexed_commit == recent_commit {
-                    if should_print {
-                        println!(
-                            "File {} is already indexed with the latest commit {}",
-                            origin_file_path, recent_commit
-                        );
-                    }
                     return true;
                 }
             }
@@ -126,9 +103,7 @@ async fn index_file(
     commits_to_index: Option<Vec<String>>,
     should_print: bool,
 ) -> HashMap<u32, AuthorDetailsV2> {
-    if should_print {
-        println!("Indexing file: {}", origin_file_path);
-    }
+    println!("Indexing file: {}", origin_file_path);
 
     match commits_to_index {
         Some(commits) => index_some_commits(origin_file_path.to_string(), commits).await,

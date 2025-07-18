@@ -351,12 +351,6 @@ impl Server {
                 let mut db_locked = db.lock().await;
                 let start_line_number = 0;
 
-                println!(
-                    "Indexing file: {} with {} lines",
-                    file_path_buf.display(),
-                    out.len()
-                );
-
                 // Get the origin file path from the first entry
                 let first_entry = out.values().next().unwrap();
                 let origin_file_path = &first_entry.origin_file_path;
@@ -419,7 +413,6 @@ impl Server {
                         ._iterate_through_workspace(subfolder_path, gitignore_builder_obj.clone())
                         .await;
                 } else {
-                    println!("Subfolder does not exist: {}", subfolder);
                     log!(Level::Error, "Subfolder does not exist: {}", subfolder);
                 }
             }
