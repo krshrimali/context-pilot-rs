@@ -20,10 +20,11 @@ use std::{
 use structopt::StructOpt;
 use tokio::sync::Mutex;
 
+use contextpilot::accuracy;
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use quicli::prelude::{
-    log::{log, Level},
     CliResult,
+    log::{Level, log},
 };
 use tokio::task;
 
@@ -96,10 +97,6 @@ impl DBHandler {
         // this should ideally start the DB server
         // DB Server and the other server should be kept separate
         // this should not be async though - as we'll really want this to finish before it finishes
-        // println!(
-        //     "Passing workspace path to init_db: {}",
-        //     metadata.workspace_path
-        // );
     }
 }
 
@@ -210,7 +207,6 @@ impl Server {
                     });
                 } else if Server::_is_valid_file(&entry_path_path) {
                     log!(Level::Info, "File is valid: {}", entry_path_path.display());
-                    let workspace_path = workspace_path.clone();
                     let w_path = self.state_db_handler.metadata.workspace_path.clone();
                     files_set.spawn({
                         async move { Server::_index_file(entry_path_path.clone(), w_path).await }
@@ -309,7 +305,10 @@ impl Server {
 
             // If the file exists, delete all shards and update mapping data
             if let Some(indices_vec) = indices {
-                log!(Level::Info, "File already exists in DB. Deleting existing shards.");
+                log!(
+                    Level::Info,
+                    "File already exists in DB. Deleting existing shards."
+                );
                 for index in indices_vec {
                     let shard_path = format!("{}/{}.json", workspace_path, index);
                     if Path::new(&shard_path).exists() {
@@ -331,13 +330,19 @@ impl Server {
                 if let Ok(mut file) = std::fs::File::create(&mapping_file_path) {
                     let mapping_string = serde_json::to_string_pretty(&db_locked.mapping_data)
                         .expect("Failed to serialize mapping");
-                    if let Err(e) = std::io::Write::write_fmt(&mut file, format_args!("{}", mapping_string)) {
+                    if let Err(e) =
+                        std::io::Write::write_fmt(&mut file, format_args!("{}", mapping_string))
+                    {
                         log!(Level::Error, "Failed writing mapping: {}", e);
                     } else {
                         log!(Level::Info, "Updated mapping file to remove deleted shards");
                     }
                 } else {
-                    log!(Level::Error, "Failed to create mapping file: {}", mapping_file_path);
+                    log!(
+                        Level::Error,
+                        "Failed to create mapping file: {}",
+                        mapping_file_path
+                    );
                 }
                 drop(db_locked);
             }
@@ -448,7 +453,8 @@ impl Server {
         let mut metadata = self.state_db_handler.get_current_metadata();
 
         // If this is a call to index a single file
-        if request_type.is_some() && request_type.clone().unwrap() == RequestTypeOptions::IndexFile {
+        if request_type.is_some() && request_type.clone().unwrap() == RequestTypeOptions::IndexFile
+        {
             if file_path.is_none() {
                 log!(Level::Error, "No file path provided to index.");
                 return;
@@ -691,5 +697,12 @@ async fn main() -> CliResult {
                 .await;
         }
     };
+    // This ideally should be done as workflow action instead and we should record how things have improved/reduced
+    // pre and post a particular commit.
+    if args.request_type == RequestTypeOptions::Index {
+        println!("Calculating accuracy...");
+        accuracy::accuracy().await;
+        println!("Done!");
+    }
     Ok(())
 }
