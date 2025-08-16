@@ -333,7 +333,7 @@ impl DB {
         if let Err(e) = std::fs::write(&db_file_path, result_string.clone()) {
             eprintln!("❌ Failed writing DB file {}: {}", db_file_path, e);
         } else {
-            println!("✅ Successfully stored shard: {}", db_file_path);
+            println!("!! Successfully stored shard: {}", db_file_path);
         }
 
         // Update mapping file
