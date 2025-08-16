@@ -259,6 +259,7 @@ impl Server {
                             .into_iter()
                             .map(|detail| (detail.line_number as u32, detail)),
                     );
+                    println!("Successfully indexed file: {}", origin_file_path);
                 }
             }
         } else if Server::_is_valid_file(path) {
@@ -360,6 +361,8 @@ impl Server {
                 db_locked.store();
 
                 log!(Level::Info, "Successfully indexed file: {}", file_path_str);
+                // This is to be used by the plugins.
+                println!("Successfully indexed file: {}", file_path_str);
             } else {
                 log!(Level::Warn, "No data to index for file: {}", file_path_str);
             }
