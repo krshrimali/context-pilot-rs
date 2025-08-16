@@ -152,7 +152,7 @@ impl Server {
         // For now, just store the output somewhere in the DB.
         let file_path = std::fs::canonicalize(file_path_inp).expect("Failed");
         let file_path_str = file_path.to_str().unwrap();
-        perform_for_whole_file(file_path_str.to_string(), true, None, Some(workspace_path)).await
+        perform_for_whole_file(file_path_str.to_string(), /*should_print=*/true, None, Some(workspace_path)).await
     }
 
     #[async_recursion]
@@ -210,7 +210,7 @@ impl Server {
                     });
                 } else if Server::_is_valid_file(&entry_path_path) {
                     log!(Level::Info, "File is valid: {}", entry_path_path.display());
-                    let workspace_path = workspace_path.clone();
+                    // let workspace_path = workspace_path.clone();
                     let w_path = self.state_db_handler.metadata.workspace_path.clone();
                     files_set.spawn({
                         async move { Server::_index_file(entry_path_path.clone(), w_path).await }
