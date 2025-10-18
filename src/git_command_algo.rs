@@ -366,13 +366,13 @@ pub fn get_file_rename_history(file_path: String) -> Vec<(String, Option<String>
     }
 
     let stdout_buf = String::from_utf8(output.stdout).unwrap_or_default();
-    let mut lines = stdout_buf.lines();
+    let lines = stdout_buf.lines();
     let mut last_rename_commit: Option<String> = None;
 
     // Track the current path we're following
     history.push((current_path.clone(), None));
 
-    while let Some(line) = lines.next() {
+    for line in lines {
         let line = line.trim();
 
         // Check if this is a commit hash line
