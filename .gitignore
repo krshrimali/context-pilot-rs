@@ -1,5 +1,4 @@
 target/*
 .git
-.github
 .test*
 Cargo.lock

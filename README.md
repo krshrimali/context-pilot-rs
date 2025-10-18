@@ -1,6 +1,9 @@
 
 # Context Pilot
 
+[![Tests](https://github.com/krshrimali/context-pilot-rs/actions/workflows/tests.yml/badge.svg)](https://github.com/krshrimali/context-pilot-rs/actions/workflows/tests.yml)
+[![Build](https://github.com/krshrimali/context-pilot-rs/actions/workflows/build.yml/badge.svg)](https://github.com/krshrimali/context-pilot-rs/actions/workflows/build.yml)
+
 Just the tool that answers following questions for you:
 
 1. "What all commits ever touched this piece of code?"
