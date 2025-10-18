@@ -18,6 +18,7 @@ impl Default for Config {
     }
 }
 
+#[allow(dead_code)]
 pub fn read_config(config_file_name: &str) -> Config {
     let home_dir_path: PathBuf = simple_home_dir::home_dir().unwrap_or_default();
     let joined_path = home_dir_path.join(config_file_name);
@@ -27,9 +28,9 @@ pub fn read_config(config_file_name: &str) -> Config {
         Ok(_) => {
             let mut config_stream = serde_json::Deserializer::from_reader(config_file.unwrap());
             // TODO: Fix the error handling and ensure users are able to watch logs for this
-            let config = Config::deserialize(&mut config_stream)
-                .expect("Expected config to be deserialized, probably the format is wrong");
-            config
+
+            Config::deserialize(&mut config_stream)
+                .expect("Expected config to be deserialized, probably the format is wrong")
         }
         Err(_) => {
             // TODO: Add a log that you are using defaults
@@ -38,6 +39,7 @@ pub fn read_config(config_file_name: &str) -> Config {
     }
 }
 
+#[allow(dead_code)]
 pub fn trim_result(inp: String, threshold: usize) -> String {
     // number of words in the string should not cross threshold
     // just trim the string
@@ -55,6 +57,8 @@ pub fn trim_result(inp: String, threshold: usize) -> String {
 }
 
 mod test {
+
+    #[cfg(test)]
     use super::*;
 
     #[test]

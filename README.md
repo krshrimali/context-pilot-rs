@@ -1,6 +1,9 @@
 
 # Context Pilot
 
+[![Tests](https://github.com/krshrimali/context-pilot-rs/actions/workflows/tests.yml/badge.svg)](https://github.com/krshrimali/context-pilot-rs/actions/workflows/tests.yml)
+[![Build](https://github.com/krshrimali/context-pilot-rs/actions/workflows/build.yml/badge.svg)](https://github.com/krshrimali/context-pilot-rs/actions/workflows/build.yml)
+
 Just the tool that answers following questions for you:
 
 1. "What all commits ever touched this piece of code?"
@@ -120,3 +123,76 @@ Gives you the relevant commits to the selected piece of code.
 
 - Just search available on VSCode Marketplace with name `contextpilot` under the name of Kushashwa Ravi Shrimali as the publisher :)
 - Extension available here: https://github.com/krshrimali/context-pilot-vscode.
+
+---
+
+## 👨‍💻 Development
+
+### Setting Up Development Environment
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/krshrimali/context-pilot-rs.git
+   cd context-pilot-rs
+   ```
+
+2. **Install dependencies**
+   ```bash
+   rustup component add rustfmt clippy
+   ```
+
+3. **Install git hooks** (recommended)
+   ```bash
+   ./.git-hooks/install-hooks.sh
+   ```
+   
+   This installs a pre-commit hook that:
+   - Automatically checks code formatting before commits
+   - Runs clippy to catch common issues
+   - Prevents commits with formatting errors
+
+### Running Tests
+
+```bash
+# Run all tests (with single thread for git-dependent tests)
+cargo test -- --test-threads=1
+
+# Run specific test suite
+cargo test --test rename_detection -- --test-threads=1
+
+# Run with output
+cargo test -- --test-threads=1 --nocapture
+```
+
+### Code Quality
+
+```bash
+# Format code
+cargo fmt
+
+# Check formatting without modifying files
+cargo fmt --check
+
+# Run clippy
+cargo clippy --all-targets --all-features
+
+# Run clippy with warnings as errors
+cargo clippy --all-targets --all-features -- -D warnings
+```
+
+### Git Hooks
+
+The pre-commit hook ensures code quality before commits. See [.git-hooks/README.md](.git-hooks/README.md) for details.
+
+To bypass the hook (not recommended):
+```bash
+git commit --no-verify
+```
+
+### Continuous Integration
+
+We use GitHub Actions for CI/CD:
+- **Tests workflow**: Runs on every PR and push to main
+- **Build workflow**: Builds on Linux, macOS, and Windows
+
+See [.github/workflows/README.md](.github/workflows/README.md) for details.

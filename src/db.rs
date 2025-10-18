@@ -42,14 +42,14 @@ impl DB {
             let data_buffers = match std::fs::read_to_string(&self.db_file_path) {
                 Ok(s) => s,
                 Err(e) => {
-                    eprintln!("Error reading file: {}", e);
+                    eprintln!("Error reading file: {e}");
                     return HashMap::new();
                 }
             };
             match serde_json::from_str(&data_buffers) {
                 Ok(data) => data,
                 Err(err) => {
-                    eprintln!("Failed to parse JSON: {}", err);
+                    eprintln!("Failed to parse JSON: {err}");
                     HashMap::new()
                 }
             }
@@ -135,17 +135,16 @@ impl DB {
             .unwrap_or_else(|_| panic!("Unable to create folder for: {}", self.folder_path));
 
         // Search for the index
-        let mut db_file_index: Option<Vec<u32>> = None;
-        if curr_file_path.is_none() {
-            db_file_index = self.find_index(workspace_path);
-        } else {
+        let db_file_index: Option<Vec<u32>> = if let Some(curr_file_path) = curr_file_path {
             // convert curr_file_path to an absolute path:
-            let curr_file_path = PathBuf::from(curr_file_path.unwrap());
+            let curr_file_path = PathBuf::from(curr_file_path);
             let curr_file_path = curr_file_path
                 .canonicalize()
                 .unwrap_or_else(|_| panic!("Unable to convert the path to absolute path"));
-            db_file_index = self.find_index(curr_file_path.as_path().to_str().unwrap());
-        }
+            self.find_index(curr_file_path.as_path().to_str().unwrap())
+        } else {
+            self.find_index(workspace_path)
+        };
         if db_file_index.is_none() {
             // No mapping yet - means no indexing hasn't happened yet.
             self.current_data_v2 = HashMap::new();
@@ -166,10 +165,10 @@ impl DB {
             std::path::MAIN_SEPARATOR,
             self.mapping_file_name
         );
-        self.mapping_file_path = String::from(mapping_path.clone());
+        self.mapping_file_path = mapping_path.clone();
         let mapping_path_obj = Path::new(&mapping_path);
         if !mapping_path_obj.exists() {
-            eprintln!("Mapping file does not exist at: {}", mapping_path);
+            eprintln!("Mapping file does not exist at: {mapping_path}");
             self.mapping_data = HashMap::new();
             self.db_file_path = format!(
                 "{}{}{}.json",
@@ -183,15 +182,12 @@ impl DB {
         let mapping_data = match std::fs::read_to_string(&mapping_path) {
             Ok(s) => s,
             Err(e) => {
-                eprintln!("Error reading file: {}: {}", mapping_path, e);
+                eprintln!("Error reading file: {mapping_path}: {e}");
                 return HashMap::new();
             }
         };
         serde_json::from_str(mapping_data.as_str()).unwrap_or_else(|_| {
-            panic!(
-                "Unable to deserialize the mapping file, path: {}",
-                mapping_path
-            )
+            panic!("Unable to deserialize the mapping file, path: {mapping_path}")
         })
     }
 
@@ -207,28 +203,22 @@ impl DB {
         let indexing_path_obj = Path::new(&indexing_path);
         if !indexing_path_obj.exists() {
             // Does not exist: create a new file:
-            eprintln!(
-                "Indexing metadata file does not exist at: {}",
-                indexing_path
-            );
+            eprintln!("Indexing metadata file does not exist at: {indexing_path}");
             // Create an empty file
             if let Err(e) = File::create(&indexing_path) {
-                eprintln!("Error creating file: {}: {}", indexing_path, e);
+                eprintln!("Error creating file: {indexing_path}: {e}");
             }
             return HashMap::new();
         }
         let indexing_data = match std::fs::read_to_string(&indexing_path) {
             Ok(s) => s,
             Err(e) => {
-                eprintln!("Error reading file: {}: {}", indexing_path, e);
+                eprintln!("Error reading file: {indexing_path}: {e}");
                 return HashMap::new();
             }
         };
         serde_json::from_str(indexing_data.as_str()).unwrap_or_else(|_| {
-            panic!(
-                "Unable to deserialize the indexing metadata file, path: {}",
-                indexing_path
-            )
+            panic!("Unable to deserialize the indexing metadata file, path: {indexing_path}")
         })
     }
 
@@ -259,7 +249,7 @@ impl DB {
                 .append(false) // TODO: Would love to append here instead
                 .open(&self.mapping_file_path)
                 .unwrap();
-            writeln!(file, "{}", init_mapping_string)
+            writeln!(file, "{init_mapping_string}")
                 .expect("Couldn't write to the mapping file, wow!");
             return None;
         }
@@ -282,11 +272,11 @@ impl DB {
 
     pub fn append_to_db(
         &mut self,
-        configured_file_path: &String,
+        configured_file_path: &str,
         _: usize,
         all_data: HashMap<u32, AuthorDetailsV2>,
     ) {
-        self.curr_file_path = configured_file_path.clone();
+        self.curr_file_path = configured_file_path.to_string();
         if all_data.is_empty() {
             return;
         }
@@ -331,17 +321,17 @@ impl DB {
         let output_string = serde_json::to_string(&self.current_data_v2);
         let result_string = output_string.expect("Failed to serialize data");
         if let Err(e) = std::fs::write(&db_file_path, result_string.clone()) {
-            eprintln!("❌ Failed writing DB file {}: {}", db_file_path, e);
+            eprintln!("❌ Failed writing DB file {db_file_path}: {e}");
         } else {
-            println!("✅ Successfully stored shard: {}", db_file_path);
+            println!("✅ Successfully stored shard: {db_file_path}");
         }
 
         // Update mapping file
         if let Ok(mut file) = File::create(&self.mapping_file_path) {
             let mapping_string = serde_json::to_string_pretty(&self.mapping_data)
                 .expect("Failed to serialize mapping");
-            if let Err(e) = write!(file, "{}", mapping_string) {
-                eprintln!("❌ Failed writing mapping: {}", e);
+            if let Err(e) = write!(file, "{mapping_string}") {
+                eprintln!("❌ Failed writing mapping: {e}");
             }
         } else {
             eprintln!(
@@ -449,7 +439,7 @@ impl DB {
 
     fn update_last_indexed_commit(
         &mut self,
-        file_path: &String,
+        file_path: &str,
         commit_hash: &str,
     ) -> Result<(), String> {
         // Read the existing indexing metadata
@@ -457,8 +447,8 @@ impl DB {
 
         // Update or create the entry for this file path
         indexing_metadata
-            .entry(file_path.clone())
-            .or_insert_with(Vec::new)
+            .entry(file_path.to_string())
+            .or_default()
             .push(commit_hash.to_string());
 
         // Write back to the indexing metadata file
@@ -471,21 +461,21 @@ impl DB {
 
         // Serialize the updated metadata
         let indexing_string = serde_json::to_string_pretty(&indexing_metadata)
-            .map_err(|e| format!("Failed to serialize indexing metadata: {}", e))?;
+            .map_err(|e| format!("Failed to serialize indexing metadata: {e}"))?;
 
         // Write to file
         std::fs::write(&indexing_path, indexing_string)
-            .map_err(|e| format!("Failed to write indexing metadata: {}", e))?;
+            .map_err(|e| format!("Failed to write indexing metadata: {e}"))?;
 
         Ok(())
     }
 
-    fn prepare_indexing_metadata(&mut self, file_path: &String, last_commit_hash: &Option<String>) {
+    fn prepare_indexing_metadata(&mut self, file_path: &str, last_commit_hash: &Option<String>) {
         // If we have a valid commit hash, update the indexing metadata
-        if let Some(commit) = last_commit_hash {
-            if let Err(e) = self.update_last_indexed_commit(file_path, commit) {
-                eprintln!("Failed to update indexing metadata: {}", e);
-            }
+        if let Some(commit) = last_commit_hash
+            && let Err(e) = self.update_last_indexed_commit(file_path, commit)
+        {
+            eprintln!("Failed to update indexing metadata: {e}");
         }
     }
 
@@ -495,7 +485,7 @@ impl DB {
             // Means, cover the whole file.
             // end_number should be the last line number of the file.
             end_line_number = std::fs::read_to_string(&file_path)
-                .unwrap_or_else(|_| panic!("Unable to read the file: {}", file_path))
+                .unwrap_or_else(|_| panic!("Unable to read the file: {file_path}"))
                 .lines()
                 .count();
         }
@@ -529,7 +519,7 @@ impl DB {
             let last_commit_hash = commit_hashes.last().unwrap().to_string();
             self.prepare_indexing_metadata(&file_path, &Some(last_commit_hash));
             for (path, count) in counter_for_paths.iter() {
-                println!("{} - {} occurrences", path, count);
+                println!("{path} - {count} occurrences");
             }
         } else {
             // Generally - check first if the last indexed commit is the same as the current one.
@@ -541,17 +531,17 @@ impl DB {
                 indexing_metadata
                     .get(&file_path.clone())
                     .unwrap_or_else(|| {
-                        panic!("No indexing metadata found for the file: {}", file_path);
+                        panic!("No indexing metadata found for the file: {file_path}");
                     });
             let last_indexed_commit = last_indexing_data.last().cloned();
-            if last_indexed_commit.is_some() {
-                if last_indexed_commit.clone().unwrap().eq(&recent_commit) {
+            if let Some(last_indexed_commit) = last_indexed_commit {
+                if last_indexed_commit.eq(&recent_commit) {
                     // No need to index again, just return the data from the DB.
                     // eprintln!("No new commits to index, returning existing data.");
                 } else {
                     // Index the new commits and update the DB.
                     // First get the new commits that have not been indexed yet.
-                    let commits_to_index = get_commits_after(last_indexed_commit.unwrap());
+                    let commits_to_index = get_commits_after(last_indexed_commit);
                     // Index these commits first.
                     perform_for_whole_file(file_path.clone(), false, Some(commits_to_index), None)
                         .await;
@@ -562,7 +552,7 @@ impl DB {
                 self.exists_and_return(&start_number, &end_line_number);
 
             for (path, count) in relevant_paths_with_counter.iter() {
-                println!("{} - {} occurrences", path, count);
+                println!("{path} - {count} occurrences");
             }
         }
     }
@@ -578,7 +568,7 @@ impl DB {
             // Means, cover the whole file.
             // end_number should be the last line number of the file.
             end_line_number = std::fs::read_to_string(&file_path)
-                .unwrap_or_else(|_| panic!("Unable to read the file: {}", file_path))
+                .unwrap_or_else(|_| panic!("Unable to read the file: {file_path}"))
                 .lines()
                 .count();
         }
@@ -599,7 +589,7 @@ impl DB {
             }
             // Get commit descriptions for these hashes
             let out = get_commit_descriptions(commit_hashes);
-            println!("{:?}", out);
+            println!("{out:?}");
         } else {
             // Generally - check first if the last indexed commit is the same as the current one.
             // If it is, then we can just return the data from the DB.
@@ -610,17 +600,17 @@ impl DB {
                 indexing_metadata
                     .get(&file_path.clone())
                     .unwrap_or_else(|| {
-                        panic!("No indexing metadata found for the file: {}", file_path);
+                        panic!("No indexing metadata found for the file: {file_path}");
                     });
             let last_indexed_commit = last_indexing_data.last().cloned();
-            if last_indexed_commit.is_some() {
-                if last_indexed_commit.clone().unwrap().eq(&recent_commit) {
+            if let Some(last_indexed_commit) = last_indexed_commit {
+                if last_indexed_commit.eq(&recent_commit) {
                     // No need to index again, just return the data from the DB.
                     // eprintln!("No new commits to index, returning existing data.");
                 } else {
                     // Index the new commits and update the DB.
                     // First get the new commits that have not been indexed yet.
-                    let commits_to_index = get_commits_after(last_indexed_commit.unwrap());
+                    let commits_to_index = get_commits_after(last_indexed_commit);
                     // Index these commits first.
                     perform_for_whole_file(file_path.clone(), false, Some(commits_to_index), None)
                         .await;
@@ -630,7 +620,7 @@ impl DB {
                 self.raw_exists_and_return(&start_number, &end_line_number);
 
             let out = get_commit_descriptions(commit_hashes);
-            println!("{:?}", out);
+            println!("{out:?}");
         }
     }
 }

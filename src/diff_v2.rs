@@ -10,7 +10,6 @@ pub struct LineDetail {
 pub enum ChangeType {
     Added,
     Deleted,
-    Modified,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,7 +32,7 @@ impl Default for LineChange {
     }
 }
 
-fn is_similar(line_content: &str, added_line_content: &str) -> bool {
+fn is_similar(_line_content: &str, _added_line_content: &str) -> bool {
     // Check if the line content is similar to the added line content.
     // For now, just check if they are equal.
     // if strsim::levenshtein(line_content, added_line_content) > 5 {
@@ -41,7 +40,7 @@ fn is_similar(line_content: &str, added_line_content: &str) -> bool {
     // } else {
     //     return true;
     // }
-    return true;
+    true
 }
 
 fn find_replacements(deleted_content: Vec<String>, added_content: Vec<String>) -> Vec<u32> {
@@ -256,7 +255,7 @@ pub fn reorder_map(
                         let to_remove = map.get(&l_no);
                         if to_remove.is_none() {
                             // Post this, there's nothing to find.
-                            panic!("Line number {} not found in map", l_no);
+                            panic!("Line number {l_no} not found in map");
                         }
                         to_remove_map.insert(new_idx, to_remove.unwrap().to_vec());
                     }
@@ -368,7 +367,7 @@ pub fn reorder_map(
                         let new_idx: i32 = l_no as i32 + diff; // diff is negative here.
                         let to_remove = map.remove(&l_no);
                         if to_remove.is_none() {
-                            panic!("Line number {} not found in map", l_no);
+                            panic!("Line number {l_no} not found in map");
                         }
                         to_remove_map.insert(new_idx as u32, to_remove.unwrap());
                     }
@@ -396,7 +395,7 @@ pub fn reorder_map(
                     let to_remove = map.remove(&l_no);
                     if to_remove.is_none() {
                         // Post this, there's nothing to find.
-                        panic!("Line number {} not found in map", l_no);
+                        panic!("Line number {l_no} not found in map");
                     }
                     to_remove_map.insert(new_idx, to_remove.unwrap());
                 }
@@ -408,7 +407,8 @@ pub fn reorder_map(
         }
         Some(DiffCases::FewLinesDeleted) => {
             let s_line_no = line_change_after.start_line_number + 1;
-            let e_line_no = line_change_after.start_line_number + line_change_before.change_count + 1;
+            let e_line_no =
+                line_change_after.start_line_number + line_change_before.change_count + 1;
 
             // Remove all lines b/w s_line_no and e_line_no (exclusive).
             for l_no in s_line_no..e_line_no {
@@ -422,7 +422,7 @@ pub fn reorder_map(
                     let to_remove = map.remove(&l_no);
                     if to_remove.is_none() {
                         // Post this, there's nothing to find.
-                        panic!("Line number {} not found in map", l_no);
+                        panic!("Line number {l_no} not found in map");
                     }
                     to_remove_map.insert(new_idx, to_remove.unwrap());
                 }
@@ -482,7 +482,7 @@ pub fn reorder_map(
                         map.len()
                     );
                 }
-                if map.get(&(i as u32)).unwrap()[0].commit_hashes.len() == 0 {
+                if map.get(&(i as u32)).unwrap()[0].commit_hashes.is_empty() {
                     panic!(
                         "Line number {} not found in map with map len: {}",
                         i,
@@ -504,7 +504,7 @@ pub fn reorder_map(
                     let new_idx = l_no + line_change_after.change_count;
                     let to_remove = map.remove(&l_no);
                     if to_remove.is_none() {
-                        panic!("Line number {} not found in map", l_no);
+                        panic!("Line number {l_no} not found in map");
                     }
                     to_remove_map.insert(new_idx, to_remove.unwrap());
                 }
@@ -587,7 +587,7 @@ fn parse_diff(
     commit_hash: String,
     commit_diff: String,
     map: &mut HashMap<u32, Vec<LineDetail>>,
-    file_name: &str,
+    _file_name: &str,
 ) -> Result<(), String> {
     // Cases possible:
     //
@@ -600,7 +600,7 @@ fn parse_diff(
     // -159 +96 -> a single line was replaced with another single line.
     // -169,0 +104,3 -> new lines were added.
     let mut all_lines = commit_diff.lines();
-    while true {
+    loop {
         let line = all_lines.next();
         if line.is_none() {
             break;
@@ -646,15 +646,14 @@ fn parse_diff(
             // lines if change_type == ChangeType::Addded.
             // reorder_map(commit_hash.clone(), category, map, line_before, line_after);
         }
-        if line_before.is_some() && line_after.is_some() {
+        if let (Some(line_before_val), Some(line_after_val)) = (&line_before, &line_after) {
             if map.is_empty() {
-                let l_after = line_after.unwrap();
                 _ = read_content(
                     &mut all_lines,
-                    line_before.unwrap().change_count,
-                    l_after.change_count,
+                    line_before_val.change_count,
+                    line_after_val.change_count,
                     map,
-                    Some(l_after.start_line_number),
+                    Some(line_after_val.start_line_number),
                     commit_hash.clone(),
                 );
                 for i in 1..map.len() {
@@ -665,7 +664,7 @@ fn parse_diff(
                             map.len()
                         );
                     }
-                    if map.get(&(i as u32)).unwrap()[0].commit_hashes.len() == 0 {
+                    if map.get(&(i as u32)).unwrap()[0].commit_hashes.is_empty() {
                         panic!(
                             "Line number {} not found in map with map len: {}",
                             i,
@@ -682,7 +681,7 @@ fn parse_diff(
                             map.len()
                         );
                     }
-                    if map.get(&(i as u32)).unwrap()[0].commit_hashes.len() == 0 {
+                    if map.get(&(i as u32)).unwrap()[0].commit_hashes.is_empty() {
                         panic!(
                             "Line number {} not found in map with map len: {}",
                             i,
@@ -706,7 +705,7 @@ fn parse_diff(
                             map.len()
                         );
                     }
-                    if map.get(&(i as u32)).unwrap()[0].commit_hashes.len() == 0 {
+                    if map.get(&(i as u32)).unwrap()[0].commit_hashes.is_empty() {
                         panic!(
                             "Line number {} not found in map with map len: {}",
                             i,
@@ -719,16 +718,16 @@ fn parse_diff(
                 // In any case -> line_after should have the content of the new lines.
                 // So make sure to replace here with added_content:
                 let mut line_after = line_after.clone();
-                line_after.as_mut().map(|x| {
+                if let Some(x) = line_after.as_mut() {
                     x.changed_content = added_content.clone();
-                });
+                }
                 let mut replaced_content_line_numbers =
                     find_replacements(deleted_content, added_content);
                 // Now for each of these replaced_content_line_numbers - add start_line_number from
                 // line_after, as they were just indices before.
                 let l_after_start_line_no = line_after.clone().unwrap().start_line_number;
                 replaced_content_line_numbers.iter_mut().for_each(|x| {
-                    *x = l_after_start_line_no + *x;
+                    *x += l_after_start_line_no;
                 });
                 // Increase line numbers for both line after and line before by 1.
                 reorder_map(
@@ -760,7 +759,7 @@ fn parse_diff(
                             map.len()
                         );
                     }
-                    if map.get(&(i as u32)).unwrap()[0].commit_hashes.len() == 0 {
+                    if map.get(&(i as u32)).unwrap()[0].commit_hashes.is_empty() {
                         panic!(
                             "Line number {} not found in map with map len: {}",
                             i,
@@ -785,28 +784,27 @@ pub fn extract_commit_hashes(
     map: &mut HashMap<u32, Vec<LineDetail>>,
     file_name: &str,
 ) {
-    let mut output: std::process::Output;
-    if parent_commit_hash.is_empty() {
+    let output = if parent_commit_hash.is_empty() {
         // Call git show --unified=0 for the commit_hash and extract line->[commit_hash...] list.
-        output = std::process::Command::new("git")
+        std::process::Command::new("git")
             .arg("show")
             .arg("--unified=0")
             .arg(commit_hash)
             .arg("--")
             .arg(file_name)
             .output()
-            .expect("Failed to execute command");
+            .expect("Failed to execute command")
     } else {
         // perform git diff b/w the parnt commit and the commit_hash.
-        output = std::process::Command::new("git")
+        std::process::Command::new("git")
             .arg("diff")
-            .arg(format!("{}..{}", parent_commit_hash, commit_hash))
+            .arg(format!("{parent_commit_hash}..{commit_hash}"))
             .arg("--unified=0")
             .arg("--")
             .arg(file_name)
             .output()
-            .expect("Failed to execute command");
-    }
+            .expect("Failed to execute command")
+    };
     if output.status.success() {
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         // Pass the commit diff and reorder the map accordingly.

@@ -1,14 +1,10 @@
-use contextpilot::contextgpt_structs::{AuthorDetailsV2, RequestTypeOptions};
-use contextpilot::db::DB;
 use contextpilot::algo_loc::perform_for_whole_file;
-use contextpilot::git_command_algo;
-use std::collections::HashMap;
+use contextpilot::db::DB;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
-use tempfile::tempdir;
-use std::process::Command;
 use std::path::Path;
-use std::sync::Arc;
+use std::process::Command;
+use tempfile::tempdir;
 
 // Helper function to initialize a git repository
 fn init_git_repo(dir_path: &Path) {
@@ -75,7 +71,7 @@ async fn test_index_file_mode() {
     writeln!(file, "Test content line 3").expect("Failed to write to test file");
 
     // Commit the file to get a commit hash
-    let commit_hash = commit_file(repo_dir, &file_path, "Initial commit");
+    let _ = commit_file(repo_dir, &file_path, "Initial commit");
 
     // Mock the home directory and DB folder structure
     let home_dir = temp_dir.path().join("home");
@@ -111,7 +107,8 @@ async fn test_index_file_mode() {
         true,
         None,
         Some(workspace_name.to_string()),
-    ).await;
+    )
+    .await;
 
     // Only store and query if there are results
     if !result.is_empty() {
@@ -150,7 +147,7 @@ async fn test_index_file_mode_with_existing_index() {
     writeln!(file, "Test content line 3").expect("Failed to write to test file");
 
     // Commit the file to get a commit hash
-    let commit_hash = commit_file(repo_dir, &file_path, "Initial commit");
+    let _ = commit_file(repo_dir, &file_path, "Initial commit");
 
     // Mock the home directory and DB folder structure
     let home_dir = temp_dir.path().join("home");
@@ -182,7 +179,8 @@ async fn test_index_file_mode_with_existing_index() {
         true,
         None,
         Some(workspace_name.to_string()),
-    ).await;
+    )
+    .await;
 
     // Only store and query if there are results
     if !result1.is_empty() {
@@ -192,14 +190,13 @@ async fn test_index_file_mode_with_existing_index() {
 
         // Modify the file
         let mut file = OpenOptions::new()
-            .write(true)
             .append(true)
             .open(&file_path)
             .expect("Failed to open test file for appending");
         writeln!(file, "Test content line 4").expect("Failed to append to test file");
 
         // Commit the changes
-        let new_commit_hash = commit_file(repo_dir, &file_path, "Second commit");
+        let _ = commit_file(repo_dir, &file_path, "Second commit");
 
         // Index the file again
         let result2 = perform_for_whole_file(
@@ -207,7 +204,8 @@ async fn test_index_file_mode_with_existing_index() {
             true,
             None,
             Some(workspace_name.to_string()),
-        ).await;
+        )
+        .await;
 
         // Only store and query if there are results
         if !result2.is_empty() {
@@ -245,7 +243,6 @@ async fn test_index_file_mode_with_specific_commits() {
 
     // Modify the file
     let mut file = OpenOptions::new()
-        .write(true)
         .append(true)
         .open(&file_path)
         .expect("Failed to open test file for appending");
@@ -284,7 +281,8 @@ async fn test_index_file_mode_with_specific_commits() {
         true,
         Some(vec![commit_hash1.clone(), commit_hash2.clone()]),
         Some(workspace_name.to_string()),
-    ).await;
+    )
+    .await;
 
     // Only store and query if there are results
     if !result.is_empty() {
@@ -318,8 +316,8 @@ async fn test_index_file_mode_does_not_affect_workspace_indexing() {
     writeln!(file2, "Test content file 2").expect("Failed to write to test file 2");
 
     // Commit the files
-    let commit_hash1 = commit_file(repo_dir, &file_path1, "Commit file 1");
-    let commit_hash2 = commit_file(repo_dir, &file_path2, "Commit file 2");
+    let _ = commit_file(repo_dir, &file_path1, "Commit file 1");
+    let _ = commit_file(repo_dir, &file_path2, "Commit file 2");
 
     // Mock the home directory and DB folder structure
     let home_dir = temp_dir.path().join("home");
@@ -351,7 +349,8 @@ async fn test_index_file_mode_does_not_affect_workspace_indexing() {
         true,
         None,
         Some(workspace_name.to_string()),
-    ).await;
+    )
+    .await;
 
     // Only store and query if there are results
     if !result1.is_empty() {
@@ -378,7 +377,8 @@ async fn test_index_file_mode_does_not_affect_workspace_indexing() {
         true,
         None,
         Some(workspace_name.to_string()),
-    ).await;
+    )
+    .await;
 
     // Only store and query if there are results
     if !result2.is_empty() {
