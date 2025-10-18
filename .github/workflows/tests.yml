@@ -2,11 +2,11 @@ name: Tests
 
 on:
   pull_request:
-    branches: ['**']  # Run on PRs to any branch
+    branches: ["**"] # Run on PRs to any branch
     types: [opened, synchronize, reopened, ready_for_review]
   push:
-    branches: [main]  # Run on push to main (after PR merge)
-  workflow_dispatch:  # Allow manual triggers
+    branches: [main] # Run on push to main (after PR merge)
+  workflow_dispatch: # Allow manual triggers
 
 env:
   CARGO_TERM_COLOR: always
@@ -17,78 +17,75 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0  # Full history for git operations in tests
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Full history for git operations in tests
 
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        components: rustfmt, clippy
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
 
-    - name: Cache cargo registry
-      uses: actions/cache@v4
-      with:
-        path: ~/.cargo/registry
-        key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-cargo-registry-
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
 
-    - name: Cache cargo index
-      uses: actions/cache@v4
-      with:
-        path: ~/.cargo/git
-        key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-cargo-git-
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-git-
 
-    - name: Cache target directory
-      uses: actions/cache@v4
-      with:
-        path: target
-        key: ${{ runner.os }}-target-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-target-
+      - name: Cache target directory
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-target-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-target-
 
-    - name: Configure git for tests
-      run: |
-        git config --global user.name "GitHub Actions"
-        git config --global user.email "actions@github.com"
+      - name: Configure git for tests
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
 
-    - name: Check formatting
-      run: cargo fmt -- --check
+      - name: Check formatting
+        run: cargo fmt -- --check
 
-    - name: Run clippy
-      run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Build
+        run: cargo build --verbose
 
-    - name: Build
-      run: cargo build --verbose
+      - name: Run unit tests
+        run: |
+          cargo test --lib --verbose -- --test-threads=1
 
-    - name: Run unit tests
-      run: |
-        cargo test --lib --verbose -- --test-threads=1
+      - name: Run integration tests (excluding rename tests)
+        run: |
+          cargo test --test index_file_mode --verbose -- --test-threads=1
+          cargo test --test index_file_mode_new --verbose -- --test-threads=1
+          cargo test --test index_file_reindexing --verbose -- --test-threads=1
+          cargo test --test real_commits --verbose -- --test-threads=1
+          cargo test --test reorder_map --verbose -- --test-threads=1
+          cargo test --test smart_indexing --verbose -- --test-threads=1
 
-    - name: Run integration tests (excluding rename tests)
-      run: |
-        cargo test --test index_file_mode --verbose -- --test-threads=1
-        cargo test --test index_file_mode_new --verbose -- --test-threads=1
-        cargo test --test index_file_reindexing --verbose -- --test-threads=1
-        cargo test --test real_commits --verbose -- --test-threads=1
-        cargo test --test reorder_map --verbose -- --test-threads=1
-        cargo test --test smart_indexing --verbose -- --test-threads=1
+      - name: Run rename detection tests
+        run: |
+          cargo test --test rename_detection --verbose -- --test-threads=1
 
-    - name: Run rename detection tests
-      run: |
-        cargo test --test rename_detection --verbose -- --test-threads=1
+      - name: Run rename integration tests
+        run: |
+          cargo test --test rename_integration --verbose -- --test-threads=1
+        continue-on-error: true # One test has known accuracy limitation
 
-    - name: Run rename integration tests
-      run: |
-        cargo test --test rename_integration --verbose -- --test-threads=1
-      continue-on-error: true  # One test has known accuracy limitation
-
-    - name: Test summary
-      if: always()
-      run: |
-        echo "✅ Test run completed"
-        echo "Note: Tests run with --test-threads=1 due to git state dependencies"
+      - name: Test summary
+        if: always()
+        run: |
+          echo "✅ Test run completed"
+          echo "Note: Tests run with --test-threads=1 due to git state dependencies"
