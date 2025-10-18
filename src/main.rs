@@ -347,8 +347,8 @@ impl Server {
         gitignore_builder.add(".gitignore");
         let gitignore = gitignore_builder.build();
         let mut gitignore_builder_obj: Option<Gitignore> = None;
-        if gitignore.is_ok() {
-            gitignore_builder_obj = Some(gitignore.unwrap());
+        if let Ok(gitignore_val) = gitignore {
+            gitignore_builder_obj = Some(gitignore_val);
         }
 
         if !self.state_db_handler.metadata.folders_to_index.is_empty() {
