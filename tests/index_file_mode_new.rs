@@ -1,14 +1,14 @@
+use contextpilot::algo_loc::perform_for_whole_file;
 use contextpilot::contextgpt_structs::{AuthorDetailsV2, RequestTypeOptions};
 use contextpilot::db::DB;
-use contextpilot::algo_loc::perform_for_whole_file;
 use contextpilot::git_command_algo;
 use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
-use tempfile::tempdir;
-use std::process::Command;
 use std::path::Path;
+use std::process::Command;
 use std::sync::Arc;
+use tempfile::tempdir;
 
 // Helper function to initialize a git repository
 fn init_git_repo(dir_path: &Path) {
@@ -111,7 +111,8 @@ async fn test_index_file_mode() {
         true,
         None,
         Some(workspace_name.to_string()),
-    ).await;
+    )
+    .await;
 
     // Only store and query if there are results
     if !result.is_empty() {
@@ -182,7 +183,8 @@ async fn test_index_file_mode_with_existing_index() {
         true,
         None,
         Some(workspace_name.to_string()),
-    ).await;
+    )
+    .await;
 
     // Only store and query if there are results
     if !result1.is_empty() {
@@ -207,7 +209,8 @@ async fn test_index_file_mode_with_existing_index() {
             true,
             None,
             Some(workspace_name.to_string()),
-        ).await;
+        )
+        .await;
 
         // Only store and query if there are results
         if !result2.is_empty() {
@@ -284,7 +287,8 @@ async fn test_index_file_mode_with_specific_commits() {
         true,
         Some(vec![commit_hash1.clone(), commit_hash2.clone()]),
         Some(workspace_name.to_string()),
-    ).await;
+    )
+    .await;
 
     // Only store and query if there are results
     if !result.is_empty() {
@@ -351,7 +355,8 @@ async fn test_index_file_mode_does_not_affect_workspace_indexing() {
         true,
         None,
         Some(workspace_name.to_string()),
-    ).await;
+    )
+    .await;
 
     // Only store and query if there are results
     if !result1.is_empty() {
@@ -378,7 +383,8 @@ async fn test_index_file_mode_does_not_affect_workspace_indexing() {
         true,
         None,
         Some(workspace_name.to_string()),
-    ).await;
+    )
+    .await;
 
     // Only store and query if there are results
     if !result2.is_empty() {

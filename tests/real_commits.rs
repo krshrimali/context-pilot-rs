@@ -25,9 +25,7 @@ mod tests_real_commits {
                 &parent_commit_hash,
                 commit_hash,
                 &mut map,
-                "src/main.rs"
-                    .to_string()
-                    .as_str(),
+                "src/main.rs".to_string().as_str(),
             );
             parent_commit_hash = commit_hash.to_string();
         }
@@ -140,11 +138,7 @@ mod tests_real_commits {
         println!("Sorted map:");
         for line_number in sorted_keys.iter() {
             let line_detail = sorted_map.get(line_number).unwrap();
-            println!(
-                "Line {}: {:?}",
-                line_number,
-                line_detail
-            );
+            println!("Line {}: {:?}", line_number, line_detail);
         }
 
         println!(

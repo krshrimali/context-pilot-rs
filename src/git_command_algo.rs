@@ -7,10 +7,7 @@ use crate::git_command_algo;
 use std::collections::{HashMap, HashSet};
 use std::process::{Command, Stdio};
 
-pub fn print_all_valid_directories(
-    workspace_dir: String,
-    gitignore_file_name: Option<String>,
-) {
+pub fn print_all_valid_directories(workspace_dir: String, gitignore_file_name: Option<String>) {
     // Prints all the valid files to stdout - used by plugins
     // optionally to get files that are to be indexed.
     // if gitignore_file_name.is_none() {
@@ -116,7 +113,6 @@ pub fn get_files_changed(commit_hash: &str) -> Vec<String> {
     files_changed
 }
 
-
 pub async fn index_some_commits(
     origin_file_path: String,
     commits_to_index: Vec<String>,
@@ -126,7 +122,12 @@ pub async fn index_some_commits(
     let mut map: HashMap<u32, Vec<diff_v2::LineDetail>> = HashMap::new();
     let mut parent_commit_hash: String = String::from("");
     for commit_hash in commits_to_index.iter() {
-        diff_v2::extract_commit_hashes(&parent_commit_hash, commit_hash, &mut map, origin_file_path.as_str());
+        diff_v2::extract_commit_hashes(
+            &parent_commit_hash,
+            commit_hash,
+            &mut map,
+            origin_file_path.as_str(),
+        );
         parent_commit_hash = commit_hash.clone();
     }
     // Map has populated "relevant commit hashes" for each line.
@@ -155,7 +156,12 @@ pub async fn extract_details_parallel(file_path: String) -> HashMap<u32, AuthorD
     let mut map: HashMap<u32, Vec<diff_v2::LineDetail>> = HashMap::new();
     let mut parent_commit_hash: String = String::from("");
     for commit_hash in commit_hashes.iter() {
-        diff_v2::extract_commit_hashes(&parent_commit_hash, commit_hash, &mut map, file_path.as_str());
+        diff_v2::extract_commit_hashes(
+            &parent_commit_hash,
+            commit_hash,
+            &mut map,
+            file_path.as_str(),
+        );
         parent_commit_hash = commit_hash.clone();
     }
     // Map has populated "relevant commit hashes" for each line.

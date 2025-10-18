@@ -8,4 +8,4 @@ pub const CONFIG_FILE_NAME: &str = "context_pilot.json";
 pub const OUTPUT_COUNT_THRESHOLD: usize = 10;
 
 //  Options supported:
-//  - 
+//  -

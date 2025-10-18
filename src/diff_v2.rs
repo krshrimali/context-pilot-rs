@@ -408,7 +408,8 @@ pub fn reorder_map(
         }
         Some(DiffCases::FewLinesDeleted) => {
             let s_line_no = line_change_after.start_line_number + 1;
-            let e_line_no = line_change_after.start_line_number + line_change_before.change_count + 1;
+            let e_line_no =
+                line_change_after.start_line_number + line_change_before.change_count + 1;
 
             // Remove all lines b/w s_line_no and e_line_no (exclusive).
             for l_no in s_line_no..e_line_no {

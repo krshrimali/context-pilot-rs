@@ -1,14 +1,14 @@
+use contextpilot::algo_loc::perform_for_whole_file;
 use contextpilot::contextgpt_structs::{AuthorDetailsV2, RequestTypeOptions};
 use contextpilot::db::DB;
-use contextpilot::algo_loc::perform_for_whole_file;
 use contextpilot::git_command_algo;
 use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
-use tempfile::tempdir;
-use std::process::Command;
 use std::path::Path;
+use std::process::Command;
 use std::sync::Arc;
+use tempfile::tempdir;
 
 // Helper function to initialize a git repository
 fn init_git_repo(dir_path: &Path) {
@@ -82,7 +82,9 @@ async fn test_index_file_mode() {
     fs::create_dir_all(&home_dir).expect("Failed to create home directory");
 
     // Set up environment for testing
-    unsafe { std::env::set_var("HOME", home_dir.to_str().unwrap()); }
+    unsafe {
+        std::env::set_var("HOME", home_dir.to_str().unwrap());
+    }
 
     // Create workspace path and DB folder
     let workspace_name = "test_workspace";
@@ -109,10 +111,14 @@ async fn test_index_file_mode() {
         true,
         None,
         Some(workspace_name.to_string()),
-    ).await;
+    )
+    .await;
 
     // Verify that the result contains data
-    assert!(!result.is_empty(), "Expected non-empty result after indexing");
+    assert!(
+        !result.is_empty(),
+        "Expected non-empty result after indexing"
+    );
 
     // Store the result in the DB
     db.append_to_db(&file_path_str, 0, result.clone());
@@ -153,7 +159,9 @@ async fn test_index_file_mode_with_existing_index() {
     fs::create_dir_all(&home_dir).expect("Failed to create home directory");
 
     // Set up environment for testing
-    unsafe { std::env::set_var("HOME", home_dir.to_str().unwrap()); }
+    unsafe {
+        std::env::set_var("HOME", home_dir.to_str().unwrap());
+    }
 
     // Create workspace path and DB folder
     let workspace_name = "test_workspace";
@@ -176,7 +184,8 @@ async fn test_index_file_mode_with_existing_index() {
         true,
         None,
         Some(workspace_name.to_string()),
-    ).await;
+    )
+    .await;
 
     // Store the result in the DB
     db.append_to_db(&file_path_str, 0, result1.clone());
@@ -199,10 +208,14 @@ async fn test_index_file_mode_with_existing_index() {
         true,
         None,
         Some(workspace_name.to_string()),
-    ).await;
+    )
+    .await;
 
     // Verify that the result contains data
-    assert!(!result2.is_empty(), "Expected non-empty result after re-indexing");
+    assert!(
+        !result2.is_empty(),
+        "Expected non-empty result after re-indexing"
+    );
 
     // Store the result in the DB
     db.append_to_db(&file_path_str, 0, result2.clone());
@@ -246,7 +259,9 @@ async fn test_index_file_mode_with_specific_commits() {
     fs::create_dir_all(&home_dir).expect("Failed to create home directory");
 
     // Set up environment for testing
-    unsafe { std::env::set_var("HOME", home_dir.to_str().unwrap()); }
+    unsafe {
+        std::env::set_var("HOME", home_dir.to_str().unwrap());
+    }
 
     // Create workspace path and DB folder
     let workspace_name = "test_workspace";
@@ -269,10 +284,14 @@ async fn test_index_file_mode_with_specific_commits() {
         true,
         Some(vec![commit_hash1.clone(), commit_hash2.clone()]),
         Some(workspace_name.to_string()),
-    ).await;
+    )
+    .await;
 
     // Verify that the result contains data
-    assert!(!result.is_empty(), "Expected non-empty result after indexing with specific commits");
+    assert!(
+        !result.is_empty(),
+        "Expected non-empty result after indexing with specific commits"
+    );
 
     // Store the result in the DB
     db.append_to_db(&file_path_str, 0, result.clone());
@@ -309,7 +328,9 @@ async fn test_index_file_mode_does_not_affect_workspace_indexing() {
     fs::create_dir_all(&home_dir).expect("Failed to create home directory");
 
     // Set up environment for testing
-    unsafe { std::env::set_var("HOME", home_dir.to_str().unwrap()); }
+    unsafe {
+        std::env::set_var("HOME", home_dir.to_str().unwrap());
+    }
 
     // Create workspace path and DB folder
     let workspace_name = "test_workspace";
@@ -332,7 +353,8 @@ async fn test_index_file_mode_does_not_affect_workspace_indexing() {
         true,
         None,
         Some(workspace_name.to_string()),
-    ).await;
+    )
+    .await;
 
     // Store the result in the DB
     db1.append_to_db(&file_path_str1, 0, result1.clone());
@@ -354,7 +376,8 @@ async fn test_index_file_mode_does_not_affect_workspace_indexing() {
         true,
         None,
         Some(workspace_name.to_string()),
-    ).await;
+    )
+    .await;
 
     // Store the result in the DB
     db2.append_to_db(&file_path_str2, 0, result2.clone());

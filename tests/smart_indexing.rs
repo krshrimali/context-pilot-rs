@@ -1,12 +1,12 @@
-use contextpilot::contextgpt_structs::AuthorDetailsV2;
 use contextpilot::algo_loc::perform_for_whole_file;
+use contextpilot::contextgpt_structs::AuthorDetailsV2;
 use contextpilot::git_command_algo;
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::Write;
-use tempfile::tempdir;
-use std::process::Command;
 use std::path::Path;
+use std::process::Command;
+use tempfile::tempdir;
 
 // Helper function to initialize a git repository
 fn init_git_repo(dir_path: &Path) {
@@ -97,15 +97,14 @@ async fn test_perform_for_whole_file_already_indexed() {
     write!(metadata_file, "{}", metadata_json).expect("Failed to write metadata");
 
     // Call the function under test
-    let result = perform_for_whole_file(
-        file_path_str,
-        true,
-        None,
-        Some(workspace_name.to_string()),
-    ).await;
+    let result =
+        perform_for_whole_file(file_path_str, true, None, Some(workspace_name.to_string())).await;
 
     // Assert that the result is empty since the file is already indexed
-    assert!(result.is_empty(), "Expected empty result for already indexed file");
+    assert!(
+        result.is_empty(),
+        "Expected empty result for already indexed file"
+    );
 }
 
 #[tokio::test]
@@ -149,12 +148,8 @@ async fn test_perform_for_whole_file_needs_indexing() {
     write!(metadata_file, "{}", metadata_json).expect("Failed to write metadata");
 
     // Call the function under test
-    let result = perform_for_whole_file(
-        file_path_str,
-        true,
-        None,
-        Some(workspace_name.to_string()),
-    ).await;
+    let result =
+        perform_for_whole_file(file_path_str, true, None, Some(workspace_name.to_string())).await;
 
     // The result might be empty if there are no commits for the file
     // This is expected behavior for the actual function
@@ -182,12 +177,7 @@ async fn test_perform_for_whole_file_with_specific_commits() {
     let file_path_str = file_path.to_str().unwrap().to_string();
     let commits = vec![commit_hash];
 
-    let result = perform_for_whole_file(
-        file_path_str,
-        true,
-        Some(commits),
-        None,
-    ).await;
+    let result = perform_for_whole_file(file_path_str, true, Some(commits), None).await;
 
     // The result might be empty if there are no commits for the file
     // This is expected behavior for the actual function
@@ -229,15 +219,14 @@ async fn test_perform_for_whole_file_no_metadata_file() {
 
     // Call the function under test
     let file_path_str = file_path.to_str().unwrap().to_string();
-    let result = perform_for_whole_file(
-        file_path_str,
-        true,
-        None,
-        Some(workspace_name.to_string()),
-    ).await;
+    let result =
+        perform_for_whole_file(file_path_str, true, None, Some(workspace_name.to_string())).await;
 
     // Assert that the result is not empty
-    assert!(!result.is_empty(), "Expected non-empty result when no metadata file exists");
+    assert!(
+        !result.is_empty(),
+        "Expected non-empty result when no metadata file exists"
+    );
 }
 
 #[tokio::test]
@@ -274,20 +263,22 @@ async fn test_perform_for_whole_file_file_not_in_metadata() {
     // Create indexing metadata file without the test file
     let indexing_path = db_folder.join("indexing_metadata.json");
     let mut metadata_map = HashMap::new();
-    metadata_map.insert("other_file.txt".to_string(), vec!["some_commit".to_string()]);
+    metadata_map.insert(
+        "other_file.txt".to_string(),
+        vec!["some_commit".to_string()],
+    );
     let metadata_json = serde_json::to_string(&metadata_map).expect("Failed to serialize metadata");
     let mut metadata_file = File::create(&indexing_path).expect("Failed to create metadata file");
     write!(metadata_file, "{}", metadata_json).expect("Failed to write metadata");
 
     // Call the function under test
     let file_path_str = file_path.to_str().unwrap().to_string();
-    let result = perform_for_whole_file(
-        file_path_str,
-        true,
-        None,
-        Some(workspace_name.to_string()),
-    ).await;
+    let result =
+        perform_for_whole_file(file_path_str, true, None, Some(workspace_name.to_string())).await;
 
     // Assert that the result is not empty
-    assert!(!result.is_empty(), "Expected non-empty result when file is not in metadata");
+    assert!(
+        !result.is_empty(),
+        "Expected non-empty result when file is not in metadata"
+    );
 }

@@ -22,8 +22,8 @@ use tokio::sync::Mutex;
 
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use quicli::prelude::{
-    log::{log, Level},
     CliResult,
+    log::{Level, log},
 };
 use tokio::task;
 
@@ -309,7 +309,10 @@ impl Server {
 
             // If the file exists, delete all shards and update mapping data
             if let Some(indices_vec) = indices {
-                log!(Level::Info, "File already exists in DB. Deleting existing shards.");
+                log!(
+                    Level::Info,
+                    "File already exists in DB. Deleting existing shards."
+                );
                 for index in indices_vec {
                     let shard_path = format!("{}/{}.json", workspace_path, index);
                     if Path::new(&shard_path).exists() {
@@ -331,13 +334,19 @@ impl Server {
                 if let Ok(mut file) = std::fs::File::create(&mapping_file_path) {
                     let mapping_string = serde_json::to_string_pretty(&db_locked.mapping_data)
                         .expect("Failed to serialize mapping");
-                    if let Err(e) = std::io::Write::write_fmt(&mut file, format_args!("{}", mapping_string)) {
+                    if let Err(e) =
+                        std::io::Write::write_fmt(&mut file, format_args!("{}", mapping_string))
+                    {
                         log!(Level::Error, "Failed writing mapping: {}", e);
                     } else {
                         log!(Level::Info, "Updated mapping file to remove deleted shards");
                     }
                 } else {
-                    log!(Level::Error, "Failed to create mapping file: {}", mapping_file_path);
+                    log!(
+                        Level::Error,
+                        "Failed to create mapping file: {}",
+                        mapping_file_path
+                    );
                 }
                 drop(db_locked);
             }
@@ -448,7 +457,8 @@ impl Server {
         let mut metadata = self.state_db_handler.get_current_metadata();
 
         // If this is a call to index a single file
-        if request_type.is_some() && request_type.clone().unwrap() == RequestTypeOptions::IndexFile {
+        if request_type.is_some() && request_type.clone().unwrap() == RequestTypeOptions::IndexFile
+        {
             if file_path.is_none() {
                 log!(Level::Error, "No file path provided to index.");
                 return;

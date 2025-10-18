@@ -1,14 +1,14 @@
+use contextpilot::algo_loc::perform_for_whole_file;
 use contextpilot::contextgpt_structs::{AuthorDetailsV2, RequestTypeOptions};
 use contextpilot::db::DB;
-use contextpilot::algo_loc::perform_for_whole_file;
 use contextpilot::git_command_algo;
 use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
-use tempfile::tempdir;
-use std::process::Command;
 use std::path::Path;
+use std::process::Command;
 use std::sync::Arc;
+use tempfile::tempdir;
 
 // Helper function to initialize a git repository
 fn init_git_repo(dir_path: &Path) {
@@ -107,7 +107,8 @@ async fn test_index_file_reindexing() {
         true,
         None,
         Some(workspace_name.to_string()),
-    ).await;
+    )
+    .await;
 
     // Only store and query if there are results
     if !result1.is_empty() {
@@ -124,7 +125,11 @@ async fn test_index_file_reindexing() {
         // Check that the shard files exist
         for index in &indices_before {
             let shard_path = format!("{}/{}.json", db_folder.display(), index);
-            assert!(Path::new(&shard_path).exists(), "Shard file should exist: {}", shard_path);
+            assert!(
+                Path::new(&shard_path).exists(),
+                "Shard file should exist: {}",
+                shard_path
+            );
         }
 
         // Modify the file
@@ -144,7 +149,8 @@ async fn test_index_file_reindexing() {
             true,
             None,
             Some(workspace_name.to_string()),
-        ).await;
+        )
+        .await;
 
         // Only store and query if there are results
         if !result2.is_empty() {
@@ -154,7 +160,10 @@ async fn test_index_file_reindexing() {
 
             // Get the indices for the file after re-indexing
             let indices_after = db.find_index(&file_path_str);
-            assert!(indices_after.is_some(), "File should still be indexed after re-indexing");
+            assert!(
+                indices_after.is_some(),
+                "File should still be indexed after re-indexing"
+            );
             let indices_after = indices_after.unwrap();
             println!("Indices after re-indexing: {:?}", indices_after);
 
@@ -162,14 +171,22 @@ async fn test_index_file_reindexing() {
             for index in &indices_before {
                 if !indices_after.contains(index) {
                     let shard_path = format!("{}/{}.json", db_folder.display(), index);
-                    assert!(!Path::new(&shard_path).exists(), "Old shard file should be deleted: {}", shard_path);
+                    assert!(
+                        !Path::new(&shard_path).exists(),
+                        "Old shard file should be deleted: {}",
+                        shard_path
+                    );
                 }
             }
 
             // Check that the new shard files exist
             for index in &indices_after {
                 let shard_path = format!("{}/{}.json", db_folder.display(), index);
-                assert!(Path::new(&shard_path).exists(), "New shard file should exist: {}", shard_path);
+                assert!(
+                    Path::new(&shard_path).exists(),
+                    "New shard file should exist: {}",
+                    shard_path
+                );
             }
 
             // Test querying the indexed file

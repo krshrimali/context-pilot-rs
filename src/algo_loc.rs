@@ -36,7 +36,8 @@ fn is_already_indexed(origin_file_path: &str, workspace_path: &str, should_print
 
     match read_indexing_metadata(&indexing_path) {
         Ok(metadata) => {
-            if let Some(last_indexed_commit) = get_last_indexed_commit(&metadata, origin_file_path) {
+            if let Some(last_indexed_commit) = get_last_indexed_commit(&metadata, origin_file_path)
+            {
                 if last_indexed_commit == recent_commit {
                     return true;
                 }
