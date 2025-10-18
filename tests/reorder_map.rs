@@ -1,5 +1,5 @@
 use contextpilot::diff_v2::{
-    categorize_diff, fetch_line_numbers, reorder_map, ChangeType, DiffCases, LineChange, LineDetail,
+    ChangeType, DiffCases, LineChange, LineDetail, categorize_diff, fetch_line_numbers, reorder_map,
 };
 use std::collections::HashMap;
 

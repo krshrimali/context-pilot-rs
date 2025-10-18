@@ -10,9 +10,7 @@ mod git_command_algo;
 use crate::{algo_loc::perform_for_whole_file, db::DB};
 use async_recursion::async_recursion;
 use contextgpt_structs::{AuthorDetailsV2, Cli, RequestTypeOptions};
-use git_command_algo::print_all_valid_files;
 use std::collections::HashMap;
-use std::fs::metadata;
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
@@ -22,8 +20,8 @@ use tokio::sync::Mutex;
 
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use quicli::prelude::{
-    log::{log, Level},
     CliResult,
+    log::{Level, log},
 };
 use tokio::task;
 
@@ -46,11 +44,9 @@ impl DBHandler {
         Self { metadata }
     }
 
-    fn _is_eligible(&mut self, _: &PathBuf) -> bool {
+    fn _is_eligible_another_sample(&mut self, _: &PathBuf) -> bool {
         true
-    }
-
-    // TODO: this is something I'm repeating in the server as well
+    } // TODO: this is something I'm repeating in the server as well
     // I should ideally move this to a common place
     // And also store this somewhere so that I don't re-compute
     fn _valid_file_count(&mut self, folder_path: &str) -> i64 {
@@ -59,7 +55,7 @@ impl DBHandler {
             let entry = entry.unwrap();
             let path = entry.path();
             if path.is_file() {
-                if self._is_eligible(&path) {
+                if self._is_eligible_another_sample(&path) {
                     total_count += 1;
                 } else {
                     log!(Level::Warn, "File is not valid: {}", path.display());
@@ -105,6 +101,7 @@ impl DBHandler {
 
 #[derive(Clone)]
 pub struct Server {
+    #[allow(dead_code)]
     state: State,
     curr_db: Option<Arc<Mutex<DB>>>,
     state_db_handler: DBHandler,
@@ -115,8 +112,10 @@ pub struct DBMetadata {
     state: State,
     workspace_path: String,
     folders_to_index: Vec<String>,
+    #[allow(dead_code)]
     curr_progress: i64, // file index you're at OR percentage done
-    total_count: i64,   // how many files are indexing
+    #[allow(dead_code)]
+    total_count: i64, // how many files are indexing
 }
 
 impl DBMetadata {}
@@ -210,7 +209,7 @@ impl Server {
                     });
                 } else if Server::_is_valid_file(&entry_path_path) {
                     log!(Level::Info, "File is valid: {}", entry_path_path.display());
-                    let workspace_path = workspace_path.clone();
+                    let _workspace_path = workspace_path.clone();
                     let w_path = self.state_db_handler.metadata.workspace_path.clone();
                     files_set.spawn({
                         async move { Server::_index_file(entry_path_path.clone(), w_path).await }
@@ -283,7 +282,7 @@ impl Server {
             return;
         }
         let file_path_str = file_path.clone().unwrap();
-        let file_path_buf = PathBuf::from(file_path_str.clone());
+        let file_path_buf = PathBuf::from(file_path_str);
         let file_path_path = file_path_buf.as_path();
         if Server::_is_valid_file(file_path_path) {
             let workspace_path = &metadata.workspace_path;
@@ -292,77 +291,25 @@ impl Server {
                 ..Default::default()
             };
             let curr_db: Arc<Mutex<DB>> = Arc::new(db.into());
-
-            // Initialize the DB
             curr_db
                 .lock()
                 .await
-                .init_db(workspace_path.as_str(), Some(&file_path_str), false);
-
+                .init_db(workspace_path.as_str(), None, false);
             let mut server = Server::new(State::Dead, DBHandler::new(metadata.clone()));
-            server.init_server(curr_db.clone());
+            server.init_server(curr_db);
 
-            // Check if the file already exists in the DB
-            let mut db_locked = curr_db.lock().await;
-            let indices = db_locked.find_index(&file_path_str);
-            drop(db_locked);
-
-            // If the file exists, delete all shards and update mapping data
-            if let Some(indices_vec) = indices {
-                log!(Level::Info, "File already exists in DB. Deleting existing shards.");
-                for index in indices_vec {
-                    let shard_path = format!("{}/{}.json", workspace_path, index);
-                    if Path::new(&shard_path).exists() {
-                        if let Err(e) = std::fs::remove_file(&shard_path) {
-                            log!(Level::Error, "Failed to delete shard {}: {}", shard_path, e);
-                        } else {
-                            log!(Level::Info, "Deleted shard: {}", shard_path);
-                        }
-                    }
-                }
-
-                // Update mapping data to remove references to deleted shards
-                let mut db_locked = curr_db.lock().await;
-                // Remove the file path from the mapping data
-                db_locked.mapping_data.remove(&file_path_str);
-
-                // Write the updated mapping data to disk
-                let mapping_file_path = format!("{}/mapping.json", workspace_path);
-                if let Ok(mut file) = std::fs::File::create(&mapping_file_path) {
-                    let mapping_string = serde_json::to_string_pretty(&db_locked.mapping_data)
-                        .expect("Failed to serialize mapping");
-                    if let Err(e) = std::io::Write::write_fmt(&mut file, format_args!("{}", mapping_string)) {
-                        log!(Level::Error, "Failed writing mapping: {}", e);
-                    } else {
-                        log!(Level::Info, "Updated mapping file to remove deleted shards");
-                    }
-                } else {
-                    log!(Level::Error, "Failed to create mapping file: {}", mapping_file_path);
-                }
-                drop(db_locked);
-            }
-
-            // Index the file
-            let w_path = workspace_path.clone();
-            let out = Server::_index_file(file_path_buf.clone(), w_path).await;
-
-            if !out.is_empty() {
-                let db = server.curr_db.clone().unwrap();
-                let mut db_locked = db.lock().await;
-                let start_line_number = 0;
-
-                // Get the origin file path from the first entry
-                let first_entry = out.values().next().unwrap();
-                let origin_file_path = &first_entry.origin_file_path;
-
-                // Store the output to the DB
-                db_locked.append_to_db(origin_file_path, start_line_number, out.clone());
-                db_locked.store();
-
-                log!(Level::Info, "Successfully indexed file: {}", file_path_str);
-            } else {
-                log!(Level::Warn, "No data to index for file: {}", file_path_str);
-            }
+            //     let out = Server::_index_file(file_path_buf.clone()).await;
+            //     let db = server.curr_db.clone().unwrap();
+            //     let mut db_locked = db.lock().await;
+            //     let start_line_number = 0;
+            //     println!(
+            //         "Indexing file: {} with {} lines",
+            //         file_path_buf.display(),
+            //         out.len()
+            //     );
+            //     db_locked.append_to_db(&out[&0].origin_file_path, start_line_number, out.clone());
+            //     db_locked.store();
+            // }
         }
     }
 
@@ -400,20 +347,21 @@ impl Server {
         gitignore_builder.add(".gitignore");
         let gitignore = gitignore_builder.build();
         let mut gitignore_builder_obj: Option<Gitignore> = None;
-        if gitignore.is_ok() {
-            gitignore_builder_obj = Some(gitignore.unwrap());
+        if let Ok(gitignore_val) = gitignore {
+            gitignore_builder_obj = Some(gitignore_val);
         }
 
         if !self.state_db_handler.metadata.folders_to_index.is_empty() {
             // If subfolders are provided - just index them.
             for subfolder in self.state_db_handler.metadata.folders_to_index.iter() {
-                let subfolder_path = PathBuf::from(format!("{}/{}", workspace_path, subfolder));
+                let subfolder_path = PathBuf::from(format!("{workspace_path}/{subfolder}"));
                 if subfolder_path.exists() {
                     server
                         ._iterate_through_workspace(subfolder_path, gitignore_builder_obj.clone())
                         .await;
                 } else {
-                    log!(Level::Error, "Subfolder does not exist: {}", subfolder);
+                    println!("Subfolder does not exist: {subfolder}");
+                    log!(Level::Error, "Subfolder does not exist: {subfolder}");
                 }
             }
         } else {
@@ -444,23 +392,8 @@ impl Server {
         // this will initialise any required states
         self.state_db_handler.init(workspace_path);
         self.state_db_handler.metadata.folders_to_index =
-            indexing_optional_folders.unwrap_or(vec![]);
+            indexing_optional_folders.unwrap_or_default();
         let mut metadata = self.state_db_handler.get_current_metadata();
-
-        // If this is a call to index a single file
-        if request_type.is_some() && request_type.clone().unwrap() == RequestTypeOptions::IndexFile {
-            if file_path.is_none() {
-                log!(Level::Error, "No file path provided to index.");
-                return;
-            }
-
-            // Initialize the server state
-            self.state_db_handler.start(&metadata);
-
-            // Start indexing the file
-            self.start_file(&mut metadata, file_path).await;
-            return;
-        }
 
         // If this is a call to query and not to index ->
         if request_type.is_some() && request_type.clone().unwrap() == RequestTypeOptions::Query {
@@ -642,16 +575,18 @@ async fn main() -> CliResult {
                 .await;
         }
         RequestTypeOptions::IndexFile => {
-            server
-                .handle_server(
-                    args.folder_path.as_str(),
-                    args.file,
-                    None,
-                    None,
-                    Some(RequestTypeOptions::IndexFile),
-                    None,
-                )
-                .await;
+            todo!("Indexing a single file is not supported yet.");
+            // TODO: @krshrimali - fix this and re-enable.
+            // server
+            //     .handle_server(
+            //         args.folder_path.as_str(),
+            //         args.file,
+            //         None,
+            //         None,
+            //         Some(RequestTypeOptions::IndexFile),
+            //         None,
+            //     )
+            //     .await;
         }
         RequestTypeOptions::Query => {
             server

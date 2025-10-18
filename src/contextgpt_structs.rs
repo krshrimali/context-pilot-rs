@@ -61,6 +61,7 @@ impl FromStr for RequestTypeOptions {
 }
 
 #[derive(Debug, StructOpt)]
+#[allow(dead_code)]
 pub(crate) struct Cli {
     pub folder_path: String,
     pub file: Option<String>,
