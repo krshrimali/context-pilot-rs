@@ -7,6 +7,14 @@ use crate::git_command_algo;
 use std::collections::{HashMap, HashSet};
 use std::process::{Command, Stdio};
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct FileRename {
+    pub old_path: String,
+    pub new_path: String,
+    pub commit_hash: String,
+    pub similarity: u32,
+}
+
 pub fn print_all_valid_directories(workspace_dir: String, gitignore_file_name: Option<String>) {
     // Prints all the valid files to stdout - used by plugins
     // optionally to get files that are to be indexed.
@@ -83,13 +91,29 @@ pub async fn index_some_commits(
     // First get all the commit hashes that ever touched the given file path.
     let mut map: HashMap<u32, Vec<diff_v2::LineDetail>> = HashMap::new();
     let mut parent_commit_hash: String = String::from("");
+    let mut current_file_path = origin_file_path.clone();
+
     for commit_hash in commits_to_index.iter() {
-        diff_v2::extract_commit_hashes(
-            &parent_commit_hash,
-            commit_hash,
-            &mut map,
-            origin_file_path.as_str(),
-        );
+        // Check if this commit contains a rename for our current file
+        if let Some(rename) = detect_rename_in_commit(commit_hash, &current_file_path) {
+            // Process the diff with the new path
+            diff_v2::extract_commit_hashes(
+                &parent_commit_hash,
+                commit_hash,
+                &mut map,
+                current_file_path.as_str(),
+            );
+            // Update current path to the old path for subsequent commits
+            current_file_path = rename.old_path.clone();
+        } else {
+            // Normal commit, no rename
+            diff_v2::extract_commit_hashes(
+                &parent_commit_hash,
+                commit_hash,
+                &mut map,
+                current_file_path.as_str(),
+            );
+        }
         parent_commit_hash = commit_hash.clone();
     }
     // Map has populated "relevant commit hashes" for each line.
@@ -117,13 +141,29 @@ pub async fn extract_details_parallel(file_path: String) -> HashMap<u32, AuthorD
     let commit_hashes = git_command_algo::get_all_commits_for_file(file_path.clone());
     let mut map: HashMap<u32, Vec<diff_v2::LineDetail>> = HashMap::new();
     let mut parent_commit_hash: String = String::from("");
+    let mut current_file_path = file_path.clone();
+
     for commit_hash in commit_hashes.iter() {
-        diff_v2::extract_commit_hashes(
-            &parent_commit_hash,
-            commit_hash,
-            &mut map,
-            file_path.as_str(),
-        );
+        // Check if this commit contains a rename for our current file
+        if let Some(rename) = detect_rename_in_commit(commit_hash, &current_file_path) {
+            // Process the diff with the new path
+            diff_v2::extract_commit_hashes(
+                &parent_commit_hash,
+                commit_hash,
+                &mut map,
+                current_file_path.as_str(),
+            );
+            // Update current path to the old path for subsequent commits
+            current_file_path = rename.old_path.clone();
+        } else {
+            // Normal commit, no rename
+            diff_v2::extract_commit_hashes(
+                &parent_commit_hash,
+                commit_hash,
+                &mut map,
+                current_file_path.as_str(),
+            );
+        }
         parent_commit_hash = commit_hash.clone();
     }
     // Map has populated "relevant commit hashes" for each line.
@@ -231,10 +271,149 @@ pub async fn extract_details_parallel(file_path: String) -> HashMap<u32, AuthorD
     auth_details_map
 }
 
+/// Detects if a file was renamed in a specific commit
+/// Returns Some(FileRename) if a rename was detected, None otherwise
+pub fn detect_rename_in_commit(commit_hash: &str, file_path: &str) -> Option<FileRename> {
+    let mut command = Command::new("git");
+    command.args([
+        "show",
+        "--name-status",
+        "-M",
+        "--pretty=format:",
+        commit_hash,
+        "--",
+    ]);
+
+    let output = command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let stdout_buf = String::from_utf8(output.stdout).ok()?;
+
+    // Parse the output for rename status
+    // Format: R<similarity>\told_path\tnew_path
+    for line in stdout_buf.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        // Check if this is a rename line (starts with R followed by a number)
+        if line.starts_with('R') {
+            let parts: Vec<&str> = line.split('\t').collect();
+            if parts.len() != 3 {
+                continue;
+            }
+
+            let status = parts[0];
+            let old_path = parts[1];
+            let new_path = parts[2];
+
+            // Check if this rename affects our file
+            if new_path == file_path {
+                // Extract similarity percentage
+                let similarity_str = status.trim_start_matches('R');
+                let similarity = similarity_str.parse::<u32>().unwrap_or(100);
+
+                return Some(FileRename {
+                    old_path: old_path.to_string(),
+                    new_path: new_path.to_string(),
+                    commit_hash: commit_hash.to_string(),
+                    similarity,
+                });
+            }
+        }
+    }
+
+    None
+}
+
+/// Gets all file path history for a file, following renames
+/// Returns a vector of (file_path, starting_commit) tuples in chronological order
+#[allow(dead_code)]
+pub fn get_file_rename_history(file_path: String) -> Vec<(String, Option<String>)> {
+    let mut history = vec![];
+    let mut current_path = file_path.clone();
+
+    // Get all commits using --follow flag
+    let mut command = Command::new("git");
+    command.args([
+        "log",
+        "--follow",
+        "--name-status",
+        "-M",
+        "--pretty=format:%h",
+        "--",
+        &current_path,
+    ]);
+
+    let output = match command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+    {
+        Ok(output) => output,
+        Err(_) => return vec![(file_path, None)],
+    };
+
+    if !output.status.success() {
+        return vec![(file_path, None)];
+    }
+
+    let stdout_buf = String::from_utf8(output.stdout).unwrap_or_default();
+    let lines = stdout_buf.lines();
+    let mut last_rename_commit: Option<String> = None;
+
+    // Track the current path we're following
+    history.push((current_path.clone(), None));
+
+    for line in lines {
+        let line = line.trim();
+
+        // Check if this is a commit hash line
+        if !line.is_empty()
+            && !line.starts_with('R')
+            && !line.starts_with('A')
+            && !line.starts_with('M')
+            && !line.starts_with('D')
+        {
+            last_rename_commit = Some(line.to_string());
+            continue;
+        }
+
+        // Check for rename status
+        if line.starts_with('R') {
+            let parts: Vec<&str> = line.split('\t').collect();
+            if parts.len() == 3 {
+                let old_path = parts[1];
+                let new_path = parts[2];
+
+                // If we found a rename for our current path
+                if new_path == current_path {
+                    // Add the old path to history
+                    history.push((old_path.to_string(), last_rename_commit.clone()));
+                    current_path = old_path.to_string();
+                }
+            }
+        }
+    }
+
+    // Reverse to get chronological order (oldest first)
+    history.reverse();
+    history
+}
+
 pub fn get_all_commits_for_file(file_path: String) -> Vec<String> {
     let mut command = Command::new("git");
     command.args([
         "log",
+        "--follow", // Follow renames
         "--pretty=format:%h",
         "--reverse",
         "--",
@@ -258,7 +437,13 @@ pub fn get_all_commits_for_file(file_path: String) -> Vec<String> {
     }
     // Add the last commit hash as well, which is the current state of the file.
     let mut command = Command::new("git");
-    command.args(["log", "--pretty=format:%h", "--", file_path.as_str()]);
+    command.args([
+        "log",
+        "--follow",
+        "--pretty=format:%h",
+        "--",
+        file_path.as_str(),
+    ]);
     let output = command
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
