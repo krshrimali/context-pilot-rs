@@ -22,7 +22,7 @@ pub async fn perform_for_whole_file(
 
 fn is_already_indexed(origin_file_path: &str, workspace_path: &str, should_print: bool) -> bool {
     // Get the latest commit safely
-    let Some(recent_commit) = get_latest_commit(&origin_file_path.to_string()) else {
+    let Some(recent_commit) = get_latest_commit(origin_file_path) else {
         return false;
     };
 
@@ -45,7 +45,7 @@ fn is_already_indexed(origin_file_path: &str, workspace_path: &str, should_print
         }
         Err(e) => {
             if should_print {
-                eprintln!("Failed to read or parse indexing metadata: {}", e);
+                eprintln!("Failed to read or parse indexing metadata: {e}");
             }
         }
     }
@@ -74,7 +74,7 @@ fn build_indexing_path(workspace_path: &str) -> Option<String> {
     let home = simple_home_dir::home_dir()?;
     let folder_path = home.join(db_folder);
     let path_str = folder_path.to_str()?;
-    Some(format!("{}/indexing_metadata.json", path_str))
+    Some(format!("{path_str}/indexing_metadata.json"))
 }
 
 fn read_indexing_metadata(
@@ -105,7 +105,7 @@ async fn index_file(
     should_print: bool,
 ) -> HashMap<u32, AuthorDetailsV2> {
     if should_print {
-        println!("Indexing file: {}", origin_file_path);
+        println!("Indexing file: {origin_file_path}");
     }
 
     match commits_to_index {

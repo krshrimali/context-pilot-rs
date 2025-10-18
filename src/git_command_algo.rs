@@ -49,49 +49,11 @@ pub fn print_all_valid_directories(workspace_dir: String, gitignore_file_name: O
                 }
             }
             Err(err) => {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
             }
         }
     }
-    println!("{:?}", all_paths);
-}
-
-pub fn print_all_valid_files(workspace_dir: String, gitignore_file_name: Option<String>) -> () {
-    // Prints all the valid files to stdout - used by plugins
-    // optionally to get files that are to be indexed.
-    // if gitignore_file_name.is_none() {
-    //     println!("None.");
-    //     return;
-    // }
-    let gitignore_file_name = gitignore_file_name.unwrap_or(String::from(".gitignore"));
-    let mut gitignore_builder = GitignoreBuilder::new(workspace_dir.clone());
-    gitignore_builder.add(gitignore_file_name);
-    let gitignore = gitignore_builder.build().expect("Failed");
-    // Iterate through all the files in the workspace_dir:
-    for walk_entry in Walk::new(workspace_dir.clone()) {
-        match walk_entry {
-            Ok(entry) => {
-                let path = entry.path();
-                if path.is_file() {
-                    // Check if the file is ignored
-                    if gitignore.matched(path, false).is_ignore() {
-                        continue;
-                    }
-                    // Print the file path -- it's valid!
-                    println!("{}", path.display());
-                } else {
-                    // Check if the whole dir is ignored:
-                    if gitignore.matched(path, true).is_ignore() {
-                        // Skip the directory.
-                        continue;
-                    }
-                }
-            }
-            Err(err) => {
-                eprintln!("Error: {}", err);
-            }
-        }
-    }
+    println!("{all_paths:?}");
 }
 
 pub fn get_files_changed(commit_hash: &str) -> Vec<String> {
@@ -331,12 +293,12 @@ fn get_commit_base_url() -> Option<String> {
                     let path = url.strip_prefix("git@github.com:").unwrap();
                     // Optionally strip ".git" if present
                     let path = path.strip_suffix(".git").unwrap_or(path);
-                    return Some(format!("https://github.com/{}/commit/", path));
+                    return Some(format!("https://github.com/{path}/commit/"));
                 } else if url.starts_with("https://github.com/") {
                     let path = url.strip_prefix("https://github.com/").unwrap();
                     // Optionally strip ".git" if present
                     let path = path.strip_suffix(".git").unwrap_or(path);
-                    return Some(format!("https://github.com/{}/commit/", path));
+                    return Some(format!("https://github.com/{path}/commit/"));
                 }
             }
         }
@@ -383,8 +345,8 @@ pub fn get_commit_descriptions(commit_hashes: Vec<String>) -> Vec<Vec<String>> {
 
                             let commit_url = base_url
                                 .as_ref()
-                                .map(|url| format!("{}{}", url, commit_hash))
-                                .unwrap_or_else(|| "".to_string());
+                                .map(|url| format!("{url}{commit_hash}"))
+                                .unwrap_or_default();
 
                             output_vec.push(vec![
                                 commit_title,
@@ -402,10 +364,10 @@ pub fn get_commit_descriptions(commit_hashes: Vec<String>) -> Vec<Vec<String>> {
     output_vec
 }
 
-pub fn get_latest_commit(file_path: &String) -> Option<String> {
+pub fn get_latest_commit(file_path: &str) -> Option<String> {
     // Get the latest commit hash for the given file path.
     let mut command = Command::new("git");
-    command.args(["log", "-1", "--pretty=format:%h", "--", file_path.as_str()]);
+    command.args(["log", "-1", "--pretty=format:%h", "--", file_path]);
     let output = command
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

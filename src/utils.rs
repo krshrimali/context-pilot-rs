@@ -17,6 +17,7 @@ pub fn levenshtein(a: &str, b: &str) -> usize {
 }
 
 // Compare a single line vs another line and see if they are similar (> some threshold).
+#[allow(dead_code)]
 fn is_similar(line1: &str, line2: &str, threshold: usize) -> bool {
     // FYI: Levenshtein distance is a measure of the difference between two sequences.
     // It is calculated as the minimum number of single-character edits (insertions, deletions, or

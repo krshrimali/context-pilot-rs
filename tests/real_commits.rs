@@ -55,7 +55,7 @@ mod tests_real_commits {
         // Accuracy is defined as, as the output for each line of code - the last commit should always
         // be coming from git blame.
         for (line_number, line_detail) in map.iter() {
-            if line_detail.get(0).unwrap().content.is_empty() {
+            if line_detail.first().unwrap().content.is_empty() {
                 continue;
             }
             // Find the git blame from the line_number:
@@ -66,7 +66,7 @@ mod tests_real_commits {
                 // "dde6f56",
                 // "80e157a",
                 "-L",
-                &format!("{},{}", line_number, line_number),
+                &format!("{line_number},{line_number}"),
                 "--abbrev=7",
                 "--",
                 file_path.as_str(),
@@ -115,8 +115,7 @@ mod tests_real_commits {
                     } else {
                         failed_count += 1;
                         println!(
-                            "Commit hash {} not found in author details for line {}",
-                            commit_hash, line_number
+                            "Commit hash {commit_hash} not found in author details for line {line_number}"
                         );
                         println!("Author details: {:?}", author_detail.commit_hashes);
                     }
@@ -138,7 +137,7 @@ mod tests_real_commits {
         println!("Sorted map:");
         for line_number in sorted_keys.iter() {
             let line_detail = sorted_map.get(line_number).unwrap();
-            println!("Line {}: {:?}", line_number, line_detail);
+            println!("Line {line_number}: {line_detail:?}");
         }
 
         println!(

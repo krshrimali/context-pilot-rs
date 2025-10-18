@@ -1,6 +1,4 @@
 use contextpilot::algo_loc::perform_for_whole_file;
-use contextpilot::contextgpt_structs::AuthorDetailsV2;
-use contextpilot::git_command_algo;
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::Write;
@@ -94,7 +92,7 @@ async fn test_perform_for_whole_file_already_indexed() {
     metadata_map.insert(file_path_str.clone(), vec![commit_hash]);
     let metadata_json = serde_json::to_string(&metadata_map).expect("Failed to serialize metadata");
     let mut metadata_file = File::create(&indexing_path).expect("Failed to create metadata file");
-    write!(metadata_file, "{}", metadata_json).expect("Failed to write metadata");
+    write!(metadata_file, "{metadata_json}").expect("Failed to write metadata");
 
     // Call the function under test
     let result =
@@ -122,7 +120,7 @@ async fn test_perform_for_whole_file_needs_indexing() {
     writeln!(file, "Test content").expect("Failed to write to test file");
 
     // Commit the file to get a commit hash
-    let commit_hash = commit_file(repo_dir, &file_path, "Initial commit");
+    let _ = commit_file(repo_dir, &file_path, "Initial commit");
 
     // Mock the home directory and DB folder structure
     let home_dir = temp_dir.path().join("home");
@@ -145,10 +143,10 @@ async fn test_perform_for_whole_file_needs_indexing() {
     metadata_map.insert(file_path_str.clone(), vec!["old_commit".to_string()]);
     let metadata_json = serde_json::to_string(&metadata_map).expect("Failed to serialize metadata");
     let mut metadata_file = File::create(&indexing_path).expect("Failed to create metadata file");
-    write!(metadata_file, "{}", metadata_json).expect("Failed to write metadata");
+    write!(metadata_file, "{metadata_json}").expect("Failed to write metadata");
 
     // Call the function under test
-    let result =
+    let _ =
         perform_for_whole_file(file_path_str, true, None, Some(workspace_name.to_string())).await;
 
     // The result might be empty if there are no commits for the file
@@ -177,7 +175,7 @@ async fn test_perform_for_whole_file_with_specific_commits() {
     let file_path_str = file_path.to_str().unwrap().to_string();
     let commits = vec![commit_hash];
 
-    let result = perform_for_whole_file(file_path_str, true, Some(commits), None).await;
+    let _ = perform_for_whole_file(file_path_str, true, Some(commits), None).await;
 
     // The result might be empty if there are no commits for the file
     // This is expected behavior for the actual function
@@ -269,7 +267,7 @@ async fn test_perform_for_whole_file_file_not_in_metadata() {
     );
     let metadata_json = serde_json::to_string(&metadata_map).expect("Failed to serialize metadata");
     let mut metadata_file = File::create(&indexing_path).expect("Failed to create metadata file");
-    write!(metadata_file, "{}", metadata_json).expect("Failed to write metadata");
+    write!(metadata_file, "{metadata_json}").expect("Failed to write metadata");
 
     // Call the function under test
     let file_path_str = file_path.to_str().unwrap().to_string();

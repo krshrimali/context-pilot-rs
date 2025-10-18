@@ -1,13 +1,9 @@
 use contextpilot::algo_loc::perform_for_whole_file;
-use contextpilot::contextgpt_structs::{AuthorDetailsV2, RequestTypeOptions};
 use contextpilot::db::DB;
-use contextpilot::git_command_algo;
-use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::Path;
 use std::process::Command;
-use std::sync::Arc;
 use tempfile::tempdir;
 
 // Helper function to initialize a git repository
@@ -75,7 +71,7 @@ async fn test_index_file_mode() {
     writeln!(file, "Test content line 3").expect("Failed to write to test file");
 
     // Commit the file to get a commit hash
-    let commit_hash = commit_file(repo_dir, &file_path, "Initial commit");
+    let _ = commit_file(repo_dir, &file_path, "Initial commit");
 
     // Mock the home directory and DB folder structure
     let home_dir = temp_dir.path().join("home");
@@ -151,7 +147,7 @@ async fn test_index_file_mode_with_existing_index() {
     writeln!(file, "Test content line 3").expect("Failed to write to test file");
 
     // Commit the file to get a commit hash
-    let commit_hash = commit_file(repo_dir, &file_path, "Initial commit");
+    let _ = commit_file(repo_dir, &file_path, "Initial commit");
 
     // Mock the home directory and DB folder structure
     let home_dir = temp_dir.path().join("home");
@@ -194,14 +190,13 @@ async fn test_index_file_mode_with_existing_index() {
 
         // Modify the file
         let mut file = OpenOptions::new()
-            .write(true)
             .append(true)
             .open(&file_path)
             .expect("Failed to open test file for appending");
         writeln!(file, "Test content line 4").expect("Failed to append to test file");
 
         // Commit the changes
-        let new_commit_hash = commit_file(repo_dir, &file_path, "Second commit");
+        let _ = commit_file(repo_dir, &file_path, "Second commit");
 
         // Index the file again
         let result2 = perform_for_whole_file(
@@ -248,7 +243,6 @@ async fn test_index_file_mode_with_specific_commits() {
 
     // Modify the file
     let mut file = OpenOptions::new()
-        .write(true)
         .append(true)
         .open(&file_path)
         .expect("Failed to open test file for appending");
@@ -322,8 +316,8 @@ async fn test_index_file_mode_does_not_affect_workspace_indexing() {
     writeln!(file2, "Test content file 2").expect("Failed to write to test file 2");
 
     // Commit the files
-    let commit_hash1 = commit_file(repo_dir, &file_path1, "Commit file 1");
-    let commit_hash2 = commit_file(repo_dir, &file_path2, "Commit file 2");
+    let _ = commit_file(repo_dir, &file_path1, "Commit file 1");
+    let _ = commit_file(repo_dir, &file_path2, "Commit file 2");
 
     // Mock the home directory and DB folder structure
     let home_dir = temp_dir.path().join("home");
