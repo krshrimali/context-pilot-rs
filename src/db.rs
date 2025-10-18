@@ -135,18 +135,16 @@ impl DB {
             .unwrap_or_else(|_| panic!("Unable to create folder for: {}", self.folder_path));
 
         // Search for the index
-        #[allow(unused_assignments)]
-        let mut db_file_index: Option<Vec<u32>> = None;
-        if curr_file_path.is_none() {
-            db_file_index = self.find_index(workspace_path);
-        } else {
+        let db_file_index: Option<Vec<u32>> = if let Some(curr_file_path) = curr_file_path {
             // convert curr_file_path to an absolute path:
-            let curr_file_path = PathBuf::from(curr_file_path.unwrap());
+            let curr_file_path = PathBuf::from(curr_file_path);
             let curr_file_path = curr_file_path
                 .canonicalize()
                 .unwrap_or_else(|_| panic!("Unable to convert the path to absolute path"));
-            db_file_index = self.find_index(curr_file_path.as_path().to_str().unwrap());
-        }
+            self.find_index(curr_file_path.as_path().to_str().unwrap())
+        } else {
+            self.find_index(workspace_path)
+        };
         if db_file_index.is_none() {
             // No mapping yet - means no indexing hasn't happened yet.
             self.current_data_v2 = HashMap::new();
@@ -474,10 +472,10 @@ impl DB {
 
     fn prepare_indexing_metadata(&mut self, file_path: &str, last_commit_hash: &Option<String>) {
         // If we have a valid commit hash, update the indexing metadata
-        if let Some(commit) = last_commit_hash {
-            if let Err(e) = self.update_last_indexed_commit(file_path, commit) {
-                eprintln!("Failed to update indexing metadata: {e}");
-            }
+        if let Some(commit) = last_commit_hash
+            && let Err(e) = self.update_last_indexed_commit(file_path, commit)
+        {
+            eprintln!("Failed to update indexing metadata: {e}");
         }
     }
 
@@ -536,14 +534,14 @@ impl DB {
                         panic!("No indexing metadata found for the file: {file_path}");
                     });
             let last_indexed_commit = last_indexing_data.last().cloned();
-            if last_indexed_commit.is_some() {
-                if last_indexed_commit.clone().unwrap().eq(&recent_commit) {
+            if let Some(last_indexed_commit) = last_indexed_commit {
+                if last_indexed_commit.eq(&recent_commit) {
                     // No need to index again, just return the data from the DB.
                     // eprintln!("No new commits to index, returning existing data.");
                 } else {
                     // Index the new commits and update the DB.
                     // First get the new commits that have not been indexed yet.
-                    let commits_to_index = get_commits_after(last_indexed_commit.unwrap());
+                    let commits_to_index = get_commits_after(last_indexed_commit);
                     // Index these commits first.
                     perform_for_whole_file(file_path.clone(), false, Some(commits_to_index), None)
                         .await;
@@ -605,14 +603,14 @@ impl DB {
                         panic!("No indexing metadata found for the file: {file_path}");
                     });
             let last_indexed_commit = last_indexing_data.last().cloned();
-            if last_indexed_commit.is_some() {
-                if last_indexed_commit.clone().unwrap().eq(&recent_commit) {
+            if let Some(last_indexed_commit) = last_indexed_commit {
+                if last_indexed_commit.eq(&recent_commit) {
                     // No need to index again, just return the data from the DB.
                     // eprintln!("No new commits to index, returning existing data.");
                 } else {
                     // Index the new commits and update the DB.
                     // First get the new commits that have not been indexed yet.
-                    let commits_to_index = get_commits_after(last_indexed_commit.unwrap());
+                    let commits_to_index = get_commits_after(last_indexed_commit);
                     // Index these commits first.
                     perform_for_whole_file(file_path.clone(), false, Some(commits_to_index), None)
                         .await;

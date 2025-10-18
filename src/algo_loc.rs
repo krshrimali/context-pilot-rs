@@ -10,10 +10,10 @@ pub async fn perform_for_whole_file(
     workspace_path: Option<String>,
 ) -> HashMap<u32, AuthorDetailsV2> {
     // Check if we should skip indexing based on existing metadata
-    if let Some(workspace_path) = &workspace_path {
-        if is_already_indexed(&origin_file_path, workspace_path, should_print) {
-            return HashMap::new();
-        }
+    if let Some(workspace_path) = &workspace_path
+        && is_already_indexed(&origin_file_path, workspace_path, should_print)
+    {
+        return HashMap::new();
     }
 
     // Perform the actual indexing
@@ -37,10 +37,9 @@ fn is_already_indexed(origin_file_path: &str, workspace_path: &str, should_print
     match read_indexing_metadata(&indexing_path) {
         Ok(metadata) => {
             if let Some(last_indexed_commit) = get_last_indexed_commit(&metadata, origin_file_path)
+                && last_indexed_commit == recent_commit
             {
-                if last_indexed_commit == recent_commit {
-                    return true;
-                }
+                return true;
             }
         }
         Err(e) => {

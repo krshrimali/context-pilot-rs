@@ -648,13 +648,14 @@ fn parse_diff(
         }
         if line_before.is_some() && line_after.is_some() {
             if map.is_empty() {
-                let l_after = line_after.unwrap();
+                let line_before_ref = line_before.as_ref().unwrap();
+                let line_after_ref = line_after.as_ref().unwrap();
                 _ = read_content(
                     &mut all_lines,
-                    line_before.unwrap().change_count,
-                    l_after.change_count,
+                    line_before_ref.change_count,
+                    line_after_ref.change_count,
                     map,
-                    Some(l_after.start_line_number),
+                    Some(line_after_ref.start_line_number),
                     commit_hash.clone(),
                 );
                 for i in 1..map.len() {

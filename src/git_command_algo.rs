@@ -284,23 +284,21 @@ fn get_commit_base_url() -> Option<String> {
     if let Ok(output) = Command::new("git")
         .args(["remote", "get-url", "origin"])
         .output()
+        && output.status.success()
+        && let Ok(url) = String::from_utf8(output.stdout)
     {
-        if output.status.success() {
-            if let Ok(url) = String::from_utf8(output.stdout) {
-                let url = url.trim();
-                // Handle GitHub URLs (both HTTPS and SSH)
-                if url.starts_with("git@github.com:") {
-                    let path = url.strip_prefix("git@github.com:").unwrap();
-                    // Optionally strip ".git" if present
-                    let path = path.strip_suffix(".git").unwrap_or(path);
-                    return Some(format!("https://github.com/{path}/commit/"));
-                } else if url.starts_with("https://github.com/") {
-                    let path = url.strip_prefix("https://github.com/").unwrap();
-                    // Optionally strip ".git" if present
-                    let path = path.strip_suffix(".git").unwrap_or(path);
-                    return Some(format!("https://github.com/{path}/commit/"));
-                }
-            }
+        let url = url.trim();
+        // Handle GitHub URLs (both HTTPS and SSH)
+        if url.starts_with("git@github.com:") {
+            let path = url.strip_prefix("git@github.com:").unwrap();
+            // Optionally strip ".git" if present
+            let path = path.strip_suffix(".git").unwrap_or(path);
+            return Some(format!("https://github.com/{path}/commit/"));
+        } else if url.starts_with("https://github.com/") {
+            let path = url.strip_prefix("https://github.com/").unwrap();
+            // Optionally strip ".git" if present
+            let path = path.strip_suffix(".git").unwrap_or(path);
+            return Some(format!("https://github.com/{path}/commit/"));
         }
     }
     None
@@ -326,36 +324,35 @@ pub fn get_commit_descriptions(commit_hashes: Vec<String>) -> Vec<Vec<String>> {
                 commit_hash,
             ])
             .output()
+            && output.status.success()
         {
-            if output.status.success() {
-                visited_commits.insert(commit_hash.clone());
-                if let Ok(output_str) = String::from_utf8(output.stdout) {
-                    let sections: Vec<&str> = output_str.split("\n--AUTHOR--\n").collect();
-                    if sections.len() == 2 {
-                        let message = sections[0].trim();
-                        let mut lines = message.lines();
-                        let commit_title = lines.next().unwrap_or("").trim().to_string();
-                        let commit_description =
-                            lines.collect::<Vec<_>>().join("\n").trim().to_string();
+            visited_commits.insert(commit_hash.clone());
+            if let Ok(output_str) = String::from_utf8(output.stdout) {
+                let sections: Vec<&str> = output_str.split("\n--AUTHOR--\n").collect();
+                if sections.len() == 2 {
+                    let message = sections[0].trim();
+                    let mut lines = message.lines();
+                    let commit_title = lines.next().unwrap_or("").trim().to_string();
+                    let commit_description =
+                        lines.collect::<Vec<_>>().join("\n").trim().to_string();
 
-                        let parts: Vec<&str> = sections[1].split("\n--DATE--\n").collect();
-                        if parts.len() == 2 {
-                            let author_name = parts[0].trim().to_string();
-                            let commit_datetime = parts[1].trim().to_string();
+                    let parts: Vec<&str> = sections[1].split("\n--DATE--\n").collect();
+                    if parts.len() == 2 {
+                        let author_name = parts[0].trim().to_string();
+                        let commit_datetime = parts[1].trim().to_string();
 
-                            let commit_url = base_url
-                                .as_ref()
-                                .map(|url| format!("{url}{commit_hash}"))
-                                .unwrap_or_default();
+                        let commit_url = base_url
+                            .as_ref()
+                            .map(|url| format!("{url}{commit_hash}"))
+                            .unwrap_or_default();
 
-                            output_vec.push(vec![
-                                commit_title,
-                                commit_description,
-                                author_name,
-                                commit_datetime,
-                                commit_url,
-                            ]);
-                        }
+                        output_vec.push(vec![
+                            commit_title,
+                            commit_description,
+                            author_name,
+                            commit_datetime,
+                            commit_url,
+                        ]);
                     }
                 }
             }
@@ -373,12 +370,12 @@ pub fn get_latest_commit(file_path: &str) -> Option<String> {
         .stderr(Stdio::piped())
         .output()
         .unwrap();
-    if output.status.success() {
-        if let Ok(commit_hash) = String::from_utf8(output.stdout) {
-            let commit_hash = commit_hash.trim().to_string();
-            if !commit_hash.is_empty() {
-                return Some(commit_hash);
-            }
+    if output.status.success()
+        && let Ok(commit_hash) = String::from_utf8(output.stdout)
+    {
+        let commit_hash = commit_hash.trim().to_string();
+        if !commit_hash.is_empty() {
+            return Some(commit_hash);
         }
     }
     None
