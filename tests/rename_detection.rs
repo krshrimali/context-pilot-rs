@@ -1,7 +1,5 @@
 // Tests for file rename/move detection functionality
-use contextpilot::git_command_algo::{
-    FileRename, detect_rename_in_commit, get_file_rename_history,
-};
+use contextpilot::git_command_algo::{detect_rename_in_commit, get_file_rename_history};
 use std::path::PathBuf;
 use std::process::Command;
 use tempfile::TempDir;
@@ -166,7 +164,7 @@ mod tests_rename_detection {
 
         // Should have at least 1 entry
         assert!(
-            history.len() >= 1,
+            !history.is_empty(),
             "History should contain at least the current path"
         );
 
@@ -258,7 +256,7 @@ mod tests_rename_detection {
 
         // Should track through all renames
         assert!(
-            history.len() >= 1,
+            !history.is_empty(),
             "Should have at least one path in history"
         );
 

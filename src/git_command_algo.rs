@@ -336,6 +336,7 @@ pub fn detect_rename_in_commit(commit_hash: &str, file_path: &str) -> Option<Fil
 
 /// Gets all file path history for a file, following renames
 /// Returns a vector of (file_path, starting_commit) tuples in chronological order
+#[allow(dead_code)]
 pub fn get_file_rename_history(file_path: String) -> Vec<(String, Option<String>)> {
     let mut history = vec![];
     let mut current_path = file_path.clone();

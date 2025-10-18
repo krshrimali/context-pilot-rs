@@ -153,7 +153,7 @@ pub fn divide(a: i32, b: i32) -> i32 {\n\
             "Should have at least 4 commits (including pre-rename history)"
         );
 
-        println!("Found commits: {:?}", commits);
+        println!("Found commits: {commits:?}");
 
         // Verify we can trace back to the original file
         // The commits should include those that touched utils.rs before the rename
@@ -169,7 +169,7 @@ pub fn divide(a: i32, b: i32) -> i32 {\n\
         // Get all commits
         let commits = get_all_commits_for_file("math_utils.rs".to_string());
 
-        println!("Commits to index: {:?}", commits);
+        println!("Commits to index: {commits:?}");
 
         // Index all commits
         let auth_details = index_some_commits("math_utils.rs".to_string(), commits).await;
@@ -188,8 +188,7 @@ pub fn divide(a: i32, b: i32) -> i32 {\n\
             );
             assert!(
                 !details.commit_hashes.is_empty(),
-                "Line {} should have at least one commit",
-                line_num
+                "Line {line_num} should have at least one commit"
             );
         }
     }
@@ -250,7 +249,7 @@ pub fn divide(a: i32, b: i32) -> i32 {\n\
                     "blame",
                     latest_commit,
                     "-L",
-                    &format!("{},{}", line_num, line_num),
+                    &format!("{line_num},{line_num}"),
                     "--abbrev=7",
                     "--",
                     "math_utils.rs",
@@ -310,8 +309,7 @@ pub fn divide(a: i32, b: i32) -> i32 {\n\
         let accuracy = (match_count as f64 / total_count as f64) * 100.0;
         assert!(
             accuracy >= 80.0,
-            "Accuracy should be at least 80%, got {:.2}%",
-            accuracy
+            "Accuracy should be at least 80%, got {accuracy:.2}%"
         );
     }
 
