@@ -646,16 +646,14 @@ fn parse_diff(
             // lines if change_type == ChangeType::Addded.
             // reorder_map(commit_hash.clone(), category, map, line_before, line_after);
         }
-        if line_before.is_some() && line_after.is_some() {
+        if let (Some(line_before_val), Some(line_after_val)) = (&line_before, &line_after) {
             if map.is_empty() {
-                let line_before_ref = line_before.as_ref().unwrap();
-                let line_after_ref = line_after.as_ref().unwrap();
                 _ = read_content(
                     &mut all_lines,
-                    line_before_ref.change_count,
-                    line_after_ref.change_count,
+                    line_before_val.change_count,
+                    line_after_val.change_count,
                     map,
-                    Some(line_after_ref.start_line_number),
+                    Some(line_after_val.start_line_number),
                     commit_hash.clone(),
                 );
                 for i in 1..map.len() {
